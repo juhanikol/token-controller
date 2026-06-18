@@ -1,40 +1,262 @@
 {
+  "schema_version": 2,
+  "defaults": {
+    "cache_align": true,
+    "raw_on_fail": true,
+    "keep_raw_logs": true,
+    "agents_mutation": "deny",
+    "target_files_full": true,
+    "preserve_stderr": true,
+    "preserve_exit_code": true,
+    "preserve_first_error": true,
+    "preserve_warnings": true,
+    "preserve_numbers": true,
+    "raw_log_dir": ".ai-context/raw",
+    "compressed_log_dir": ".ai-context/compressed"
+  },
   "modes": {
-    "plan": {
-      "rtk_hook_enabled": false,
-      "headroom_strategy": "ast-interfaces-only",
-      "memstack_active": true,
+    "raw": {
+      "risk": "critical",
+      "compress_shell": "off",
+      "compress_files": "off",
+      "codebase_index": false,
+      "memory_layer": "off",
+      "headroom_mode": "off",
+      "leanctx_mode": "off",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "scope": {
+      "risk": "high",
+      "compress_shell": "off",
+      "compress_files": "safe-summary",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe",
+      "leanctx_mode": "context-read",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "architect": {
+      "risk": "high",
+      "compress_shell": "safe",
+      "compress_files": "interfaces-and-map",
+      "codebase_index": true,
+      "memory_layer": "project",
+      "headroom_mode": "code-safe",
+      "leanctx_mode": "graph-read",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "decisions": {
+      "risk": "high",
+      "compress_shell": "safe",
+      "compress_files": "interfaces-and-schemas",
+      "codebase_index": true,
+      "memory_layer": "project",
+      "headroom_mode": "code-safe",
+      "leanctx_mode": "graph-read",
+      "rtk_mode": "off",
       "caveman_output": false
     },
     "code": {
-      "rtk_hook_enabled": false,
-      "headroom_strategy": "reversible-ccr",
-      "memstack_active": true,
+      "risk": "normal",
+      "compress_shell": "safe",
+      "compress_files": "target-full-deps-signatures",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "reversible",
+      "leanctx_mode": "auto",
+      "rtk_mode": "noisy-success-only",
       "caveman_output": false
     },
+    "snippet": {
+      "risk": "normal",
+      "compress_shell": "off",
+      "compress_files": "off-for-target",
+      "codebase_index": false,
+      "memory_layer": "off",
+      "headroom_mode": "off",
+      "leanctx_mode": "off",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "agent": {
+      "risk": "high",
+      "compress_shell": "safe",
+      "compress_files": "stable-prefix",
+      "codebase_index": true,
+      "memory_layer": "project",
+      "headroom_mode": "cache-aligner",
+      "leanctx_mode": "auto",
+      "rtk_mode": "off",
+      "caveman_output": false,
+      "agents_mutation": "deny"
+    },
     "test": {
-      "rtk_hook_enabled": true,
-      "headroom_strategy": "aggressive-logs",
-      "memstack_active": false,
-      "caveman_output": true
+      "risk": "high",
+      "compress_shell": "safe-on-fail-aggressive-on-pass",
+      "compress_files": "target-full-tests-full",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "tests-safe",
+      "caveman_output": false
+    },
+    "test-full": {
+      "risk": "high",
+      "compress_shell": "aggressive-on-success-safe-on-fail",
+      "compress_files": "test-map",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "aggressive-success-only",
+      "caveman_output": false
     },
     "debug": {
-      "rtk_hook_enabled": true,
-      "headroom_strategy": "safety-first-lossless",
-      "memstack_active": true,
+      "risk": "high",
+      "compress_shell": "safe",
+      "compress_files": "target-full-related-signatures",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe-reversible",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "off-first-failure",
+      "caveman_output": false
+    },
+    "docs": {
+      "risk": "normal",
+      "compress_shell": "safe",
+      "compress_files": "source-summary-target-full",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe",
+      "leanctx_mode": "context-read",
+      "rtk_mode": "off",
       "caveman_output": false
     },
     "cicd": {
-      "rtk_hook_enabled": true,
-      "headroom_strategy": "strip-boilerplate",
-      "memstack_active": false,
-      "caveman_output": true
+      "risk": "high",
+      "compress_shell": "strip-boilerplate-preserve-errors",
+      "compress_files": "yaml-and-scripts-full",
+      "codebase_index": false,
+      "memory_layer": "session",
+      "headroom_mode": "safe",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "install-build-noise",
+      "caveman_output": false
+    },
+    "review": {
+      "risk": "high",
+      "compress_shell": "safe",
+      "compress_files": "interfaces-and-diffs",
+      "codebase_index": true,
+      "memory_layer": "project",
+      "headroom_mode": "safe-reversible",
+      "leanctx_mode": "graph-read",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "security": {
+      "risk": "critical",
+      "compress_shell": "off-or-lossless-only",
+      "compress_files": "off-for-security-critical",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "lossless-only",
+      "leanctx_mode": "guarded",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "migration": {
+      "risk": "critical",
+      "compress_shell": "safe",
+      "compress_files": "target-full-global-map",
+      "codebase_index": true,
+      "memory_layer": "project",
+      "headroom_mode": "reversible",
+      "leanctx_mode": "graph-read",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "db": {
+      "risk": "critical",
+      "compress_shell": "off-or-lossless-only",
+      "compress_files": "migrations-and-schema-full",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "lossless-only",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
+    "perf": {
+      "risk": "high",
+      "compress_shell": "preserve-numeric-metrics",
+      "compress_files": "target-full",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "off",
+      "caveman_output": false,
+      "preserve_numbers": true
+    },
+    "release": {
+      "risk": "critical",
+      "compress_shell": "off-or-lossless-only",
+      "compress_files": "release-files-full",
+      "codebase_index": false,
+      "memory_layer": "off",
+      "headroom_mode": "off",
+      "leanctx_mode": "guarded",
+      "rtk_mode": "off",
+      "caveman_output": false
     },
     "off": {
-      "rtk_hook_enabled": false,
-      "headroom_strategy": "bypass",
-      "memstack_active": false,
+      "risk": "normal",
+      "compress_shell": "off",
+      "compress_files": "off",
+      "codebase_index": false,
+      "memory_layer": "off",
+      "headroom_mode": "off",
+      "leanctx_mode": "off",
+      "rtk_mode": "off",
       "caveman_output": false
     }
+  },
+  "command_policy": {
+    "noisy_success_can_compress": [
+      "npm install",
+      "pnpm install",
+      "yarn install",
+      "docker build",
+      "dotnet restore",
+      "cargo fetch",
+      "pip install"
+    ],
+    "preserve_raw_or_lossless": [
+      "npm audit",
+      "govulncheck",
+      "trivy",
+      "grype",
+      "snyk",
+      "semgrep",
+      "gitleaks",
+      "flyway",
+      "liquibase",
+      "prisma migrate",
+      "mysql",
+      "psql"
+    ],
+    "test_commands": [
+      "pytest",
+      "go test",
+      "npm test",
+      "dotnet test",
+      "cargo test"
+    ]
   }
 }
