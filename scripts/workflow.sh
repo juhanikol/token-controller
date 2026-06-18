@@ -34,6 +34,7 @@ Modes:
   architect    Architecture, structure, codebase overview.
   decisions    ADRs, domain models, schemas, types.
   code         Normal implementation work.
+  data-analysis Data analysis, stats, and visualization.
   snippet      Small file/method/snippet review.
   agent        Agent-governance / AGENTS.md workflows.
   test         Unit/integration test runs.

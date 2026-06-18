@@ -126,6 +126,18 @@
       "rtk_mode": "off-first-failure",
       "caveman_output": false
     },
+    "data-analysis": {
+      "risk": "high",
+      "compress_shell": "preserve-numeric-metrics",
+      "compress_files": "target-full",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "off",
+      "caveman_output": false,
+      "preserve_numbers": true
+    },
     "docs": {
       "risk": "normal",
       "compress_shell": "safe",
@@ -172,11 +184,11 @@
     },
     "migration": {
       "risk": "critical",
-      "compress_shell": "safe",
+      "compress_shell": "off-or-lossless-only",
       "compress_files": "target-full-global-map",
       "codebase_index": true,
       "memory_layer": "project",
-      "headroom_mode": "reversible",
+      "headroom_mode": "lossless-only",
       "leanctx_mode": "graph-read",
       "rtk_mode": "off",
       "caveman_output": false

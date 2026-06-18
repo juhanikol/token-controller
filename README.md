@@ -262,27 +262,29 @@ workflow ci     # same as cicd
 
 ## Scenario matrix
 
-| Scenario | Command | Recommended context policy | Token-saving tools | Raw fidelity requirement |
-|---|---|---|---|---|
-| Scope and requirements | `workflow scope` | Safe summaries, no destructive compression | Headroom safe, LeanCTX context-read | User intent, constraints, acceptance criteria |
-| Structure and architecture | `workflow architect` | Codebase map + full-read selected files | LeanCTX graph/read, Headroom code-safe | Core module boundaries, interfaces, design rationale |
-| Architecture decisions, models, types | `workflow decisions` | Interfaces/schemas preserved | Headroom code-safe, LeanCTX graph-read | Domain models, API contracts, type definitions |
-| Actual coding | `workflow code` | Full target file, dependency signatures | Headroom reversible, LeanCTX auto, RTK for noisy successful shell commands | Edited files, nearby tests, compiler errors |
-| Agent orchestration / AGENTS.md | `workflow agent` | Stable prefix, dynamic task files separate | Headroom cache-aligner, LeanCTX auto | AGENTS.md, TASK.md, PLAN.md, STATE.md |
-| Bug fixing | `workflow debug` | First failure raw, later repetition compressed | LeanCTX diagnostic, Headroom safe-reversible | First error, stderr, exit code, stack trace, paths, line numbers |
-| Documentation | `workflow docs` | Compressed source gathering, normal final prose | Headroom safe, LeanCTX context-read | Final README/docs, factual project behavior |
-| Unit/integration tests | `workflow test` | Compress pass noise, preserve failures | RTK tests-safe, LeanCTX diagnostic | Failing assertions, stack traces, test names |
-| Automated tests for all agent changes | `workflow test` or `workflow test-full` | Raw-on-fail, compressed pass logs | RTK/LeanCTX after baseline | First failure and summary |
-| Whole codebase examination | `workflow review` | Index first, full-read selected files | LeanCTX graph-read, Headroom reversible | Diffs, risk areas, public interfaces |
-| Small snippet/file/method check | `workflow snippet` | Usually raw only | None by default | Entire snippet/method/file |
-| Full app test routine | `workflow test-full` | Aggressive only after baseline | RTK success-only, LeanCTX diagnostic | Raw failing logs and summary |
-| CI/CD design and implementation | `workflow cicd` | Compress install/fetch boilerplate only | RTK install-build-noise, LeanCTX diagnostic | YAML, scripts, env vars, exit code, failing lines |
-| Security/compliance review | `workflow security` | Raw or lossless only | LeanCTX guarded, Headroom lossless-only | CVEs, secrets, auth, crypto, license findings |
-| Large migration / legacy refactor | `workflow migration` | Indexed global map + full active files | LeanCTX graph-read, Headroom reversible | Migration rules, compatibility behavior, changed files |
-| Database/schema migration | `workflow db` | Raw/lossless | LeanCTX diagnostic only | SQL, constraints, migration order, data-loss warnings |
-| Performance profiling | `workflow perf` | Preserve numbers and environment | LeanCTX diagnostic, Headroom safe | Timings, percentiles, memory, sample size |
-| Release preparation | `workflow release` | Raw/lossless | Usually none | Version, changelog, artifact names, hashes, signing output |
-| Emergency rate-limit reduction | not default; manual | Output-only brevity | Caveman | Never for final or high-risk output |
+
+| Scenario                              | Command                                 | Recommended context policy                      | Token-saving tools                                                         | Raw fidelity requirement                                         |
+| ------------------------------------- | --------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Scope and requirements                | `workflow scope`                        | Safe summaries, no destructive compression      | Headroom safe, LeanCTX context-read                                        | User intent, constraints, acceptance criteria                    |
+| Structure and architecture            | `workflow architect`                    | Codebase map + full-read selected files         | LeanCTX graph/read, Headroom code-safe                                     | Core module boundaries, interfaces, design rationale             |
+| Architecture decisions, models, types | `workflow decisions`                    | Interfaces/schemas preserved                    | Headroom code-safe, LeanCTX graph-read                                     | Domain models, API contracts, type definitions                   |
+| Actual coding                         | `workflow code`                         | Full target file, dependency signatures         | Headroom reversible, LeanCTX auto, RTK for noisy successful shell commands | Edited files, nearby tests, compiler errors                      |
+| Data analysis                         | `workflow data-analysis`                | Preserve numbers, safe compression              | LeanCTX diagnostic, Headroom safe                                          | Numeric data, stats, plots, data sources                         |
+| Agent orchestration / AGENTS.md       | `workflow agent`                        | Stable prefix, dynamic task files separate      | Headroom cache-aligner, LeanCTX auto                                       | AGENTS.md, TASK.md, PLAN.md, STATE.md                            |
+| Bug fixing                            | `workflow debug`                        | First failure raw, later repetition compressed  | LeanCTX diagnostic, Headroom safe-reversible                               | First error, stderr, exit code, stack trace, paths, line numbers |
+| Documentation                         | `workflow docs`                         | Compressed source gathering, normal final prose | Headroom safe, LeanCTX context-read                                        | Final README/docs, factual project behavior                      |
+| Unit/integration tests                | `workflow test`                         | Compress pass noise, preserve failures          | RTK tests-safe, LeanCTX diagnostic                                         | Failing assertions, stack traces, test names                     |
+| Automated tests for all agent changes | `workflow test` or `workflow test-full` | Raw-on-fail, compressed pass logs               | RTK/LeanCTX after baseline                                                 | First failure and summary                                        |
+| Whole codebase examination            | `workflow review`                       | Index first, full-read selected files           | LeanCTX graph-read, Headroom reversible                                    | Diffs, risk areas, public interfaces                             |
+| Small snippet/file/method check       | `workflow snippet`                      | Usually raw only                                | None by default                                                            | Entire snippet/method/file                                       |
+| Full app test routine                 | `workflow test-full`                    | Aggressive only after baseline                  | RTK success-only, LeanCTX diagnostic                                       | Raw failing logs and summary                                     |
+| CI/CD design and implementation       | `workflow cicd`                         | Compress install/fetch boilerplate only         | RTK install-build-noise, LeanCTX diagnostic                                | YAML, scripts, env vars, exit code, failing lines                |
+| Security/compliance review            | `workflow security`                     | Raw or lossless only                            | LeanCTX guarded, Headroom lossless-only                                    | CVEs, secrets, auth, crypto, license findings                    |
+| Large migration / legacy refactor     | `workflow migration`                    | Indexed global map + full active files          | LeanCTX graph-read, Headroom reversible                                    | Migration rules, compatibility behavior, changed files           |
+| Database/schema migration             | `workflow db`                           | Raw/lossless                                    | LeanCTX diagnostic only                                                    | SQL, constraints, migration order, data-loss warnings            |
+| Performance profiling                 | `workflow perf`                         | Preserve numbers and environment                | LeanCTX diagnostic, Headroom safe                                          | Timings, percentiles, memory, sample size                        |
+| Release preparation                   | `workflow release`                      | Raw/lossless                                    | Usually none                                                               | Version, changelog, artifact names, hashes, signing output       |
+| Emergency rate-limit reduction        | not default; manual                     | Output-only brevity                             | Caveman                                                                    | Never for final or high-risk output                              |
 
 ## Risk-level rule
 
