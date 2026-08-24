@@ -48,7 +48,9 @@ For the VS Code button, install the extension into the **WSL extension host**, n
 
 If you use VS Code with WSL, installing the extension via the terminal can sometimes fail to register with the Windows UI. The most reliable method is using the VS Code graphical interface:
 
-**SIMPLE METHOD:** Download the 'extensions/vscode/token-controller-ui-x.x.x.vsix' and install it via VS Code UI, OR...
+**SIMPLE METHOD:** Download the 'extensions/vscode/token-controller-ui-x.x.x.vsix' and install it via VS Code UI
+
+**OR**
 
 ## Clone the repository
 
