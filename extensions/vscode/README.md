@@ -1,10 +1,84 @@
 # AI Context Workflow Controller
 
-This tool gives coding agents simple, project-local rules for handling context safely.
+**Spend fewer tokens on noise. Keep the context that protects your code.**
+
+Token Controller stops AI coding agents from burning through token budgets on repetitive logs, build boilerplate, and noisy terminal output. It manages a lightweight context policy that your IDE agents follow automatically across your projects.
+
+## How it works
+
+* **Smarter Token Usage:** Compresses noisy, repetitive output during routine coding, package installs, and test runs.
+* **Guaranteed Fidelity:** Automatically enforces lossless, raw context for first failing errors, stack traces, security audits, and database migrations.
+* **One-Click Control:** Switch context modes seamlessly via the terminal (`workflow code`, `workflow debug`) or the VS Code Status Bar dropdown.
+
+![select context](assets/20260824_212226_image.png)
+
+*Token Controller acts as the context router and guardrail layer. It defines when to compress and when to preserve raw evidence, helping your connected agents and tools keep sessions focused and cost-effective.*
+
+## Why this matters (even with million-token context windows)
+
+Context windows have reached massive scales, but simply having a larger window does not eliminate the need for optimization. In fact, unmanaged capacity often leads to **"context rot."** As the window fills with raw logs, uncompressed MCP (Model Context Protocol) tool outputs, and irrelevant file contents, the AI's attention dilutes. This causes reasoning drops, latency spikes, and unnecessary inference costs.
+
+While native IDE features and RAG (Retrieval-Augmented Generation) are highly effective at finding static code snippets, they lack awareness of your immediate engineering intent. This controller bridges that gap:
+
+* **Proactive vs. Reactive:** RAG reacts to your prompt. This tool proactively broadcasts the current state of your work to the agent[cite: 12].
+* **Risk-Based Fidelity:** An IDE indexer does not inherently know that a database migration requires higher fidelity than a UI component update. When you run critical modes (like `workflow db`), this tool forces the agent to preserve strict, lossless context.
+* **Establishing Boundaries:** By injecting the rules directly into a project's `AGENTS.md`, you establish a firm guardrail explicitly telling the agent that correctness always beats token savings[cite: 12].
+
+## Supported environment
+
+> **Currently supported and tested only on WSL 2 with Ubuntu, using VS Code connected to the same WSL distro through the WSL extension.** The current validation environment is Ubuntu 24.04 x86-64 on WSL2 with Bash 5.2 and `jq` 1.8.
+
+Native Windows, WSL 1, macOS, native Linux, Dev Containers, SSH remotes, and GitHub Codespaces have not been verified. They may work, but they are not currently supported by this project.
+
+Environment requirements and assumptions:
+
+* Run the setup and workflow commands in a WSL Bash terminal, not PowerShell or Command Prompt.
+* Open the project from that same WSL distro in VS Code. The terminal, extension, controller files, and `~/.config/ai-workflow/active_mode.env` must resolve to the same Linux home directory.
+* Each WSL distro has its own Linux home and active-mode file. If you use multiple distros, install and configure the controller separately in each one.
+* Keep the controller and projects in the WSL Linux filesystem, such as `~/tools` and `~/projects`. Windows-mounted paths such as `/mnt/c/...` are unverified and may behave differently for permissions, file watching, and shell scripts.
+* Keep shell scripts in Linux LF format. Windows CRLF conversion can prevent Bash from reading them correctly.
+* Use Bash. The documented alias is added to `~/.bashrc`; zsh, fish, and other shells are not currently documented or tested.
+* Install Git and `jq`. Standard Ubuntu tools such as `grep`, `mktemp`, `cp`, `mv`, and `chmod` are also required.
+* Keep `~/.config` writable so the active-mode file can be created and updated.
+* Optional context tools are not required. Install them only if you intend to use their features.
+
+## Do I need external tools to save tokens?
+
+No! Token savings happen in two layers:
+
+1. **Behavioral Savings (Built-in):** By reading the `AGENTS.md` and `active_mode.env`, your AI agent (Copilot, Claude, Cursor) changes its own behavior. It will proactively summarize files, avoid reading irrelevant directories, and stop dumping massive passing logs into its reasoning loop. 
+2. **Mechanical Savings (Optional Tools):** If you want automated compression (like physically stripping 2,000 lines of `npm install` output in the terminal before the agent even sees it), you can install tools like RTK, Headroom, or LeanCTX. 
+
+Token Controller only exports policy variables; compatible tools may choose to act on them.
+
+For the VS Code button, install the extension into the **WSL extension host**, not only into local Windows VS Code. See the [VS Code extension requirements](extensions/vscode/README.md).
+
+## VS Code Extension Installation (WSL & Remote)
+
+If you use VS Code with WSL, installing the extension via the terminal can sometimes fail to register with the Windows UI. The most reliable method is using the VS Code graphical interface:
+
+**SIMPLE METHOD:** Download the 'extensions/vscode/token-controller-ui-0.0.1.vsix' and install it via VS Code UI
+
+## Clone the repository
+
+1. Clone the repository and navigate into it
+2. Build the extension inside your WSL terminal
+
+   ```bash
+   cd extensions/vscode
+   npx vsce package
+   ```
+
+3. Open VS Code (ensure you are connected to your WSL environment).
+4. Open the Extensions panel (Ctrl + Shift + X).
+5. Click the ... (Views and More Actions) icon at the top right of the Extensions panel.
+6. Select Install from VSIX...
+7. Navigate to the generated .vsix file and select it.
+8. Reload the window (Ctrl + Shift + P -> Developer: Reload Window).
 
 You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md`. Your coding agents read that file and check the active workflow mode before they answer or modify files.
 
-The controller does not compress anything by itself. It selects a policy and saves it in:
+The selected policy is saved in:
 
 ```text
 ~/.config/ai-workflow/active_mode.env
@@ -74,9 +148,9 @@ workflow init
 
 This changes only the `AGENTS.md` in the current project:
 
-- If `AGENTS.md` is missing, the command creates it from `templates/AGENTS_base.md`.
-- If `AGENTS.md` already exists, the command keeps the project's custom instructions and appends the required AI workflow rules.
-- If you run `workflow init` again, it does not add duplicate rules.
+* If `AGENTS.md` is missing, the command creates it from `templates/AGENTS_base.md`.
+* If `AGENTS.md` already exists, the command keeps the project's custom instructions and appends the required AI workflow rules.
+* If you run `workflow init` again, it does not add duplicate rules.
 
 Commit the generated or updated `AGENTS.md` if you want everyone working on the project to use the same rules.
 
@@ -184,12 +258,12 @@ workflow ci     # same as workflow cicd
 
 ## Safety rules in plain language
 
-- Correctness is more important than saving tokens.
-- `raw`, `security`, `db`, and `release` use raw or lossless context.
-- `debug` and `test` keep the first failure, stderr, exit code, paths, and line numbers.
-- Target files being edited should be read in full.
-- Repetitive successful output is the safest content to compress.
-- Optional tools must be detected before an agent relies on them.
+* Correctness is more important than saving tokens.
+* `raw`, `security`, `db`, and `release` use raw or lossless context.
+* `debug` and `test` keep the first failure, stderr, exit code, paths, and line numbers.
+* Target files being edited should be read in full.
+* Repetitive successful output is the safest content to compress.
+* Optional tools must be detected before an agent relies on them.
 
 ## What `workflow init` adds
 
@@ -201,11 +275,11 @@ templates/AGENTS_base.md
 
 The injected rules tell agents to:
 
-- check `~/.config/ai-workflow/active_mode.env` before working;
-- follow the selected risk and fidelity policy;
-- preserve failures and high-risk evidence;
-- avoid assuming optional tools are installed;
-- keep project-specific instructions intact.
+* check `~/.config/ai-workflow/active_mode.env` before working;
+* follow the selected risk and fidelity policy;
+* preserve failures and high-risk evidence;
+* avoid assuming optional tools are installed;
+* keep project-specific instructions intact.
 
 Managed markers make the operation repeatable. If an existing managed block is incomplete, or `AGENTS.md` is a symbolic link, `workflow init` stops instead of making a risky change.
 
@@ -239,8 +313,8 @@ bash ~/tools/token-controller/scripts/install-optional-tools.sh
 
 If you choose to install the Python tools using those printed commands, their virtual environments are:
 
-- Headroom: `~/.venvs/headroom`
-- MemStack: `~/.venvs/memstack`
+* Headroom: `~/.venvs/headroom`
+* MemStack: `~/.venvs/memstack`
 
 ## Useful commands
 

@@ -10,6 +10,8 @@ Token Controller stops AI coding agents from burning through token budgets on re
 * **Guaranteed Fidelity:** Automatically enforces lossless, raw context for first failing errors, stack traces, security audits, and database migrations.
 * **One-Click Control:** Switch context modes seamlessly via the terminal (`workflow code`, `workflow debug`) or the VS Code Status Bar dropdown.
 
+![select context](assets/20260824_212040_image.png)
+
 *Token Controller acts as the context router and guardrail layer. It defines when to compress and when to preserve raw evidence, helping your connected agents and tools keep sessions focused and cost-effective.*
 
 ## Why this matters (even with million-token context windows)
@@ -56,7 +58,7 @@ If you use VS Code with WSL, installing the extension via the terminal can somet
    ```bash
    cd extensions/vscode
    npx vsce package
-    ```
+   ```
 
 3. Open VS Code (ensure you are connected to your WSL environment).
 4. Open the Extensions panel (Ctrl + Shift + X).
