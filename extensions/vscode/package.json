@@ -18,6 +18,9 @@
     "name": "Juhani Kolehmainen"
   },
   "license": "MIT",
+  "extensionKind": [
+    "workspace"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/juhanikol/token-controller"
@@ -31,7 +34,17 @@
         "command": "tokenController.selectMode",
         "title": "AI Context: Switch Mode"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Token Controller",
+      "properties": {
+        "tokenController.scriptPath": {
+          "type": "string",
+          "default": "~/projects/token-controller/scripts/workflow.sh",
+          "description": "The path to your token-controller workflow.sh script. Use ~ for your home directory."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

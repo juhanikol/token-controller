@@ -81,11 +81,22 @@ function updateStatusBar(activeEnvFile: string) {
 }
 
 async function switchMode(mode: string, activeEnvFile: string) {
-    // Resolve the script path globally in ~/tools/token-controller/scripts/workflow.sh as instructed in your README
-    const scriptPath = path.join(os.homedir(), 'tools', 'token-controller', 'scripts', 'workflow.sh');
+    // Resolve the script path globally in ~/projects/token-controller/scripts/workflow.sh as instructed in your README
+    // 1. Read the path from VS Code User Settings
+    const config = vscode.workspace.getConfiguration('tokenController');
+    let scriptPath = config.get<string>('scriptPath');
 
+    if (!scriptPath) {
+        vscode.window.showErrorMessage("Workflow script path is not configured.");
+        return;
+    }
+    // 2. Expand the '~' to the actual home directory
+    if (scriptPath.startsWith('~')) {
+        scriptPath = path.join(os.homedir(), scriptPath.slice(1));
+    }
+    // 3. Verify it exists
     if (!fs.existsSync(scriptPath)) {
-        vscode.window.showErrorMessage(`Workflow script not found at: ${scriptPath}. Check your installation.`);
+        vscode.window.showErrorMessage(`Workflow script not found at: ${scriptPath}. Please update your settings.`);
         return;
     }
 

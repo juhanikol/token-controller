@@ -43,7 +43,7 @@ Choose one central location and keep the controller there:
 
 ```bash
 mkdir -p ~/tools
-git clone <repository-url> ~/tools/token-controller
+git clone <repository-url> ~/projects/token-controller
 ```
 
 If you choose a different location, use that path in the alias below.
@@ -53,7 +53,7 @@ If you choose a different location, use that path in the alias below.
 Run this once:
 
 ```bash
-echo "alias workflow='source ~/tools/token-controller/scripts/workflow.sh'" >> ~/.bashrc
+echo "alias workflow='source ~/projects/token-controller/scripts/workflow.sh'" >> ~/.bashrc
 source ~/.bashrc
 ```
 
