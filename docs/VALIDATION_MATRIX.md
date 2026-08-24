@@ -76,6 +76,7 @@ Copy this block for each experiment.
 | Architecture | architect | medium | interfaces, module boundaries, data flow, ADR rationale | agent misses critical dependency |
 | Domain models/types | decisions | low-medium | schemas, type definitions, invariants | agent invents or drops field/constraint |
 | Coding | code | medium | edited file, nearby tests, compile errors | agent edits based on incomplete target file |
+| Rapid prototyping | rapid-prototype | high for successful builds only | backend API integration errors, stderr, exit code, database migration warnings, raw logs | an API error or migration warning is compressed away |
 | Snippet review | snippet | none/low | complete snippet/method/file | any omitted line affects judgment |
 | Agent governance | agent | low | AGENTS.md and dynamic task-state separation | agent mutates stable instructions unnecessarily |
 | Unit tests | test | medium after baseline | failing test name, assertion, stack trace origin, exit code | failure reason hidden |
@@ -114,3 +115,37 @@ Copy this block for each experiment.
 - Observation: scan output kept raw/lossless.
 - Evidence preserved: package names, versions, CVE IDs, severity, remediation advice.
 - Decision: required. Do not use destructive compression.
+
+### Experiment: rapid prototype profile activation
+
+- Date: 2026-08-24
+- Repository / branch: token-controller / main
+- Scenario: aggressive compression for successful prototype builds with guarded backend API and database migration evidence
+- Profile: `rapid-prototype`
+- Active env file: isolated temporary `active_mode.env`, removed after validation
+- Tools installed: jq 1.8.2, RTK 0.42.4, Headroom 0.25.0
+- Tools missing: LeanCTX, MemStack, Caveman
+- Commands:
+  - `jq . config/workflow_settings.json >/dev/null`
+  - `source scripts/workflow.sh rapid-prototype`
+  - `source scripts/workflow.sh status`
+- Raw output location: isolated temporary validation file, removed after measuring
+- Compressed output location: not applicable; no build output was compressed during profile activation validation
+- Raw size / estimated tokens: 998 bytes / 18 lines
+- Compressed size / estimated tokens: not applicable
+- Evidence preserved:
+  - command: profile activation and status output retained
+  - working directory: repository root
+  - exit code: JSON parse, activation, and status all returned 0
+  - stderr: `AICONTEXT_PRESERVE_STDERR=true`
+  - first error: `AICONTEXT_PRESERVE_FIRST_ERROR=true`
+  - last relevant lines: full status and active environment cache inspected
+  - file paths: backend API targets and migrations selected for full file context
+  - line numbers: not applicable; no error was generated
+  - versions/environment: jq and optional tool availability recorded above
+  - warnings: `AICONTEXT_PRESERVE_WARNINGS=true`
+  - raw logs: `AICONTEXT_KEEP_RAW_LOGS=true`
+- Evidence lost or possibly hidden: none during activation; end-to-end build compression remains unmeasured
+- Did the agent reach the same conclusion with compressed context? Not applicable; compression tools were not invoked
+- Pass/fail: PASS for JSON validity, profile activation, exported safeguards, and cache persistence
+- Recommended profile change: none; run a representative successful build, failing backend integration, and warning-producing migration before approving end-to-end compression behavior

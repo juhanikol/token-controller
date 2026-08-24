@@ -114,7 +114,7 @@ source ~/.bashrc
 bash scripts/check-tools.sh
 ```
 
-The installer is deliberately conservative. It installs basic dependencies and prints tool-specific commands. Review each command before running it.
+The installer is deliberately conservative. It installs basic dependencies and prints tool-specific commands. It does not create the optional Python virtual environments automatically; running the printed Headroom and MemStack commands creates them under `$HOME/.venvs`. Review each command before running it.
 
 ### RTK
 
@@ -143,6 +143,8 @@ Safety note: use RTK mainly for noisy successful commands or repeated logs. For 
 ### Headroom
 
 Purpose: compresses tool outputs, logs, files, RAG chunks, and conversation history before model input. It can be used as a Python package, proxy, MCP server, or framework integration.
+
+The installer prints commands that create Headroom at `$HOME/.venvs/headroom` (the same path as `~/.venvs/headroom`). Its activation script is `$HOME/.venvs/headroom/bin/activate`.
 
 Recommended isolated Python setup:
 
@@ -193,6 +195,8 @@ Safety note: LeanCTX is the best fit for safe diagnostic/context-runtime behavio
 ### MemStack
 
 Purpose: Claude Code skill and memory framework. Do not treat it as a generic local vector indexer unless your installed version and license actually provide that feature.
+
+The installer prints commands that create MemStack at `$HOME/.venvs/memstack` (the same path as `~/.venvs/memstack`). Its activation script is `$HOME/.venvs/memstack/bin/activate`.
 
 Typical Claude Code-oriented setup:
 

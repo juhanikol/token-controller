@@ -70,6 +70,23 @@
       "rtk_mode": "noisy-success-only",
       "caveman_output": false
     },
+    "rapid-prototype": {
+      "risk": "high",
+      "compress_shell": "aggressive-on-successful-builds-preserve-errors-and-warnings",
+      "compress_files": "target-full-backend-api-and-migrations-full",
+      "codebase_index": true,
+      "memory_layer": "session",
+      "headroom_mode": "safe-reversible",
+      "leanctx_mode": "diagnostic",
+      "rtk_mode": "aggressive-success-only",
+      "caveman_output": false,
+      "raw_on_fail": true,
+      "keep_raw_logs": true,
+      "preserve_stderr": true,
+      "preserve_exit_code": true,
+      "preserve_first_error": true,
+      "preserve_warnings": true
+    },
     "snippet": {
       "risk": "normal",
       "compress_shell": "off",
