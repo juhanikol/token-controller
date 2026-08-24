@@ -1,3 +1,4 @@
 config/active_mode.env
 .memstack/
 node_modules/
+backup/

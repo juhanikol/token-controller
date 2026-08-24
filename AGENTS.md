@@ -1,8 +1,8 @@
 <!-- ai-workflow-controller:start -->
-# AI Context Policy
+# AI Context Workflow Rules
 
-## Active Profile
-Before executing tasks, check `~/.config/ai-workflow/active_mode.env` for `AICONTEXT_PROFILE` and `AICONTEXT_RISK`. Correctness and safety strictly supersede token reduction.
+## Purpose
+This WSL/Ubuntu shell state manager exports context-policy variables for compatible tools and VS Code agents; it does not compress content itself.
 
 ## Core rules
 Correctness beats token savings; compress only tolerant evidence and preserve raw failure, security, database, release, and compliance evidence.
@@ -11,10 +11,10 @@ Correctness beats token savings; compress only tolerant evidence and preserve ra
 2. Report it when it changes tool use; detect optional tools before relying on them.
 3. Edit `AGENTS.md` only when explicitly asked; keep all edits small and scoped.
 
-## Execution Rules
-- Terminal Execution: Prefix terminal test, build, and package commands with `wx` (e.g., `wx npm test`).
-- Code Exploration: If LeanCTX or Headroom MCP tools are available, use them to explore structure before reading raw files.
-- Use standard exploration tools only when neither MCP option is available.
+## Tool & Execution Rules
+Always prefix terminal commands with `wx` (for example, `wx npm test`) unless the active mode is `security`, `db`, or `raw`.
+When LeanCTX or Headroom MCP tools are available, prioritize them over standard `cat` or `grep` for codebase exploration.
+Use standard exploration tools only when neither MCP option is available.
 
 ## Policy inputs
 Use these variables to choose context fidelity and compression:

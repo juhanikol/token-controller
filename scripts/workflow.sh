@@ -7,6 +7,22 @@
 # This script is intended to be sourced, because it exports variables to the current shell.
 # It does not install token tools and does not invoke AI agents directly.
 
+workflow_run() {
+  if [ "$#" -eq 0 ]; then
+    printf 'Usage: workflow_run <command> [args...]\n' >&2
+    return 2
+  fi
+
+  if [ "${RTK_HOOK_ENABLED:-false}" = true ] && command -v rtk >/dev/null 2>&1; then
+    command rtk "$@"
+  else
+    command "$@"
+  fi
+}
+
+export -f workflow_run
+alias wx='workflow_run'
+
 _ai_workflow_main() {
   local _MODE="${1:-status}"
   local _SCRIPT_SOURCE="${BASH_SOURCE[0]}"

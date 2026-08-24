@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "LeanCTX": {
+      "type": "stdio",
+      "command": "lean-ctx",
+      "args": ["mcp"]
+    },
+    "Headroom": {
+      "type": "stdio",
+      "command": "headroom",
+      "args": ["mcp", "serve"]
+    }
+  }
+}

@@ -46,8 +46,8 @@ Environment requirements and assumptions:
 
 No! Token savings happen in two layers:
 
-1. **Behavioral Savings (Built-in):** By reading the `AGENTS.md` and `active_mode.env`, your AI agent (Copilot, Claude, Cursor) changes its own behavior. It will proactively summarize files, avoid reading irrelevant directories, and stop dumping massive passing logs into its reasoning loop. 
-2. **Mechanical Savings (Optional Tools):** If you want automated compression (like physically stripping 2,000 lines of `npm install` output in the terminal before the agent even sees it), you can install tools like RTK, Headroom, or LeanCTX. 
+1. **Behavioral Savings (Built-in):** By reading the `AGENTS.md` and `active_mode.env`, your AI agent (Copilot, Claude, Cursor) changes its own behavior. It will proactively summarize files, avoid reading irrelevant directories, and stop dumping massive passing logs into its reasoning loop.
+2. **Mechanical Savings (Optional Tools):** If you want automated compression (like physically stripping 2,000 lines of `npm install` output in the terminal before the agent even sees it), you can install tools like RTK, Headroom, or LeanCTX.
 
 Token Controller only exports policy variables; compatible tools may choose to act on them.
 
