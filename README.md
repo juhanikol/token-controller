@@ -1,10 +1,36 @@
 # AI Context Workflow Controller
 
-This tool gives coding agents simple, project-local rules for handling context safely.
+**Spend fewer tokens on noise. Keep the context that protects your code.**
+
+Token Controller helps developers get more useful work from AI coding agents without wasting context on repetitive logs, generated output, or irrelevant detail. Choose a workflow mode and it publishes a task-aware policy that compatible agents and context tools can follow: compress safe noise during routine work, but preserve source files, first failures, security findings, database warnings, and release evidence when accuracy matters.
+
+The goal is simple: leaner prompts, more focused agent sessions, and more of your token budget spent on solving the problem. Switch modes from the terminal or the VS Code status bar as your task moves from planning to coding, testing, debugging, or high-risk review.
+
+Token Controller is the policy and coordination layer. It does not perform compression by itself, so actual token savings depend on the agents and optional context tools connected to it.
+
+## Supported environment
+
+> **Currently supported and tested only on WSL 2 with Ubuntu, using VS Code connected to the same WSL distro through the WSL extension.** The current validation environment is Ubuntu 24.04 x86-64 on WSL2 with Bash 5.2 and `jq` 1.8.
+
+Native Windows, WSL 1, macOS, native Linux, Dev Containers, SSH remotes, and GitHub Codespaces have not been verified. They may work, but they are not currently supported by this project.
+
+Environment requirements and assumptions:
+
+- Run the setup and workflow commands in a WSL Bash terminal, not PowerShell or Command Prompt.
+- Open the project from that same WSL distro in VS Code. The terminal, extension, controller files, and `~/.config/ai-workflow/active_mode.env` must resolve to the same Linux home directory.
+- Each WSL distro has its own Linux home and active-mode file. If you use multiple distros, install and configure the controller separately in each one.
+- Keep the controller and projects in the WSL Linux filesystem, such as `~/tools` and `~/projects`. Windows-mounted paths such as `/mnt/c/...` are unverified and may behave differently for permissions, file watching, and shell scripts.
+- Keep shell scripts in Linux LF format. Windows CRLF conversion can prevent Bash from reading them correctly.
+- Use Bash. The documented alias is added to `~/.bashrc`; zsh, fish, and other shells are not currently documented or tested.
+- Install Git and `jq`. Standard Ubuntu tools such as `grep`, `mktemp`, `cp`, `mv`, and `chmod` are also required.
+- Keep `~/.config` writable so the active-mode file can be created and updated.
+- Optional context tools are not required. Install them only if you intend to use their features.
+
+For the VS Code button, install the extension into the **WSL extension host**, not only into local Windows VS Code. See the [VS Code extension requirements](extensions/vscode/README.md).
 
 You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md`. Your coding agents read that file and check the active workflow mode before they answer or modify files.
 
-The controller does not compress anything by itself. It selects a policy and saves it in:
+The selected policy is saved in:
 
 ```text
 ~/.config/ai-workflow/active_mode.env
@@ -31,7 +57,7 @@ workflow code
 
 ## Quick start
 
-You need WSL/Ubuntu, Bash, Git, and `jq`. If `jq` is missing:
+You need the supported WSL2/Ubuntu environment described above, plus Bash, Git, and `jq`. If Git or `jq` is missing:
 
 ```bash
 sudo apt install -y jq git
@@ -118,12 +144,11 @@ workflow debug
 
 You can switch modes as often as needed. Running `workflow init` is normally a one-time step per project.
 
-
-#### Step-by-Step Local Cleanup Commands:
+### Step-by-Step Local Cleanup Commands
 
 Bash
 
-```
+```bash
 # 1. Remove the active workflow cache directory
 rm -rf ~/.config/ai-workflow
 
@@ -138,22 +163,19 @@ rm -f ./AGENTS.md
 rm -rf ~/.venvs/headroom ~/.venvs/memstack
 ```
 
-
-#### One-Liner to Launch an Isolated Container:
+#### One-Liner to Launch an Isolated Container
 
 Run this from your `token-controller` project root directory:
 
 Bash
 
-```
+```bash
 docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:24.04 bash
 ```
-
 
 ## Scenario matrix
 
 Use this table when you are unsure which mode to choose.
-
 
 | Scenario                           | Command                    | Context behavior                                 | Evidence that must stay complete                            |
 | ---------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
@@ -247,7 +269,6 @@ If you choose to install the Python tools using those printed commands, their vi
 - MemStack: `~/.venvs/memstack`
 
 ## Useful commands
-
 
 | Command           | Purpose                                                  |
 | ----------------- | -------------------------------------------------------- |

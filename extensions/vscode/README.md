@@ -1,289 +1,107 @@
-# AI Context Workflow Controller
+# AI Context Workflow Controller for VS Code
 
-This tool gives coding agents simple, project-local rules for handling context safely.
+**Switch token-saving strategies without leaving your editor.**
 
-You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md`. Your coding agents read that file and check the active workflow mode before they answer or modify files.
+The **AI Context** status-bar button lets you match agent context to the work in front of you. Use compact modes for routine coding and successful test output, then switch to lossless modes when debugging failures, reviewing security findings, or changing databases. Compatible agents and context tools can use the selected policy to spend fewer tokens on noise while keeping important evidence complete.
 
-The controller does not compress anything by itself. It selects a policy and saves it in:
+One click updates the active workflow policy file in WSL, so you can keep agent sessions focused without remembering terminal commands.
 
-```text
-~/.config/ai-workflow/active_mode.env
-```
+The extension selects and publishes the policy; it does not compress context by itself. Actual token savings depend on the agents and optional context tools connected to Token Controller.
 
-## The simple flow
+## Supported environment
 
-```text
-One central clone
-      │
-      ├── workflow init ──────> project/AGENTS.md
-      │                          project-local agent rules
-      │
-      └── workflow <mode> ────> ~/.config/ai-workflow/active_mode.env
-                                 current context policy
-```
+> **Currently supported and tested only in VS Code connected to an Ubuntu WSL 2 distro through the WSL extension.** The current validation environment is Ubuntu 24.04 x86-64 on WSL2.
 
-For everyday use, remember only two commands:
+Install and run this extension in the **WSL extension host**. A local Windows-only VS Code window is not supported because the extension invokes `bash`, reads the Linux home directory, and watches `~/.config/ai-workflow/active_mode.env` inside WSL.
 
-```bash
-workflow init
-workflow code
-```
+Requirements and assumptions:
 
-## Quick start
+- VS Code 1.134.0 or newer, as required by the extension manifest.
+- WSL 2 with Ubuntu and a VS Code window connected to that same distro.
+- A separate controller installation for each WSL distro you use; Linux home directories and active-mode files are not shared between distros.
+- Bash and `jq` installed inside WSL.
+- Node.js and npm inside WSL when building the VSIX from source.
+- The repository cloned inside the WSL Linux filesystem at `~/tools/token-controller`. This exact path is currently required by the button implementation.
+- The generated VSIX installed into the WSL extension host.
 
-You need WSL/Ubuntu, Bash, Git, and `jq`. If `jq` is missing:
+Native Windows, WSL 1, macOS, native Linux, Dev Containers, SSH remotes, Codespaces, other Linux distributions, and repositories under `/mnt/c/...` have not been verified. They may work, but they are not currently supported.
 
-```bash
-sudo apt install -y jq git
-```
+## Install
 
-### 1. Clone the controller once
-
-Choose one central location and keep the controller there:
-
-```bash
-mkdir -p ~/tools
-git clone <repository-url> ~/tools/token-controller
-```
-
-If you choose a different location, use that path in the alias below.
-
-### 2. Add the `workflow` alias
-
-Run this once:
-
-```bash
-echo "alias workflow='source ~/tools/token-controller/scripts/workflow.sh'" >> ~/.bashrc
-source ~/.bashrc
-```
-
-Check that the alias works:
-
-```bash
-workflow status
-```
-
-### 3. Initialize each project
-
-Go to a project and run `workflow init`:
-
-```bash
-cd ~/projects/my-project
-workflow init
-```
-
-This changes only the `AGENTS.md` in the current project:
-
-- If `AGENTS.md` is missing, the command creates it from `templates/AGENTS_base.md`.
-- If `AGENTS.md` already exists, the command keeps the project's custom instructions and appends the required AI workflow rules.
-- If you run `workflow init` again, it does not add duplicate rules.
-
-Commit the generated or updated `AGENTS.md` if you want everyone working on the project to use the same rules.
-
-### 4. Choose a mode before you work
-
-Pick the mode that matches your task:
-
-```bash
-workflow architect
-workflow code
-workflow debug
-```
-
-The selected mode applies to the current shell and is also written to `~/.config/ai-workflow/active_mode.env` for agents to read.
-
-See the current mode at any time:
-
-```bash
-workflow status
-```
-
-## Everyday example
-
-```bash
-cd ~/projects/my-project
-
-# Run once for this project.
-workflow init
-
-# Understand the structure before making changes.
-workflow architect
-
-# Switch when implementation begins.
-workflow code
-
-# Use this if a test fails.
-workflow debug
-```
-
-You can switch modes as often as needed. Running `workflow init` is normally a one-time step per project.
-
-
-#### Step-by-Step Local Cleanup Commands:
-
-Bash
-
-```
-# 1. Remove the active workflow cache directory
-rm -rf ~/.config/ai-workflow
-
-# 2. Remove generated global instruction files
-rm -f ~/.copilot/instructions/ai-workflow.instructions.md
-rm -f ~/.claude/CLAUDE.md
-
-# 3. Clean up the current project's test AGENTS.md (if testing in a dummy folder)
-rm -f ./AGENTS.md
-
-# 4. (Optional) Remove installed Python virtual environments if resetting optional tools
-rm -rf ~/.venvs/headroom ~/.venvs/memstack
-```
-
-
-#### One-Liner to Launch an Isolated Container:
-
-Run this from your `token-controller` project root directory:
-
-Bash
-
-```
-docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:24.04 bash
-```
-
-
-## Scenario matrix
-
-Use this table when you are unsure which mode to choose.
-
-
-| Scenario                           | Command                    | Context behavior                                 | Evidence that must stay complete                            |
-| ---------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
-| Requirements and scope             | `workflow scope`           | Summarize carefully                              | User intent, constraints, acceptance criteria               |
-| Architecture and structure         | `workflow architect`       | Map the codebase, then read selected files fully | Interfaces, module boundaries, design reasoning             |
-| Models, schemas, and decisions     | `workflow decisions`       | Preserve contracts and types                     | Schemas, invariants, API contracts                          |
-| Normal coding                      | `workflow code`            | Keep target files full; summarize dependencies   | Edited files, nearby tests, compiler errors                 |
-| Rapid prototype                    | `workflow rapid-prototype` | Compress successful build noise aggressively     | Backend API errors, migration warnings, raw failure logs    |
-| Small snippet review               | `workflow snippet`         | Use little or no compression                     | The complete snippet, method, or file                       |
-| Agent-rule work                    | `workflow agent`           | Keep agent instructions stable                   | `AGENTS.md` and dynamic task-state files                    |
-| Data analysis                      | `workflow data-analysis`   | Preserve numeric evidence                        | Numbers, units, statistics, plots, data sources             |
-| Bug fixing                         | `workflow debug`           | Keep the first failure raw                       | Error, stderr, exit code, stack origin, paths, line numbers |
-| Unit and integration tests         | `workflow test`            | Compress passing noise only                      | Failing tests, assertions, stack traces                     |
-| Full test suite                    | `workflow test-full`       | Compress successful repetition                   | First failure and final test summary                        |
-| Documentation                      | `workflow docs`            | Gather sources efficiently; write normal prose   | Final documentation and factual behavior                    |
-| CI/CD                              | `workflow cicd`            | Compress install and fetch boilerplate           | Workflow files, scripts, environment, failing lines         |
-| Codebase or pull-request review    | `workflow review`          | Index first, then read important files fully     | Diffs, public interfaces, risk areas                        |
-| Security and compliance            | `workflow security`        | Raw or lossless context only                     | CVEs, secrets, auth, crypto, license findings               |
-| Large refactor or legacy migration | `workflow migration`       | Use a global map and full active files           | Compatibility rules and changed files                       |
-| Database migration                 | `workflow db`              | Raw or lossless context only                     | SQL, constraints, ordering, data-loss warnings              |
-| Performance work                   | `workflow perf`            | Preserve measurements exactly                    | Timings, percentiles, memory, sample size, environment      |
-| Release preparation                | `workflow release`         | Raw or lossless context only                     | Versions, changelog, artifacts, hashes, signing output      |
-| Maximum fidelity                   | `workflow raw`             | Disable compression                              | Everything                                                  |
-| Disable optimizers                 | `workflow off`             | Turn optional optimization modes off             | Normal shell output                                         |
-
-Aliases kept for compatibility:
-
-```bash
-workflow plan   # same as workflow architect
-workflow ci     # same as workflow cicd
-```
-
-## Safety rules in plain language
-
-- Correctness is more important than saving tokens.
-- `raw`, `security`, `db`, and `release` use raw or lossless context.
-- `debug` and `test` keep the first failure, stderr, exit code, paths, and line numbers.
-- Target files being edited should be read in full.
-- Repetitive successful output is the safest content to compress.
-- Optional tools must be detected before an agent relies on them.
-
-## What `workflow init` adds
-
-The reusable template is stored at:
+The extension currently expects the controller at:
 
 ```text
-templates/AGENTS_base.md
+~/tools/token-controller/scripts/workflow.sh
 ```
 
-The injected rules tell agents to:
-
-- check `~/.config/ai-workflow/active_mode.env` before working;
-- follow the selected risk and fidelity policy;
-- preserve failures and high-risk evidence;
-- avoid assuming optional tools are installed;
-- keep project-specific instructions intact.
-
-Managed markers make the operation repeatable. If an existing managed block is incomplete, or `AGENTS.md` is a symbolic link, `workflow init` stops instead of making a risky change.
-
-## Optional global editor setup
-
-Project-local `AGENTS.md` files are the main distribution method. You can also add the same rule to supported global VS Code and agent settings:
+Clone the repository to that location:
 
 ```bash
-workflow setup
+git clone https://github.com/juhanikol/token-controller.git ~/tools/token-controller
 ```
 
-This command is optional. It updates supported Copilot settings and instruction files, and adds rules for detected Gemini Code Assist or Claude Code installations. Existing settings are preserved, and the same rule is not added twice.
-
-The VS Code settings updater expects a strict JSON `settings.json`. It stops without replacing files that contain JSON comments or trailing commas.
-
-## Optional context tools
-
-RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The controller only exports policy variables; compatible tools may choose to act on them.
-
-To inspect what is installed:
+Build the VSIX:
 
 ```bash
-bash ~/tools/token-controller/scripts/check-tools.sh
+cd ~/tools/token-controller/extensions/vscode
+npm install
+npx @vscode/vsce package
 ```
 
-The optional installer installs base prerequisites and then prints tool-specific commands for review:
+Install the generated VSIX from the command line:
 
 ```bash
-bash ~/tools/token-controller/scripts/install-optional-tools.sh
+code --install-extension token-controller-ui-0.0.1.vsix
 ```
 
-If you choose to install the Python tools using those printed commands, their virtual environments are:
+Alternatively, open the VS Code Extensions view, choose **Views and More Actions (...) > Install from VSIX...**, and select the generated `token-controller-ui-0.0.1.vsix` file.
 
-- Headroom: `~/.venvs/headroom`
-- MemStack: `~/.venvs/memstack`
+Reload VS Code after installation. The **AI Context: off** button should appear on the right side of the status bar.
 
-## Useful commands
+The controller requires Bash and `jq`. On Ubuntu or WSL, install `jq` with:
 
+```bash
+sudo apt install -y jq
+```
 
-| Command           | Purpose                                                  |
-| ----------------- | -------------------------------------------------------- |
-| `workflow init`   | Create or safely extend the current project's`AGENTS.md` |
-| `workflow setup`  | Configure optional global editor instructions            |
-| `workflow <mode>` | Select a context mode                                    |
-| `workflow status` | Show the active mode and policy                          |
-| `workflow off`    | Disable optional optimizers                              |
-| `workflow help`   | List available commands and modes                        |
+## What the button does
 
-## Repository layout
+1. Click **AI Context: current-mode** in the status bar.
+2. Select a workflow type from the menu.
+3. The extension runs the matching workflow mode.
+4. The selected policy is saved to `~/.config/ai-workflow/active_mode.env`.
+5. The status-bar text updates and VS Code confirms the new mode.
+
+The button also updates when the mode is changed outside VS Code with the `workflow` command.
+
+The extension only switches context modes. It does not install optional tools, modify project files, or run `workflow init`.
+
+## Workflow types
+
+| Workflow type | Use it for | Context behavior |
+|---|---|---|
+| **Code** | Normal implementation work | Keeps target files complete and uses safe compression for supporting context. |
+| **Debug** | Investigating bugs | Preserves the first failure, stderr, exit code, paths, and stack origin. |
+| **Test** | Unit and integration tests | Compresses passing noise while preserving failures. |
+| **Test-Full** | Full or broad test suites | Compresses repetitive successful output and keeps failure evidence. |
+| **Architect** | Understanding structure and planning architecture | Builds a codebase overview before selected files are read fully. |
+| **Scope** | Gathering requirements and constraints | Uses careful summaries while preserving intent and acceptance criteria. |
+| **Security** | Vulnerability, secret, authentication, or compliance work | Uses raw or lossless context only. |
+| **Database** | Schemas and database migrations | Preserves SQL, ordering, constraints, and data-loss warnings without lossy compression. |
+| **CI/CD** | Build and deployment pipelines | Reduces install boilerplate but preserves scripts, errors, and exit codes. |
+| **Rapid Prototype** | Fast experimental builds | Compresses successful build noise aggressively but preserves API errors, migration warnings, and failures. |
+| **Review** | Repository or pull-request review | Focuses on interfaces, diffs, and risk areas. |
+| **Raw (Lossless)** | Maximum-fidelity work | Disables compression and preserves all available evidence. |
+| **Off** | Turning workflow optimizers off | Returns to normal shell output without an active optimization strategy. |
+
+When unsure, choose **Code** for everyday work. Switch to **Debug**, **Security**, **Database**, or **Raw (Lossless)** whenever exact failure or high-risk evidence matters.
+
+## Troubleshooting
+
+If VS Code reports that the workflow script was not found, confirm this file exists:
 
 ```text
-token-controller/
-├── README.md
-├── config/
-│   └── workflow_settings.json
-├── docs/
-│   └── VALIDATION_MATRIX.md
-├── prompts/
-│   └── vscode-agent-prompts.md
-├── scripts/
-│   ├── check-tools.sh
-│   ├── install-optional-tools.sh
-│   └── workflow.sh
-└── templates/
-    └── AGENTS_base.md
+~/tools/token-controller/scripts/workflow.sh
 ```
 
-## Development checks
-
-The controller itself needs only Bash and `jq` for its basic checks:
-
-```bash
-bash -n scripts/workflow.sh
-jq . config/workflow_settings.json >/dev/null
-```
-
-Detailed validation results live in `docs/VALIDATION_MATRIX.md`.
+If the displayed mode is `off` after installation, select a workflow type from the button. If it shows `error`, check that `~/.config/ai-workflow/active_mode.env` is readable.

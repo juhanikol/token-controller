@@ -368,3 +368,113 @@ Copy this block for each experiment.
 - Did the agent reach the same conclusion with compressed context? Not tested; the raw profile prohibits lossy compression
 - Pass/fail: PASS
 - Recommended profile change: disable Caveman output in every mode while retaining compatibility variables
+
+### Experiment: VS Code extension button documentation
+
+- Date: 2026-08-24
+- Repository / branch: token-controller / main
+- Scenario: replace copied controller documentation with focused VS Code extension installation and status-bar button guidance
+- Profile: no active environment profile detected
+- Active env file: not present
+- Tools installed: Node.js, npm, TypeScript, ESLint, esbuild, LeanCTX
+- Tools missing: not applicable
+- Commands:
+  - full read of `extensions/vscode/README.md`, `package.json`, `.gitignore`, and `src/extension.ts`
+  - `npm run package`
+  - compare the 13 source mode definitions with the 13 documented workflow rows
+  - verify Markdown fence count is even
+  - `git diff --check`
+- Raw output location: validation transcript retained in the agent session
+- Compressed output location: LeanCTX inspection transcript in the agent session
+- Raw size / estimated tokens: rewritten extension README is 3,828 bytes / 83 lines; source and documentation each contain 13 UI modes
+- Compressed size / estimated tokens: not measured
+- Evidence preserved:
+  - command: extension type check, lint, production build, mode counts, Markdown structure, and diff check
+  - working directory: repository root and `extensions/vscode`
+  - exit code: build and final validation checks returned 0
+  - stderr: first validation-command quoting error retained exactly before the corrected check
+  - first error: `/bin/bash: -c: line 1: unexpected EOF while looking for matching \`\``
+  - last relevant lines: source mode count 13, README mode-row count 13, fence count 12
+  - file paths: `extensions/vscode/README.md`, `package.json`, `.gitignore`, and `src/extension.ts`
+  - line numbers: all workflow rows reported at README lines 59-71
+  - versions/environment: local installed Node/npm toolchain and VS Code extension package configuration
+- Evidence lost or possibly hidden: none relevant; dependency-directory listings were compacted during initial discovery
+- Did the agent reach the same conclusion with compressed context? Yes; direct build and exact count checks independently verified the documentation
+- Pass/fail: PASS
+- Recommended profile change: none
+
+### Experiment: WSL2 environment support documentation
+
+- Date: 2026-08-24
+- Repository / branch: token-controller / main
+- Scenario: state the currently supported environment and runtime assumptions at the start of both READMEs
+- Profile: no active environment profile detected
+- Active env file: not present
+- Tools installed: Ubuntu 24.04 on WSL2 x86-64, Bash 5.2.21, jq 1.8.2, Node.js/npm extension toolchain
+- Tools missing: not applicable
+- Commands:
+  - inspect the local kernel, Ubuntu release, Bash version, and jq version
+  - verify extension home, script, active-mode, and Bash execution paths against `src/extension.ts`
+  - verify the VS Code engine requirement against `package.json`
+  - `bash -n scripts/workflow.sh`
+  - `jq . config/workflow_settings.json >/dev/null`
+  - `npm run package` in `extensions/vscode`
+  - verify both supported-environment headings appear at line 3 and both notices at line 5
+  - verify Markdown fence counts are even
+  - `git diff --check`
+- Raw output location: validation transcript retained in the agent session
+- Compressed output location: LeanCTX build transcript in the agent session
+- Raw size / estimated tokens: root README is 13,437 bytes / 304 lines; extension README is 5,146 bytes / 101 lines
+- Compressed size / estimated tokens: not measured
+- Evidence preserved:
+  - command: environment detection, source-path checks, syntax, JSON, extension build, Markdown structure, and diff checks
+  - working directory: repository root and `extensions/vscode`
+  - exit code: raw validation and extension build returned 0
+  - stderr: complete LeanCTX allowlist refusal retained before raw inspection fallback
+  - first error: `[BLOCKED — DO NOT RETRY] 'bash' is not in the shell allowlist.`
+  - last relevant lines: README sizes and supported-environment notice locations
+  - file paths: `README.md`, `extensions/vscode/README.md`, `extensions/vscode/src/extension.ts`, and `extensions/vscode/package.json`
+  - line numbers: both environment headings at line 3 and support notices at line 5
+  - versions/environment: WSL2 kernel 6.6.87.2, Ubuntu 24.04.4 LTS x86-64, Bash 5.2.21, jq 1.8.2, VS Code engine `^1.134.0`
+- Evidence lost or possibly hidden: none; LeanCTX rejected the initial pipeline before execution, then raw read-only commands preserved the full evidence
+- Did the agent reach the same conclusion with compressed context? Yes; the extension build used LeanCTX and the environment/source checks were independently verified raw
+- Pass/fail: PASS
+- Recommended profile change: none
+
+### Experiment: token-saving value proposition
+
+- Date: 2026-08-24
+- Repository / branch: token-controller / main
+- Scenario: explain the token-saving purpose of Token Controller at the start of both READMEs
+- Profile: no active environment profile detected
+- Active env file: not present
+- Tools installed: Bash 5.2.21, jq 1.8.2, LeanCTX 3.9.19, standard GNU utilities
+- Tools missing: Markdownlint CLI
+- Commands:
+  - inspect both README openings and all existing token/compression claims
+  - add benefit-led copy above each supported-environment section
+  - verify the main pitch and extension pitch both appear at line 3
+  - verify both supported-environment sections remain near the start at line 11
+  - search for unsupported percentage or guaranteed-savings claims
+  - verify Markdown fence counts are even
+  - `bash -n scripts/workflow.sh`
+  - `jq . config/workflow_settings.json >/dev/null`
+  - `git diff --check`
+- Raw output location: validation transcript retained in the agent session
+- Compressed output location: LeanCTX README inspection transcript in the agent session
+- Raw size / estimated tokens: root README is 14,265 bytes / 310 lines; extension README is 5,774 bytes / 107 lines
+- Compressed size / estimated tokens: not measured
+- Evidence preserved:
+  - command: exact pitch locations, environment heading locations, claim scan, Markdown structure, syntax, JSON, and diff checks
+  - working directory: repository root
+  - exit code: syntax, JSON, Markdown structure, claim scan, and diff checks returned 0 or the expected no-match status
+  - stderr: none
+  - first error: none
+  - last relevant lines: root fence count 40, extension fence count 12, and no unsupported quantitative saving claim
+  - file paths: `README.md` and `extensions/vscode/README.md`
+  - line numbers: both pitches at line 3; both supported-environment headings at line 11
+  - versions/environment: WSL2 Ubuntu 24.04 x86-64, Bash 5.2.21, jq 1.8.2
+- Evidence lost or possibly hidden: none; the copy explicitly states that actual savings depend on connected agents and optional context tools
+- Did the agent reach the same conclusion with compressed context? Yes; exact raw checks independently verified placement and claim boundaries
+- Pass/fail: PASS
+- Recommended profile change: none
