@@ -3,7 +3,8 @@ set -euo pipefail
 
 cat <<'INTRO'
 This script installs only basic WSL/Ubuntu prerequisites automatically.
-It then prints optional commands for RTK, Headroom, LeanCTX, MemStack, and Caveman.
+It then prints optional commands for RTK, Headroom, LeanCTX, Claude Code, MemStack, and Caveman.
+No optional tool command is run automatically.
 Review each optional command before running it.
 INTRO
 
@@ -32,11 +33,33 @@ Headroom:
   python -c "import headroom; print(headroom.__version__)"
   headroom proxy --port 8787
 
-LeanCTX:
+LeanCTX (choose one installation method; do not run both):
+  # Cargo is the primary choice when a Rust toolchain is already installed.
+  cargo install lean-ctx
+
+  # OR use the universal installer when Rust is not installed.
   curl -fsSL https://leanctx.com/install.sh | sh
+
   source ~/.bashrc
-  lean-ctx onboard
+  lean-ctx setup
   lean-ctx doctor
+
+  # OPTIONAL: language servers are needed only for the ctx_refactor feature.
+  # Core LeanCTX features do not require rust-analyzer or other LSP servers.
+  rustup component add rust-analyzer
+  npm install -g typescript-language-server typescript
+  pip install python-lsp-server
+  go install golang.org/x/tools/gopls@latest
+
+Node.js 18+ (needed for Claude Code and Caveman):
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+  source ~/.bashrc
+  nvm install 22
+  nvm use 22
+
+Claude Code:
+  npm install -g @anthropic-ai/claude-code
+  claude --version
 
 MemStack, Claude Code oriented:
   python3 -m venv ~/.venvs/memstack
@@ -45,11 +68,15 @@ MemStack, Claude Code oriented:
   pip install memstack-skill-loader
   claude mcp add --scope user memstack-skills -- python -m memstack_skill_loader
 
-Node / Caveman:
-  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-  source ~/.bashrc
-  nvm install 22
-  nvm use 22
+Caveman:
+  ========================================================================
+  WARNING (August 2026): Several original standalone Caveman tools,
+  including caveman-code, cavemem, and cavekit, are frozen and are no
+  longer under active development. Consider whether you actually need an
+  output-brevity tool before installing Caveman.
+  ========================================================================
+
+  # If you still want Caveman after reviewing the warning:
   curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman/main/install.sh | bash
 
 After installing optional tools:

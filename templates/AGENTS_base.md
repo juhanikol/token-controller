@@ -1,3 +1,4 @@
+<!-- ai-workflow-controller:start -->
 # AGENTS.md - AI Context Workflow Rules
 
 ## Project purpose
@@ -91,3 +92,4 @@ When changing profiles, scripts, or README scenario guidance, update `docs/VALID
 - evidence lost or possibly hidden
 - pass/fail decision
 - recommended profile change
+<!-- ai-workflow-controller:end -->

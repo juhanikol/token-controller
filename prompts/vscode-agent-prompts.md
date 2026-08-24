@@ -9,7 +9,7 @@ You are reviewing a WSL/Ubuntu shell profile controller for AI context and token
 
 Goal: validate whether this repository correctly acts as a profile/state manager, not as a token optimizer itself.
 
-Read AGENTS.md, README.md, scripts/workflow.sh, and config/workflow_settings.json.
+Read templates/AGENTS_base.md, README.md, scripts/workflow.sh, and config/workflow_settings.json.
 
 Check:
 1. Does workflow.sh use config/workflow_settings.json as the source of truth?
@@ -18,7 +18,7 @@ Check:
 4. Are backward-compatible variables still exported?
 5. Are high-risk profiles raw/lossless by default?
 6. Are target files and failures protected from destructive compression?
-7. Is AGENTS.md concise enough and free from unnecessary context bloat?
+7. Is templates/AGENTS_base.md concise enough and free from unnecessary context bloat?
 8. Are README scenario mappings consistent with config/workflow_settings.json?
 
 Do not install RTK, Headroom, LeanCTX, MemStack, or Caveman.
@@ -48,7 +48,7 @@ Rules:
 - Update README.md scenario matrix.
 - Update docs/VALIDATION_MATRIX.md expectations.
 - Update scripts/workflow.sh usage text only if a new command name is added.
-- Keep AGENTS.md stable unless a new general rule is needed.
+- Keep templates/AGENTS_base.md stable unless a new general rule is needed.
 - Do not install optional tools.
 - Validate with bash -n and jq.
 
@@ -148,22 +148,22 @@ Return only:
 8. recommended profile change
 ```
 
-## 7. AGENTS.md smell review prompt
+## 7. AGENTS.md template smell review prompt
 
 ```text
-Review AGENTS.md for coding-agent instruction quality.
+Review templates/AGENTS_base.md for coding-agent instruction quality.
 
 Look specifically for:
 - context bloat
 - conflicting instructions
-- rules that belong in README instead of AGENTS.md
+- rules that belong in README instead of the generated AGENTS.md
 - instructions that force unnecessary file traversal or testing
 - tool-specific assumptions that may be false when the tool is not installed
 - unclear permission boundaries
 - unstable task-specific content that should be moved to TASK.md, PLAN.md, STATE.md, or docs/VALIDATION_MATRIX.md
 
-Do not rewrite AGENTS.md immediately. First produce a short findings list and a minimal proposed patch.
-If patching, keep AGENTS.md concise and stable.
+Do not rewrite templates/AGENTS_base.md immediately. First produce a short findings list and a minimal proposed patch.
+If patching, keep the template concise and stable.
 ```
 
 ## 8. Safe release-readiness prompt
@@ -179,7 +179,7 @@ Check:
 - README command examples are fenced and not malformed
 - no accidental hardcoded local paths except documented defaults
 - no install script runs risky remote curl commands automatically without user decision
-- AGENTS.md does not instruct agents to mutate workflow.sh or AGENTS.md without permission
+- templates/AGENTS_base.md does not instruct agents to mutate workflow.sh or generated AGENTS.md files without permission
 - docs/VALIDATION_MATRIX.md exists and has templates
 - prompts/vscode-agent-prompts.md exists and is task-oriented
 

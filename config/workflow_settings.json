@@ -1,4 +1,5 @@
 {
+  "_comment": "Caveman integration is maintained for backward compatibility only and is disabled in all mode profiles.",
   "schema_version": 2,
   "defaults": {
     "cache_align": true,
