@@ -14,16 +14,6 @@ Token Controller stops AI coding agents from burning through token budgets on re
 
 *Token Controller acts as the context router and guardrail layer. It defines when to compress and when to preserve raw evidence, helping your connected agents and tools keep sessions focused and cost-effective.*
 
-### Tool-routing model
-
-Token Controller has two complementary layers:
-
-* **Active shell interception:** `wx` is the only built-in command interceptor. When the active profile enables RTK and the `rtk` executable is available, `wx` routes the command through RTK. Otherwise, it executes the original command unchanged.
-* **Integration-driven tools:** LeanCTX, Headroom, and MemStack are not launched or intercepted by `wx`. The workflow writes `AICONTEXT_LEANCTX_MODE`, `AICONTEXT_HEADROOM_MODE`, `AICONTEXT_CODEBASE_INDEX`, and `AICONTEXT_MEMORY_LAYER` to `~/.config/ai-workflow/active_mode.env`; agents and compatible IDE or MCP integrations can read those values and use an installed tool when the selected mode enables it.
-* **Behavioral fallback:** The project-local `AGENTS.md` rules remain effective without optional software. If an integration is missing, agents use standard tools while manually preserving first failures and high-risk evidence and summarizing only repetitive, low-risk noise.
-
-Caveman is frozen and deprecated as of mid-2026. It is no longer included in the default profile configuration, tool detection, or installation guidance. The shell controller retains only disabled legacy environment exports for backward compatibility; no bundled profile enables or recommends Caveman.
-
 ## Why this matters (even with million-token context windows)
 
 Context windows have reached massive scales, but simply having a larger window does not eliminate the need for optimization. In fact, unmanaged capacity often leads to **"context rot."** As the window fills with raw logs, uncompressed MCP (Model Context Protocol) tool outputs, and irrelevant file contents, the AI's attention dilutes. This causes reasoning drops, latency spikes, and unnecessary inference costs.
@@ -58,7 +48,7 @@ For the VS Code button, install the extension into the **WSL extension host**, n
 
 If you use VS Code with WSL, installing the extension via the terminal can sometimes fail to register with the Windows UI. The most reliable method is using the VS Code graphical interface:
 
-**SIMPLE METHOD:** Download the 'extensions/vscode/token-controller-ui-0.0.1.vsix' and install it via VS Code UI
+**SIMPLE METHOD:** Download the 'extensions/vscode/token-controller-ui-x.x.x.vsix' and install it via VS Code UI, OR...
 
 ## Clone the repository
 
@@ -69,7 +59,6 @@ If you use VS Code with WSL, installing the extension via the terminal can somet
    cd extensions/vscode
    npx vsce package
    ```
-
 3. Open VS Code (ensure you are connected to your WSL environment).
 4. Open the Extensions panel (Ctrl + Shift + X).
 5. Click the ... (Views and More Actions) icon at the top right of the Extensions panel.
@@ -79,7 +68,7 @@ If you use VS Code with WSL, installing the extension via the terminal can somet
 
 You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md`. Your coding agents read that file and check the active workflow mode before they answer or modify files.
 
-By default, the selected policy is saved in:
+The selected policy is saved in:
 
 ```text
 ~/.config/ai-workflow/active_mode.env
@@ -104,7 +93,7 @@ workflow init
 workflow code
 ```
 
-## Quick start
+## Quick start and depencies
 
 You need the supported WSL2/Ubuntu environment described above, plus Bash, Git, and `jq`. If Git or `jq` is missing:
 
@@ -165,11 +154,7 @@ workflow code
 workflow debug
 ```
 
-The selected mode applies to the current shell and is also written to `active_mode.env` under `AICONTEXT_CONFIG_DIR` (default: `~/.config/ai-workflow`) for agents to read.
-
-When you run `workflow <mode>` in a terminal, that shell receives the exported variables immediately because the command sources `workflow.sh`. A mode change made from the VS Code UI updates the shared `active_mode.env` file but cannot rewrite the environment of an already-open terminal process. Refresh that terminal by sourcing the active file directly, by running `source ~/.bashrc` when your Bash startup configuration sources the active file, or by re-sourcing `workflow.sh` with the selected mode. New terminals load their startup configuration automatically, and `wx` also loads the cached profile on first use when its RTK flag is unset.
-
-If `AICONTEXT_CONFIG_DIR` is set before VS Code starts, both the extension and CLI use that directory instead of `~/.config/ai-workflow`.
+The selected mode applies to the current shell and is also written to `~/.config/ai-workflow/active_mode.env` for agents to read.
 
 See the current mode at any time:
 
@@ -197,7 +182,7 @@ workflow debug
 
 You can switch modes as often as needed. Running `workflow init` is normally a one-time step per project.
 
-### Step-by-Step Local Cleanup Commands
+### Step-by-Step Local Cleanup / Uninstall Commands
 
 Bash
 
@@ -212,11 +197,18 @@ rm -f ~/.claude/CLAUDE.md
 # 3. Clean up the current project's test AGENTS.md (if testing in a dummy folder)
 rm -f ./AGENTS.md
 
-# 4. (Optional) Remove installed Python virtual environments if resetting optional tools
+# 4.a.  Remove the Shell Alias. Open your ~/.bashrc file in a text editor (or via terminal):
+nano ~/.bashrc
+# 4.b   Find and delete the following line:
+alias workflow='source ~/projects/token-controller/scripts/workflow.sh'
+# 4.c.  Save the file and refresh your terminal session:
+source ~/.bashrc
+
+# 5. (Optional) Remove installed Python virtual environments if resetting optional tools
 rm -rf ~/.venvs/headroom ~/.venvs/memstack
 ```
 
-#### One-Liner to Launch an Isolated Container
+#### One-Liner to Launch a Container
 
 Run this from your `token-controller` project root directory:
 
@@ -229,6 +221,7 @@ docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:24.04 bash
 ## Scenario matrix
 
 Use this table when you are unsure which mode to choose.
+
 
 | Scenario                           | Command                    | Context behavior                                 | Evidence that must stay complete                            |
 | ---------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
@@ -302,9 +295,7 @@ The VS Code settings updater expects a strict JSON `settings.json`. It stops wit
 
 ## Optional context tools
 
-RTK, Headroom, LeanCTX, and MemStack are optional. RTK is routed actively through `wx`; the other tools depend on their own IDE or MCP integration and the exported `AICONTEXT_*` policy values. The controller does not install or launch those integrations automatically.
-
-If any or all optional tools are missing, the controller degrades safely: `wx` runs the native command, agents use standard exploration tools, and the behavioral guardrails in `templates/AGENTS_base.md` still require complete first failures and high-risk evidence while allowing summaries of repetitive success noise.
+RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The controller only exports policy variables; compatible tools may choose to act on them.
 
 To inspect what is installed:
 
@@ -323,7 +314,30 @@ If you choose to install the Python tools using those printed commands, their vi
 * Headroom: `~/.venvs/headroom`
 * MemStack: `~/.venvs/memstack`
 
+## What the optional tools do
+
+While not required, installing these tools activates the "Mechanical" compression layer, intercepting noise before the AI agent even has to read it:
+
+* **RTK (Terminal Hook):** Intercepts and physically compresses noisy terminal output (like `npm install` or massive test passing logs) directly in the shell.
+* **LeanCTX (MCP Server):** Provides semantic codebase graphing and context-aware file reading, preventing agents from doing massive, token-heavy `cat` dumps of large files.
+* **Headroom (MCP/Proxy):** Acts as a local proxy that semantically caches prompt inputs and intelligently trims historical noise before hitting the model API.
+* **MemStack:** A local memory layer primarily oriented around Claude Code, allowing agents to preserve long-running task context across sessions.
+* **Caveman:** A legacy standalone output-brevity tool (Note: largely frozen as of August 2026, evaluate before installing).
+
+## Controlling Changes (Validation Matrix)
+
+Whenever a new mode is added or a shell policy is changed, it must be documented to prevent regressions. We maintain a ledger in `docs/VALIDATION_MATRIX.md`.
+
+When testing a change, you must record:
+
+1. The target scenario and the active profile.
+2. The exact commands executed (e.g., `wx build`).
+3. Which optional tools were active versus missing.
+4. The estimated raw token size vs. the compressed token size.
+5. The pass/fail result indicating if critical evidence (like a stack trace) was safely preserved.
+
 ## Useful commands
+
 
 | Command           | Purpose                                                  |
 | ----------------- | -------------------------------------------------------- |
