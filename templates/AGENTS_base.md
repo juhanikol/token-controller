@@ -4,43 +4,14 @@
 ## Active Profile
 Before executing tasks, check `~/.config/ai-workflow/active_mode.env` for `AICONTEXT_PROFILE` and `AICONTEXT_RISK`. Correctness and safety strictly supersede token reduction.
 
-## Core rules
-Correctness beats token savings; compress only tolerant evidence and preserve raw failure, security, database, release, and compliance evidence.
-
-1. Read the active context profile from the environment or from `~/.config/ai-workflow/active_mode.env`.
-2. Report it when it changes tool use; detect optional tools before relying on them.
-3. Edit `AGENTS.md` only when explicitly asked; keep all edits small and scoped.
-
 ## Execution Rules
-- Terminal Execution: Prefix terminal test, build, and package commands with `wx` (e.g., `wx npm test`).
-- Code Exploration: If LeanCTX or Headroom MCP tools are available, use them to explore structure before reading raw files.
-- Use standard exploration tools only when neither MCP option is available.
+- **Terminal Execution:** Prefix terminal test, build, and package commands with `wx` (e.g., `wx npm test`).
+- **Tool Routing:** `wx` directly intercepts commands only for RTK. LeanCTX, Headroom, and MemStack are integration-driven; use them only when they are installed, exposed through the IDE or MCP, and enabled by `AICONTEXT_LEANCTX_MODE`, `AICONTEXT_HEADROOM_MODE`, `AICONTEXT_CODEBASE_INDEX`, or `AICONTEXT_MEMORY_LAYER` as applicable.
+- **Code Exploration:** If LeanCTX or Headroom MCP tools are available, prioritize them over standard `cat` or `grep` for codebase exploration. Use raw file reads when the active profile requires full fidelity or when those MCP tools are unavailable.
 
-## Policy inputs
-Use these variables to choose context fidelity and compression:
-
-- Profile: `AICONTEXT_PROFILE`, `AICONTEXT_RISK`.
-- Tools: `AICONTEXT_COMPRESS_SHELL`, `AICONTEXT_COMPRESS_FILES`, `AICONTEXT_CODEBASE_INDEX`, `AICONTEXT_MEMORY_LAYER`, `AICONTEXT_HEADROOM_MODE`, `AICONTEXT_LEANCTX_MODE`, `AICONTEXT_RTK_MODE`, `AICONTEXT_CAVEMAN_OUTPUT`.
-- Safety: `AICONTEXT_RAW_ON_FAIL`, `AICONTEXT_KEEP_RAW_LOGS`, `AICONTEXT_AGENTS_MUTATION`.
-
-Compatibility variables: `RTK_HOOK_ENABLED`, `HEADROOM_COMPRESSION_STRATEGY`, `LEANCTX_ACTIVE`, `MEMSTACK_ACTIVE`, `CAVEMAN_OUTPUT`.
-
-## Fidelity policy
-Preserve raw edited targets; first failures; stderr, exit codes, first errors, stack origins, paths, and lines; security findings and auth/crypto code; database changes and data-loss warnings; release artifacts and metadata; and performance measurements with sample sizes.
-
-Compression is acceptable for repetitive successes, fetch/build boilerplate, unedited generated or vendor files, indexed structure, and duplicate warnings after preserving the first exact instance.
-
-## Scenario behavior
-- `raw`, `security`, `db`, and `release`: use raw or lossless context only.
-- `scope`, `architect`, `decisions`, and `review`: use structural maps and codebase indices, then full-read selected files.
-- `code` and `snippet`: full target file and nearby tests; dependency summaries are acceptable.
-- `debug` and `test`: preserve the first failure exactly; compress only repeated pass/noise output.
-- `cicd`: preserve workflow YAML, shell scripts, environment assumptions, exit code, and failing lines; compress fetch/install boilerplate only.
-- `docs`: use normal prose. Do not use Caveman-style output for final documentation.
-
-## AGENTS.md stability
-Keep this file short and stable; put dynamic state in `TASK.md`, `PLAN.md`, `STATE.md`, `DECISIONS.md`, or `.ai-context/validation-log.md`.
-
-## Validation requirement
-When profiles, scripts, or README scenario guidance change, record the scenario, profile, commands, tool availability, raw/compressed size estimates, preserved/lost evidence, pass/fail result, and recommendation in `docs/VALIDATION_MATRIX.md`.
+## Behavioral Guardrails (Default & Tool-Free)
+- If no optional tool is available, use standard tools and apply these guardrails manually.
+- **`raw` / `security` / `db` / `release`:** 100% lossless. Read target files completely; preserve all SQL, auth code, CVE findings, and data warnings.
+- **`debug` / `test` / `cicd`:** Preserve the first failure, stack trace, line numbers, stderr, and exit code. Summarize repetitive passing noise.
+- **`code` / `architect` / `scope`:** Read target files being edited in full; summarize broad dependency trees and boilerplate.
 <!-- ai-workflow-controller:end -->

@@ -28,7 +28,7 @@ const MODES: ModeOption[] = [
 ];
 
 export function activate(context: vscode.ExtensionContext) {
-    const configDir = path.join(os.homedir(), '.config', 'ai-workflow');
+    const configDir = process.env.AICONTEXT_CONFIG_DIR || path.join(os.homedir(), '.config', 'ai-workflow');
     const activeEnvFile = path.join(configDir, 'active_mode.env');
 
     // Create the Status Bar Item

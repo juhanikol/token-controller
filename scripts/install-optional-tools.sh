@@ -3,7 +3,7 @@ set -euo pipefail
 
 cat <<'INTRO'
 This script installs only basic WSL/Ubuntu prerequisites automatically.
-It then prints optional commands for RTK, Headroom, LeanCTX, Claude Code, MemStack, and Caveman.
+It then prints optional commands for RTK, Headroom, LeanCTX, Claude Code, and MemStack.
 No optional tool command is run automatically.
 Review each optional command before running it.
 INTRO
@@ -51,7 +51,7 @@ LeanCTX (choose one installation method; do not run both):
   pip install python-lsp-server
   go install golang.org/x/tools/gopls@latest
 
-Node.js 18+ (needed for Claude Code and Caveman):
+Node.js 18+ (needed for Claude Code):
   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
   source ~/.bashrc
   nvm install 22
@@ -67,17 +67,6 @@ MemStack, Claude Code oriented:
   pip install --upgrade pip
   pip install memstack-skill-loader
   claude mcp add --scope user memstack-skills -- python -m memstack_skill_loader
-
-Caveman:
-  ========================================================================
-  WARNING (August 2026): Several original standalone Caveman tools,
-  including caveman-code, cavemem, and cavekit, are frozen and are no
-  longer under active development. Consider whether you actually need an
-  output-brevity tool before installing Caveman.
-  ========================================================================
-
-  # If you still want Caveman after reviewing the warning:
-  curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman/main/install.sh | bash
 
 After installing optional tools:
   source ~/.bashrc

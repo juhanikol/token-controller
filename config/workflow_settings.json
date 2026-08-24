@@ -1,5 +1,4 @@
 {
-  "_comment": "Caveman integration is maintained for backward compatibility only and is disabled in all mode profiles.",
   "schema_version": 2,
   "defaults": {
     "cache_align": true,
@@ -24,8 +23,7 @@
       "memory_layer": "off",
       "headroom_mode": "off",
       "leanctx_mode": "off",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "scope": {
       "risk": "high",
@@ -35,8 +33,7 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "context-read",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "architect": {
       "risk": "high",
@@ -46,8 +43,7 @@
       "memory_layer": "project",
       "headroom_mode": "code-safe",
       "leanctx_mode": "graph-read",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "decisions": {
       "risk": "high",
@@ -57,8 +53,7 @@
       "memory_layer": "project",
       "headroom_mode": "code-safe",
       "leanctx_mode": "graph-read",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "code": {
       "risk": "normal",
@@ -68,8 +63,7 @@
       "memory_layer": "session",
       "headroom_mode": "reversible",
       "leanctx_mode": "auto",
-      "rtk_mode": "noisy-success-only",
-      "caveman_output": false
+      "rtk_mode": "noisy-success-only"
     },
     "rapid-prototype": {
       "risk": "high",
@@ -80,7 +74,6 @@
       "headroom_mode": "safe-reversible",
       "leanctx_mode": "diagnostic",
       "rtk_mode": "aggressive-success-only",
-      "caveman_output": false,
       "raw_on_fail": true,
       "keep_raw_logs": true,
       "preserve_stderr": true,
@@ -96,8 +89,7 @@
       "memory_layer": "off",
       "headroom_mode": "off",
       "leanctx_mode": "off",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "agent": {
       "risk": "high",
@@ -108,7 +100,6 @@
       "headroom_mode": "cache-aligner",
       "leanctx_mode": "auto",
       "rtk_mode": "off",
-      "caveman_output": false,
       "agents_mutation": "deny"
     },
     "test": {
@@ -119,8 +110,7 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "tests-safe",
-      "caveman_output": false
+      "rtk_mode": "tests-safe"
     },
     "test-full": {
       "risk": "high",
@@ -130,8 +120,7 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "aggressive-success-only",
-      "caveman_output": false
+      "rtk_mode": "aggressive-success-only"
     },
     "debug": {
       "risk": "high",
@@ -141,8 +130,7 @@
       "memory_layer": "session",
       "headroom_mode": "safe-reversible",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "off-first-failure",
-      "caveman_output": false
+      "rtk_mode": "off-first-failure"
     },
     "data-analysis": {
       "risk": "high",
@@ -153,7 +141,6 @@
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
       "rtk_mode": "off",
-      "caveman_output": false,
       "preserve_numbers": true
     },
     "docs": {
@@ -164,8 +151,7 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "context-read",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "cicd": {
       "risk": "high",
@@ -175,8 +161,7 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "install-build-noise",
-      "caveman_output": false
+      "rtk_mode": "install-build-noise"
     },
     "review": {
       "risk": "high",
@@ -186,8 +171,7 @@
       "memory_layer": "project",
       "headroom_mode": "safe-reversible",
       "leanctx_mode": "graph-read",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "security": {
       "risk": "critical",
@@ -197,8 +181,7 @@
       "memory_layer": "session",
       "headroom_mode": "lossless-only",
       "leanctx_mode": "guarded",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "migration": {
       "risk": "critical",
@@ -208,8 +191,7 @@
       "memory_layer": "project",
       "headroom_mode": "lossless-only",
       "leanctx_mode": "graph-read",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "db": {
       "risk": "critical",
@@ -219,8 +201,7 @@
       "memory_layer": "session",
       "headroom_mode": "lossless-only",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "perf": {
       "risk": "high",
@@ -231,7 +212,6 @@
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
       "rtk_mode": "off",
-      "caveman_output": false,
       "preserve_numbers": true
     },
     "release": {
@@ -242,8 +222,7 @@
       "memory_layer": "off",
       "headroom_mode": "off",
       "leanctx_mode": "guarded",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     },
     "off": {
       "risk": "normal",
@@ -253,8 +232,7 @@
       "memory_layer": "off",
       "headroom_mode": "off",
       "leanctx_mode": "off",
-      "rtk_mode": "off",
-      "caveman_output": false
+      "rtk_mode": "off"
     }
   },
   "command_policy": {

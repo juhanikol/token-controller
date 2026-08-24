@@ -9,8 +9,14 @@
 
 workflow_run() {
   if [ "$#" -eq 0 ]; then
-    printf 'Usage: workflow_run <command> [args...]\n' >&2
+    printf 'Usage: wx <command> [args...]\n' >&2
     return 2
+  fi
+
+  # Fallback to active_mode.env if variable is unset in current subshell
+  if [ -z "${RTK_HOOK_ENABLED:-}" ] && [ -f "$HOME/.config/ai-workflow/active_mode.env" ]; then
+    # shellcheck source=/dev/null
+    source "$HOME/.config/ai-workflow/active_mode.env"
   fi
 
   if [ "${RTK_HOOK_ENABLED:-false}" = true ] && command -v rtk >/dev/null 2>&1; then
@@ -113,7 +119,6 @@ USAGE
       local _TARGET_AGENTS="$PWD/AGENTS.md"
       local _MANAGED_START='<!-- ai-workflow-controller:start -->'
       local _MANAGED_END='<!-- ai-workflow-controller:end -->'
-      local _ACTIVE_MODE_REFERENCE='~/.config/ai-workflow/active_mode.env'
       local _TARGET_DIR
       local _TEMPORARY_AGENTS
 
@@ -163,18 +168,14 @@ USAGE
       fi
       chmod --reference="$_TARGET_AGENTS" "$_TEMPORARY_AGENTS"
 
-      {
-        printf '\n%s\n' "$_MANAGED_START"
-        printf '%s\n\n' '## AI Context Workflow Rules'
-        if ! grep -Fq -- "$_ACTIVE_MODE_REFERENCE" "$_TARGET_AGENTS"; then
-          printf '%s\n\n' 'Before answering or modifying files, always check `~/.config/ai-workflow/active_mode.env` for the active context policy (`AICONTEXT_PROFILE`, `AICONTEXT_RISK`, and `AICONTEXT_RAW_ON_FAIL`).'
-        fi
-        printf '%s\n' '- Correctness and reproducibility take priority over token savings.'
-        printf '%s\n' '- For `raw`, `security`, `db`, and `release` modes, use raw or lossless context only.'
-        printf '%s\n' '- For `debug` and `test` modes, preserve the first failure, stderr, exit code, paths, and line numbers completely.'
-        printf '%s\n' '- Do not assume optional context tools are installed; detect them before relying on them.'
-        printf '%s\n' "$_MANAGED_END"
-      } >> "$_TEMPORARY_AGENTS"
+      if ! {
+        printf '\n'
+        cat -- "$_AGENTS_TEMPLATE"
+      } >> "$_TEMPORARY_AGENTS"; then
+        rm -f -- "$_TEMPORARY_AGENTS"
+        printf 'Error: could not append AGENTS.md template: %s\n' "$_AGENTS_TEMPLATE" >&2
+        return 1
+      fi
 
       if mv -- "$_TEMPORARY_AGENTS" "$_TARGET_AGENTS"; then
         printf 'Appended AI workflow rules without replacing existing instructions: %s\n' "$_TARGET_AGENTS"

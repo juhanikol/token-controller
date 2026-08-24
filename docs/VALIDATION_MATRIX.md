@@ -259,6 +259,32 @@ Copy this block for each experiment.
 - Pass/fail: PASS
 - Recommended profile change: none
 
+### Experiment: init template reuse
+
+- Date: 2026-08-24
+- Repository / branch: token-controller / main
+- Scenario: append the canonical `AGENTS_base.md` template during `workflow init` without duplicating its managed block
+- Profile: no active environment profile detected; raw/lossless script evidence was preserved
+- Active env file: not present
+- Tools installed: Bash 5.2.21, LeanCTX 3.9.19, standard GNU utilities
+- Tools missing: ShellCheck
+- Commands:
+  - full raw read of `scripts/workflow.sh` and `templates/AGENTS_base.md`
+  - `bash -n scripts/workflow.sh`
+  - run `init` against an existing marker-free `AGENTS.md` fixture
+  - compare the appended content byte-for-byte with `templates/AGENTS_base.md`
+  - run `init` again and verify the existing-marker path returns without appending
+  - `git diff --check`
+- Raw output location: validation transcript retained in the agent session
+- Compressed output location: LeanCTX validation transcript in the agent session
+- Raw size / estimated tokens: workflow script is 20,208 bytes / 478 lines; template is 1,019 bytes / 14 lines
+- Compressed size / estimated tokens: not measured; successful command output was compacted
+- Evidence preserved: syntax exit code 0, exact template comparison exit code 0, first-init append message, and second-init duplicate-marker message
+- Evidence lost or possibly hidden: none; the complete edited script and first LeanCTX allowlist refusal were retained
+- Did the agent reach the same conclusion with compressed context? Yes; raw syntax and byte-for-byte comparison independently verified the behavior
+- Pass/fail: PASS
+- Recommended profile change: none
+
 ### Experiment: missing-tool installation hints
 
 - Date: 2026-08-24
