@@ -1,18 +1,25 @@
 # AI Context Workflow Controller
 
-**Spend fewer tokens on noise. Keep the context that protects your code.**
+**Choose how agents should handle context, while keeping high-risk evidence visible.**
 
-Token Controller stops AI coding agents from burning through token budgets on repetitive logs, build boilerplate, and noisy terminal output. It manages a lightweight context policy that your IDE agents follow automatically across your projects.
+Token Controller is currently a policy/profile controller plus an explicit `wx` shell wrapper. It records the selected profile, installs project guidance for compatible agents, and can route commands invoked as `wx <command>` through RTK when RTK is installed and enabled. It does not itself compress prompts or files, enforce agent compliance, measure token use, or guarantee token savings.
 
 ## How it works
 
-* **Smarter Token Usage:** Compresses noisy, repetitive output during routine coding, package installs, and test runs.
-* **Guaranteed Fidelity:** Automatically enforces lossless, raw context for first failing errors, stack traces, security audits, and database migrations.
-* **One-Click Control:** Switch context modes seamlessly via the terminal (`workflow code`, `workflow debug`) or the VS Code Status Bar dropdown.
+* **Profile control:** `workflow <mode>` exports policy variables and writes them to `~/.config/ai-workflow/active_mode.env`.
+* **Project guidance:** `workflow init` creates or extends `AGENTS.md` with instructions for agents to read the active profile and preserve specified evidence.
+* **Explicit command routing:** `wx <command>` delegates to RTK only when the active profile enables RTK and the `rtk` executable is available; otherwise it runs the command normally.
+* **VS Code control:** The Status Bar dropdown provides another way to select a profile.
 
 ![select context](assets/20260824_212040_image.png)
 
-*Token Controller acts as the context router and guardrail layer. It defines when to compress and when to preserve raw evidence, helping your connected agents and tools keep sessions focused and cost-effective.*
+The implementation has three distinct layers:
+
+| Layer | Current status |
+| --- | --- |
+| Policy layer | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy. |
+| Mechanical layer | Limited to the explicit `wx` wrapper's optional RTK delegation. Other tool integrations and automatic hook-based enforcement are experimental or integration-dependent. |
+| Measured savings layer | Not established yet. The validation matrix records controller checks, but it does not contain paired end-to-end measurements proving token savings. |
 
 ## Why this matters (even with million-token context windows)
 
@@ -20,9 +27,9 @@ Context windows have reached massive scales, but simply having a larger window d
 
 While native IDE features and RAG (Retrieval-Augmented Generation) are highly effective at finding static code snippets, they lack awareness of your immediate engineering intent. This controller bridges that gap:
 
-* **Proactive vs. Reactive:** RAG reacts to your prompt. This tool proactively broadcasts the current state of your work to the agent.
-* **Risk-Based Fidelity:** An IDE indexer does not inherently know that a database migration requires higher fidelity than a UI component update. When you run critical modes (like `workflow db`), this tool forces the agent to preserve strict, lossless context.
-* **Establishing Boundaries:** By injecting the rules directly into a project's `AGENTS.md`, you establish a firm guardrail explicitly telling the agent that correctness always beats token savings.
+* **Proactive vs. Reactive:** RAG reacts to your prompt. This tool publishes the selected work profile through shell variables, an active-mode file, and project instructions that compatible agents can read.
+* **Risk-Based Fidelity:** An IDE indexer does not inherently know that a database migration requires higher fidelity than a UI component update. Critical modes such as `workflow db` request strict, lossless handling from the agent and connected tools; the controller does not independently verify that they comply.
+* **Establishing Boundaries:** Injecting rules into a project's `AGENTS.md` gives compatible agents an explicit policy that correctness takes priority over token savings. Those instructions are a policy guardrail, not mechanical enforcement.
 
 ## Supported environment
 
@@ -68,7 +75,7 @@ If you use VS Code with WSL, installing the extension via the terminal can somet
 7. Navigate to the generated .vsix file and select it.
 8. Reload the window (Ctrl + Shift + P -> Developer: Reload Window).
 
-You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md`. Your coding agents read that file and check the active workflow mode before they answer or modify files.
+You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md` with instructions telling compatible coding agents to check the active workflow mode before they answer or modify files.
 
 The selected policy is saved in:
 
@@ -138,7 +145,7 @@ cd ~/projects/my-project
 workflow init
 ```
 
-This changes only the `AGENTS.md` in the current project:
+Within the current project, this changes only `AGENTS.md`; the controller also ensures that its user-level configuration directory exists.
 
 * If `AGENTS.md` is missing, the command creates it from `templates/AGENTS_base.md`.
 * If `AGENTS.md` already exists, the command keeps the project's custom instructions and appends the required AI workflow rules.
@@ -222,10 +229,10 @@ docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:24.04 bash
 
 ## Scenario matrix
 
-Use this table when you are unsure which mode to choose.
+Use this table when you are unsure which mode to choose. It describes the policy requested from an agent or connected tool, not behavior the controller independently enforces.
 
 
-| Scenario                           | Command                    | Context behavior                                 | Evidence that must stay complete                            |
+| Scenario                           | Command                    | Requested policy                                 | Evidence requested complete                                 |
 | ---------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
 | Requirements and scope             | `workflow scope`           | Summarize carefully                              | User intent, constraints, acceptance criteria               |
 | Architecture and structure         | `workflow architect`       | Map the codebase, then read selected files fully | Interfaces, module boundaries, design reasoning             |
@@ -256,7 +263,9 @@ workflow plan   # same as workflow architect
 workflow ci     # same as workflow cicd
 ```
 
-## Safety rules in plain language
+## Policy rules in plain language
+
+These rules are written into the active profile and agent instructions. Their execution depends on the agent and any connected context tool; the `wx` wrapper does not inspect output to verify them.
 
 * Correctness is more important than saving tokens.
 * `raw`, `security`, `db`, and `release` use raw or lossless context.
@@ -297,7 +306,7 @@ The VS Code settings updater expects a strict JSON `settings.json`. It stops wit
 
 ## Optional context tools
 
-RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The controller only exports policy variables; compatible tools may choose to act on them.
+RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. Apart from the explicit `wx`-to-RTK path, the controller only exports policy variables; compatible tools may choose to act on them.
 
 To inspect what is installed:
 
@@ -316,19 +325,21 @@ If you choose to install the Python tools using those printed commands, their vi
 * Headroom: `~/.venvs/headroom`
 * MemStack: `~/.venvs/memstack`
 
-## What the optional tools do
+## Experimental and integration-dependent mechanical layer
 
-While not required, installing these tools activates the "Mechanical" compression layer, intercepting noise before the AI agent even has to read it:
+Installing an optional tool does not by itself activate automatic interception. The current integration boundary is:
 
-* **RTK (Terminal Hook):** Intercepts and physically compresses noisy terminal output (like `npm install` or massive test passing logs) directly in the shell.
-* **LeanCTX (MCP Server):** Provides semantic codebase graphing and context-aware file reading, preventing agents from doing massive, token-heavy `cat` dumps of large files.
-* **Headroom (MCP/Proxy):** Acts as a local proxy that semantically caches prompt inputs and intelligently trims historical noise before hitting the model API.
-* **MemStack:** A local memory layer primarily oriented around Claude Code, allowing agents to preserve long-running task context across sessions.
-* **Caveman:** A legacy standalone output-brevity tool (Note: largely frozen as of August 2026, evaluate before installing).
+* **RTK:** The implemented `wx` path delegates an explicitly wrapped command to `rtk` when the selected profile enables RTK and the executable is installed. RTK determines how that command's output is handled.
+* **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools.
+* **Caveman:** The controller exports a compatibility variable, disabled by the current profiles; no automatic invocation is implemented.
+
+Automatic shell hooks, transparent interception of commands not invoked through `wx`, and enforcement by IDE or MCP integrations should be treated as planned or experimental behavior until they are implemented and validated end to end.
 
 ## Controlling Changes (Validation Matrix)
 
 Whenever a new mode is added or a shell policy is changed, it must be documented to prevent regressions. We maintain a ledger in `docs/VALIDATION_MATRIX.md`.
+
+The existing ledger validates profile activation, configuration, initialization, and related safety behavior. It does not yet prove a measured token-saving result for the controller as a whole.
 
 When testing a change, you must record:
 
@@ -347,7 +358,7 @@ When testing a change, you must record:
 | `workflow setup`  | Configure optional global editor instructions            |
 | `workflow <mode>` | Select a context mode                                    |
 | `workflow status` | Show the active mode and policy                          |
-| `workflow off`    | Disable optional optimizers                              |
+| `workflow off`    | Select the off policy and make `wx` bypass RTK            |
 | `workflow help`   | List available commands and modes                        |
 
 ## Repository layout
