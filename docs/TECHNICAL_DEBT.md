@@ -45,6 +45,8 @@ How to keep it:
 | D-30 | Risk | Medium | Extension | The configured script is trusted code with no check of content or owner. A trusted workspace may contain the controller. The CLI inherits the host environment. Multi-root and virtual workspaces are only partly covered. | Risk accepted | Extension configuration and trust hardening |
 | D-31 | Debt | Low | Extension | Missing `jq` or an old controller shows "unavailable" with no install help. `stale_shell` describes the VS Code environment, not a terminal. | Open | Extension uses the CLI JSON interface |
 | D-32 | Not implemented | Low | Research | Research candidates are not evaluated: ccusage, Aider repo map, token-optimizer, token-savior. | Open | Plan, "External tools" |
+| D-33 | Debt | Low | Config | The flags `raw_on_fail`, `keep_raw_logs`, `preserve_*`, `target_files_full`, and `compress_files` are exported but read by nothing. `wx` hard-wires the safe behavior, so setting them to `false` has no effect. Keeping target files full is policy only. | Open | Profile/state manager review in `VALIDATION_MATRIX.md` (F2) |
+| D-34 | Contradiction | Low | Docs | The README policy rules list `raw`, `security`, `db`, and `release` as raw or lossless. `migration` is also `critical` and protected in `wx`. The README does not define the risk levels (`high` is not raw). | Open | Profile/state manager review in `VALIDATION_MATRIX.md` (F1, F4) |
 
 ## Remaining contradictions (fixing these changes code or behavior, so I left them)
 

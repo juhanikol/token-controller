@@ -598,3 +598,50 @@ Copy this block for each experiment.
 - Limitation: matcher coverage is conservative and host-specific; it does not cover every nested shell form or any non-Claude host
 - Pass/fail: PASS
 - Recommended profile change: none
+
+### Experiment: profile/state manager review (eight checks)
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (HEAD `0b5f823` plus an uncommitted working tree)
+- Scenario: check that the repository acts as a profile/state manager (plus the `wx` wrapper as the only mechanical layer), and not as a token optimizer by itself
+- Profiles: all 22 modes; `code` and `security` in detail
+- Active env file: an isolated directory (`AICONTEXT_CONFIG_DIR`). The real `~/.config/ai-workflow/active_mode.env` was not changed.
+- Tools installed: Bash 5.2.21, jq 1.8.2. RTK 0.42.4 and LeanCTX are installed on this machine, but nothing was installed or configured for this review, and only `tests/wx-wrapper.test.sh` calls RTK (through its fake RTK and one real-RTK check).
+- Tools missing: Headroom, Caveman, MemStack were not used
+- Commands:
+  - `bash -n scripts/workflow.sh`, `bash -n scripts/lib/*.sh`, `jq . config/workflow_settings.json >/dev/null`
+  - `source scripts/workflow.sh status` (clean environment, no mode file), `status --json`
+  - `source scripts/workflow.sh code` and `security`, then `declare -p`, `env`, and a child process
+  - a loop over all 22 modes comparing exported values with `jq` on the config
+  - a copy of the config with a new mode and a changed risk (`AICONTEXT_SETTINGS_FILE`)
+  - `scripts/workflow-cli.sh modes --json`
+  - `grep` for code that reads the protection flags
+  - `wc` on `templates/AGENTS_base.md`
+  - README scenario table compared with the config (`comm` on the mode names, plus the values of the protected rows)
+  - `bash tests/wx-wrapper.test.sh`, `bash benchmarks/run-benchmark.sh`
+- Results:
+
+| # | Check | Result | Evidence |
+| ---: | --- | --- | --- |
+| 1 | `workflow.sh` uses the config as the source of truth | PASS, with notes | All 22 modes export exactly the config values for risk, shell, files, index, memory, headroom, leanctx, and rtk. A new mode and a changed risk in a copied config were picked up with no script change. An unknown mode returns 1. Not config-driven: the Caveman blocked-profile list (a code copy beside the config list), the built-in alias fallback, and the usage text (debt D-16, D-18). |
+| 2 | `status` works before any profile is activated | PASS | Clean environment, no mode file: text status prints `unset` for every variable and returns 0. `status --json` returns `profile: null`, `source: "unset"`, `stale_shell: false`. |
+| 3 | Variables are exported to the current shell when sourced | PASS | `declare -x` for `AICONTEXT_PROFILE` and `AICONTEXT_RISK`, a child process sees `code/normal` and `security/critical`, and 29 `AICONTEXT_*` variables are exported. |
+| 4 | Backward-compatible variables are exported | PASS | `RTK_HOOK_ENABLED`, `HEADROOM_COMPRESSION_STRATEGY`, `LEANCTX_ACTIVE`, `MEMSTACK_ACTIVE`, `CAVEMAN_OUTPUT`: exported, non-empty, and mapped correctly in all 22 modes (110 checks). All five are in the mode file. |
+| 5 | High-risk profiles are raw/lossless by default | PASS for `critical`. Not for `high`, by design. See finding F3 and F4. | `critical`: `raw`, `security`, `migration`, `db`, `release`. All five have shell compression `off` or `off-or-lossless-only`, `rtk_mode off`, Caveman `off`, Headroom `off` or `lossless-only`. The `high` modes (12) are not raw: 11 allow shell compression or RTK on successful output (for example `debug`, `test`, `cicd`, `rapid-prototype`). |
+| 6 | Target files and failures are protected from destructive compression | Failures: PASS (mechanical). Target files: policy only. See finding F2. | All 22 modes export `raw_on_fail`, `keep_raw_logs`, `preserve_*`, and `target_files_full` as `true`. Nothing in `scripts/lib`, `doctor.sh`, or the extension reads those flags or `AICONTEXT_COMPRESS_FILES`. Failures are protected because `wx` always keeps raw output on a nonzero exit (`raw-nonzero-exit`), keeps stderr verbatim, and keeps raw logs. `tests/wx-wrapper.test.sh` passes, and the benchmark keeps failure, security, and database evidence. |
+| 7 | `AGENTS_base.md` is concise and free from context bloat | PASS | 19 lines, 224 words, 1,586 bytes (about 400 tokens, estimated as bytes/4, not tokenizer-measured). No references to `docs/`. Longest line is 298 characters (the Caveman bullet). It names four optional tools. |
+| 8 | README scenario mappings match the config | PASS, with one finding. See finding F1. | The 22 modes in the README table and the 22 in the config are the same set. Aliases match (`plan`, `ci`). "Raw or lossless" rows (`security`, `db`, `release`) have `off-or-lossless-only` and RTK `off`. "Little or no / disable" rows (`snippet`, `micro`, `raw`, `off`) have shell compression `off`. |
+
+- Findings and minimal patches (proposed, not applied):
+  - **F1 (README, check 8).** "Policy rules in plain language" says `raw`, `security`, `db`, and `release` use raw or lossless context. The config marks `migration` as `critical` too, and `wx` treats it as protected. Patch: add `migration` to that line.
+  - **F2 (check 6).** The flags `raw_on_fail`, `keep_raw_logs`, `preserve_stderr`, `preserve_exit_code`, `preserve_first_error`, `preserve_warnings`, `target_files_full`, and `compress_files` are exported state that nothing reads. `wx` hard-wires the safe behavior, so setting a flag to `false` changes nothing (the safe direction). Keeping target files full is only a request to the agent. Patch (docs only): add one sentence to the README policy rules, "These flags are state for agents and tools. `wx` always keeps raw output on failure, stderr, and raw logs." Recorded as debt D-33. Do not make `wx` read `raw_on_fail=false`, because that would weaken the safety layer.
+  - **F3 (check 5).** `leanctx_mode` on critical modes is `guarded` (`security`, `release`), `diagnostic` (`db`), and `graph-read` (`migration`), and `memory_layer` and `codebase_index` are on for `security`, `db`, and `migration`. These labels are free text and LeanCTX is not integrated, so "lossless" cannot be asserted for them. Patch (decision for you): either set `leanctx_mode` to `off` for the critical modes until LeanCTX is designed, or keep the labels and accept that they are intent only. Covered by debt D-01 and D-03.
+  - **F4 (check 5).** `risk: high` does not mean raw. Only `critical` is raw or lossless. Patch (docs only): define the three levels in one README sentence.
+  - **F5 (check 7, optional).** Shorten the Caveman bullet in the template (298 characters) if the template should be smaller. No change is needed to pass.
+  - **F6 (check 1).** The Caveman blocked list and the aliases exist outside the config. The existing tests guard the Caveman copies.
+- Evidence preserved: raw stdout and stderr, exit codes, first failures, security and database output (shown by the existing `wx` tests and the benchmark, run again for this review)
+- Evidence lost or possibly hidden: none in the checks. The benchmark's noisy-success fixture still collapses exact repeated lines on purpose.
+- Mechanical results re-run for this review: `tests/wx-wrapper.test.sh` PASS (including the real-RTK check); `benchmarks/run-benchmark.sh` PASS (aggregate emitted bytes 1641, practical reduction 74.84%, byte reduction only).
+- Pass/fail: PASS. The repository acts as a profile/state manager. The only mechanical layer is `wx`. File and mode-level protection beyond `wx` is policy for agents and tools. No check found a mode that exports a value different from the config.
+- Interpretation: this review checks state and wording. It does not show token savings, agent compliance, or any behavior of LeanCTX, Headroom, or Caveman.
+- Recommended profile change: none. Apply F1 and F4 (docs) first. Decide F3. F2 is recorded as debt D-33.
