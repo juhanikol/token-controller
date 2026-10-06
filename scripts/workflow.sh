@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Path: scripts/workflow.sh
 # Usage: source scripts/workflow.sh <mode>
-# Modes: init setup raw scope architect decisions code snippet micro agent test test-full debug docs cicd review security migration db perf release off status report reset-session
+# Modes: init setup raw scope architect decisions code snippet micro agent test test-full debug docs cicd review security migration db perf release off status report doctor reset-session
 # Backward-compatible aliases: plan=architect, ci=cicd
 
 # This script is intended to be sourced, because it exports variables to the current shell.
@@ -60,6 +60,7 @@ Modes:
   release      Release preparation.
   off          Disable all optimizers.
   status       Show current profile.
+  doctor       Read-only check of settings, instruction files, and tools. Option: --json
   report       Summarize the current project's wx session.
   reset-session Archive the current wx session and start a new one.
 
@@ -101,6 +102,12 @@ USAGE
     status|"")
       status
       return 0
+      ;;
+    doctor)
+      shift
+      # Read-only check. Runs in a child process so it cannot change this shell.
+      bash "$_SCRIPT_DIR/doctor.sh" "$@"
+      return $?
       ;;
     report)
       need_jq || return 1
