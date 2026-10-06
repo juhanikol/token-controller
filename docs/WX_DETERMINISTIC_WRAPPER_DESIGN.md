@@ -2,7 +2,7 @@
 
 ## Current behavior
 
-`workflow_run` is defined in `scripts/workflow.sh` and exposed as the `wx` alias. It loads `active_mode.env` when needed, then either invokes `rtk <command>` when RTK is enabled and installed or invokes the command directly. It does not retain the command's raw stdout/stderr, create measurements, or independently enforce the profile's preservation rules. `workflow.sh` also owns profile activation, so wrapper execution and profile management are currently coupled.
+The first mechanical layer is implemented in `scripts/lib/wx.sh` and exposed as the `wx` function. It runs the supplied command directly, stores raw stdout and stderr under `.ai-context/raw/`, appends command metadata to `.ai-context/session.jsonl`, replays the uncompressed streams, prints the raw-log location, and returns the command's exit code. `scripts/workflow.sh` now sources the wrapper while remaining responsible for profile activation. Policy-aware compression remains unimplemented.
 
 ## Proposed behavior
 
@@ -18,6 +18,8 @@ Keep `workflow.sh` responsible for selecting profiles, exporting policy variable
 Compression is post-processing; an optional tool must never replace the authoritative raw capture. The initial implementation should not depend on RTK for its deterministic baseline.
 
 ## File layout
+
+The first layer keeps capture and metadata logic in `scripts/lib/wx.sh`. When policy-aware compression is added, split toward this target layout:
 
 ```text
 scripts/

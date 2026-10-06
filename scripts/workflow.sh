@@ -7,27 +7,10 @@
 # This script is intended to be sourced, because it exports variables to the current shell.
 # It does not install token tools and does not invoke AI agents directly.
 
-workflow_run() {
-  if [ "$#" -eq 0 ]; then
-    printf 'Usage: wx <command> [args...]\n' >&2
-    return 2
-  fi
-
-  # Fallback to active_mode.env if variable is unset in current subshell
-  if [ -z "${RTK_HOOK_ENABLED:-}" ] && [ -f "$HOME/.config/ai-workflow/active_mode.env" ]; then
-    # shellcheck source=/dev/null
-    source "$HOME/.config/ai-workflow/active_mode.env"
-  fi
-
-  if [ "${RTK_HOOK_ENABLED:-false}" = true ] && command -v rtk >/dev/null 2>&1; then
-    command rtk "$@"
-  else
-    command "$@"
-  fi
-}
-
-export -f workflow_run
-alias wx='workflow_run'
+_AI_WORKFLOW_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/wx.sh
+source "$_AI_WORKFLOW_SCRIPT_DIR/lib/wx.sh"
+unset _AI_WORKFLOW_SCRIPT_DIR
 
 _ai_workflow_main() {
   local _MODE="${1:-status}"

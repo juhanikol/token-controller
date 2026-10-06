@@ -2,13 +2,13 @@
 
 **Choose how agents should handle context, while keeping high-risk evidence visible.**
 
-Token Controller is currently a policy/profile controller plus an explicit `wx` shell wrapper. It records the selected profile, installs project guidance for compatible agents, and can route commands invoked as `wx <command>` through RTK when RTK is installed and enabled. It does not itself compress prompts or files, enforce agent compliance, measure token use, or guarantee token savings.
+Token Controller is currently a policy/profile controller plus an explicit `wx` shell wrapper. It records the selected profile, installs project guidance for compatible agents, and captures commands invoked as `wx <command>` without relying on an optional context tool. It does not yet compress output, enforce agent compliance, measure token use, or guarantee token savings.
 
 ## How it works
 
 * **Profile control:** `workflow <mode>` exports policy variables and writes them to `~/.config/ai-workflow/active_mode.env`.
 * **Project guidance:** `workflow init` creates or extends `AGENTS.md` with instructions for agents to read the active profile and preserve specified evidence.
-* **Explicit command routing:** `wx <command>` delegates to RTK only when the active profile enables RTK and the `rtk` executable is available; otherwise it runs the command normally.
+* **Explicit command capture:** `wx <command>` runs the command directly, saves raw stdout/stderr and JSONL metadata under `.ai-context/`, replays the raw output, and preserves the command's exit code.
 * **VS Code control:** The Status Bar dropdown provides another way to select a profile.
 
 ![select context](assets/20260824_212040_image.png)
@@ -18,7 +18,7 @@ The implementation has three distinct layers:
 | Layer | Current status |
 | --- | --- |
 | Policy layer | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy. |
-| Mechanical layer | Limited to the explicit `wx` wrapper's optional RTK delegation. Other tool integrations and automatic hook-based enforcement are experimental or integration-dependent. |
+| Mechanical layer | The explicit `wx` wrapper captures raw command evidence and metadata. Compression and automatic hook-based enforcement are not implemented yet. |
 | Measured savings layer | Not established yet. The validation matrix records controller checks, but it does not contain paired end-to-end measurements proving token savings. |
 
 ## Why this matters (even with million-token context windows)
@@ -306,7 +306,7 @@ The VS Code settings updater expects a strict JSON `settings.json`. It stops wit
 
 ## Optional context tools
 
-RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. Apart from the explicit `wx`-to-RTK path, the controller only exports policy variables; compatible tools may choose to act on them.
+RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The `wx` capture layer does not invoke them; outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
 
 To inspect what is installed:
 
@@ -329,7 +329,7 @@ If you choose to install the Python tools using those printed commands, their vi
 
 Installing an optional tool does not by itself activate automatic interception. The current integration boundary is:
 
-* **RTK:** The implemented `wx` path delegates an explicitly wrapped command to `rtk` when the selected profile enables RTK and the executable is installed. RTK determines how that command's output is handled.
+* **RTK:** `wx` no longer delegates command execution to RTK. Any future RTK integration must occur after the wrapper has captured authoritative raw output.
 * **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools.
 * **Caveman:** The controller exports a compatibility variable, disabled by the current profiles; no automatic invocation is implemented.
 
@@ -358,7 +358,7 @@ When testing a change, you must record:
 | `workflow setup`  | Configure optional global editor instructions            |
 | `workflow <mode>` | Select a context mode                                    |
 | `workflow status` | Show the active mode and policy                          |
-| `workflow off`    | Select the off policy and make `wx` bypass RTK            |
+| `workflow off`    | Select the off policy                                      |
 | `workflow help`   | List available commands and modes                        |
 
 ## Repository layout
