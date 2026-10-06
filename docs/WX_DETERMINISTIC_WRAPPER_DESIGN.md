@@ -4,6 +4,11 @@
 
 The mechanical layer is implemented in `scripts/lib/wx.sh` and `scripts/lib/wx-compress.sh`, exposed as the `wx` function. It stores raw stdout and stderr under `.ai-context/raw/`, appends raw/visible byte measurements to `.ai-context/session.jsonl`, prints the raw-log location, and returns the command's exit code. Successful allowlisted noisy commands may collapse exact consecutive repetitions; failures and protected profiles or commands remain raw.
 
+## PLAN CHANGE AND PRIME DIRECTIVE 6.10.2026 (branch "mode_switcher_and_orchestrator"):
+
+wx is a safety/measurement/fallback layer, not the whole architecture.
+Information here is useful for project context BUT it may not be updated accordingly to this new plan.
+
 ## Proposed behavior
 
 Keep `workflow.sh` responsible for selecting profiles, exporting policy variables, and writing `active_mode.env`. Move `wx` execution into a small runner with this contract:

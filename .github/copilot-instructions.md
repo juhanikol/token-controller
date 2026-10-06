@@ -1,6 +1,6 @@
 # Copilot Instructions
 
-This repository is a WSL/Ubuntu shell profile controller for AI context workflows. It exports environment variables for scenario-specific token/context behavior; it does not implement compression itself.
+This repository is a WSL/Ubuntu shell profile controller for AI context workflows. It exports environment variables for scenario-specific token/context behavior; it implements compression itself and it also preserves old backward-compatible variables as central.
 
 When working in this repository:
 
