@@ -89,3 +89,38 @@ True mode or alias
 4. **STE and Caveman are mutually exclusive.** Caveman drops articles and STE keeps them, so the output style is one or the other.
 5. **Doctor follow-up.** Doctor should read `.caveman-active`. Active in a hard-blocked mode is an `error`, above `caveman_max` or without opt-in is a `warn`, and not installed is an `info`.
 6. **`ultra` and `wenyan` unsupported.** `ultra` loses clarity. `wenyan` isn't English.
+
+
+## Extension alignment design
+
+
+### Problems in the current extension
+
+* **Shell injection:** `exec("bash -c \"source \\\"${scriptPath}\\\" ${mode}\"")` builds a shell string from the `scriptPath` setting.
+* **Security hole:** `tokenController.scriptPath` has the default `window` scope, so a repository's `.vscode/settings.json` can set it. A cloned repo could make the extension run an arbitrary script. The manifest has no Workspace Trust restriction either.
+* **Mode drift:** the `MODES` list is hard-coded and misses 9 of the 22 profiles, including `micro`, `docs` and `release`.
+* **Fragile parsing:** the active profile is read by regex from `active_mode.env`, and risk isn't shown at all.
+
+
+### What should wait
+
+* **Report summary in the tooltip:** needs `report --json`, `--project`, and a watcher on `session.jsonl`. This is phase 2, directly after the first implementation.
+* **Windows backend:** `WslBackend` or a native one, and a Windows CI job.
+* **Bundling the CLI in the VSIX:** this removes the dependency on the repo path, but it makes the extension ship the controller too. It is a release decision, not a first-step one.
+* **Doctor webview:** and any quick fixes, which need a separate `--fix` design.
+* **Caveman opt-in toggle and per-tool toggles:** these depend on the policy implementation.
+* **Multi-root workspaces:** one profile per folder.
+* **Marketplace publishing.**
+
+### Decisions for you
+
+1. **Stale terminals.**
+   * The extension can only write `active_mode.env`. A terminal that already sourced `workflow <mode>` keeps its old `AICONTEXT_*` variables.
+   * `wx` reads the env file only when `AICONTEXT_PROFILE` is unset (`wx.sh`). So after a switch from the status bar, an old terminal can still apply the old profile, including in protected modes.
+   * Options:
+     * a CLI change so `wx` prefers the file
+     * VS Code's `environmentVariableCollection` for new terminals
+     * a "restart terminals" prompt
+   * I'd pick the first, since `wx` is the safety layer.
+2. **`status` source.** `status --json` reads the env file, not the calling shell. This differs from the current `workflow status`, which prints shell variables. I'd keep both and name the difference.
+3. **Config `description` field.** Each mode needs one. It would also let `workflow help` be generated from config, removing a second copy of the mode list.
