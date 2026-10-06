@@ -531,3 +531,26 @@ Copy this block for each experiment.
 - Did the agent reach the same conclusion with compressed context? Yes; the success summary retained the pass identity and count, while all failure/protected evidence remained raw
 - Pass/fail: PASS
 - Recommended profile change: none
+
+### Experiment: workflow session reporting and reset
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: report aggregate wrapper measurements and safely start a new session without deleting raw evidence
+- Profile: `code`
+- Command(s):
+  - `bash tests/workflow-session.test.sh`
+  - `workflow report` with no session, one command, and three commands including one failure
+  - `workflow reset-session` with populated and empty sessions
+- Raw output location: isolated `.ai-context/raw/` test directory removed by the fixture cleanup trap
+- Compressed output location: fixture-visible stdout/stderr captured by the test
+- Evidence preserved:
+  - every live and archived JSONL record parsed with `jq`
+  - report totals matched independently aggregated raw and visible byte counts
+  - one-command report showed 6 raw and 6 visible bytes with 0.00% reduction
+  - multiple-command report showed three commands and one failure
+  - reset produced a valid three-record archive and a new empty session
+  - raw-log file count was identical before and after reset
+- Evidence lost or possibly hidden: none; reset archived metadata and did not alter raw logs
+- Pass/fail: PASS
+- Recommended profile change: none

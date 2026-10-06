@@ -58,6 +58,7 @@ The runner buffers output on disk rather than in shell variables, avoiding binar
 - Store each invocation in a unique directory such as `YYYYMMDD/<UTC timestamp>-<pid>-<counter>/` with `stdout.raw`, `stderr.raw`, and `run.json`.
 - Create directories with mode `0700` and files with mode `0600`; reject symlinked run directories and never overwrite an existing run.
 - Retain raw logs for successes, failures, compression failures, and interrupted commands. Do not delete logs automatically in the first implementation.
+- `workflow reset-session` archives only `session.jsonl` under `.ai-context/archive/`; it never deletes raw logs.
 - Document that raw logs may contain secrets and should be gitignored. A future explicit prune command may implement age/size retention without changing capture semantics.
 
 ## Compression rules
@@ -99,6 +100,8 @@ Append one JSON object per invocation to `.ai-context/measurements.jsonl` using 
 ```
 
 Byte and line counts are exact. Token fields should be absent or `null` unless a named tokenizer and version actually calculate them; byte reduction must not be labeled token savings. Store only the executable name and an argv hash by default so measurements do not duplicate secret arguments.
+
+`workflow report` aggregates command count, raw and visible bytes, byte-reduction percentage, and failures from valid JSONL records. It reports the active profile and raw-log directory without mutating either the session or raw evidence.
 
 ## Failure behavior
 

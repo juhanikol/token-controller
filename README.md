@@ -349,6 +349,22 @@ When testing a change, you must record:
 4. The estimated raw token size vs. the compressed token size.
 5. The pass/fail result indicating if critical evidence (like a stack trace) was safely preserved.
 
+## Session reporting and reset
+
+Summarize the current project's `.ai-context/session.jsonl` measurements:
+
+```bash
+workflow report
+```
+
+Archive the current JSONL session and start a new empty session:
+
+```bash
+workflow reset-session
+```
+
+Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is stored under `.ai-context/archive/`.
+
 ## Useful commands
 
 
@@ -358,6 +374,8 @@ When testing a change, you must record:
 | `workflow setup`  | Configure optional global editor instructions            |
 | `workflow <mode>` | Select a context mode                                    |
 | `workflow status` | Show the active mode and policy                          |
+| `workflow report` | Summarize command, byte, reduction, and failure counts   |
+| `workflow reset-session` | Archive session metadata without deleting raw logs |
 | `workflow off`    | Select the off policy                                      |
 | `workflow help`   | List available commands and modes                        |
 
