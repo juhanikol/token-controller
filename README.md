@@ -393,13 +393,14 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 | `workflow init`   | Create or safely extend the current project's`AGENTS.md` |
 | `workflow setup`  | Configure optional global editor instructions            |
 | `workflow <mode>` | Select a context mode                                    |
-| `workflow status` | Show the active mode and policy                          |
+| `workflow status` | Show the active mode and policy (`--json` for tools)     |
 | `workflow doctor` | Read-only check of settings, instruction files, and tools (`--json` available) |
 | `wx <command>`    | Capture, preserve, optionally compress, and measure output |
 | `workflow report` | Summarize command, byte, reduction, and failure counts   |
 | `workflow reset-session` | Archive session metadata without deleting raw logs |
 | `workflow off`    | Select the off policy                                      |
 | `workflow help`   | List available commands and modes                        |
+| `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes `active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
 
 ## Repository layout
 
@@ -428,6 +429,7 @@ token-controller/
 │   └── vscode-agent-prompts.md
 ├── scripts/
 │   ├── workflow.sh                # sourced: mode switching and commands
+│   ├── workflow-cli.sh            # run, not sourced: entry point for tools and the extension
 │   ├── doctor.sh                  # read-only checks (workflow doctor)
 │   ├── check-tools.sh
 │   ├── install-optional-tools.sh  # prints optional install commands only

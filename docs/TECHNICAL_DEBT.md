@@ -181,7 +181,7 @@ Still open:
 * **Dynamic mode loading:** the extension parses the config itself. The planned `workflow-cli.sh modes --json` is not built. The fallback list can drift when the extension runs without the repository config. `AICONTEXT_SETTINGS_FILE` is not honored.
 * **Windows:** `runModeSwitch` needs Bash and returns an error on `win32`. No backend interface yet (`docs/EXTENSION_ALIGNMENT_DESIGN.md`).
 * **Not verified in a real VS Code host:** `npm test` (`vscode-test`) was not run. The unit tests ran with plain mocha. `inspect().globalValue` behavior in a WSL remote window is untested.
-* **Stale terminals:** a terminal that already ran `workflow <mode>` keeps old variables. Decision open in `docs/EXTENSION_ALIGNMENT_DESIGN.md`.
+* **Stale terminals:** mitigated, not solved. `wx` and `workflow report` use `active_mode.env`, and the AGENTS template tells agents to read it. A terminal that already ran `workflow <mode>` still keeps old shell variables. See "Stale terminal safety" below.
 * **Tracked `.vsix`:** `extensions/vscode/token-controller-ui-1.1.0.vsix` is in git and does not contain these fixes. Rebuild and bump the version when you release.
 
 ## Stale terminal safety (2026-10-07)
@@ -194,7 +194,54 @@ Fixed:
 * `session.jsonl` records `policy_source` and `stale_shell_profile` (additive fields, `schema_version` stays 2).
 * `workflow status` shows the env-file profile and warns when the shell differs. Doctor's shell mismatch warning says `wx` uses the file.
 
+Mitigated (not fully solved):
+* `templates/AGENTS_base.md` tells agents that `active_mode.env` is the source of truth, not to rely only on `AICONTEXT_*` shell variables, that open terminals can be stale, and that `wx` uses the file by default. This is policy text. It depends on agent compliance, and projects that ran `workflow init` earlier keep the old block until it is updated.
+
 Still open:
-* Agents that read shell variables directly (not through `wx`) still see stale values until the terminal runs `workflow <mode>`. Options are in `docs/EXTENSION_ALIGNMENT_DESIGN.md`.
-* There is no `status --json` yet. The text `workflow status` is the only place that shows both states.
+* Shell variables in an already-open terminal stay stale until it runs `workflow <mode>`. Anything that reads them directly (a person, a script, an agent that ignores the template) can see the wrong profile. `wx` and `workflow report` are protected. Options are in `docs/EXTENSION_ALIGNMENT_DESIGN.md`.
+* `status --json` now exists (see below).
 * `wx` ignores values with `$`, backticks, or backslashes in the env file. `workflow.sh` never writes them today.
+
+## `workflow status --json` (2026-10-07)
+
+Fixed: tools and agents can read controller state without parsing text. It reads `active_mode.env` the way `wx` does (parsed, not sourced, in a subshell), so it never changes the caller's shell. The text `workflow status` is unchanged for the shell-visible variables, plus the env-file lines added earlier. Needs `jq`. Unknown option returns 2.
+
+Schema (`schema_version` 1). Strings are `null` when not set. Booleans are `true`, `false`, or `null`.
+
+| Field | Meaning |
+|---|---|
+| `profile`, `risk` | Active profile and its risk from the env file |
+| `output_style` | `AICONTEXT_OUTPUT_STYLE` |
+| `raw_on_fail`, `keep_raw_logs` | Booleans |
+| `compress_shell`, `compress_files` | Policy labels |
+| `rtk_mode`, `leanctx_mode`, `headroom_mode` | Tool modes as exported state |
+| `caveman_mode`, `caveman_max`, `caveman_output` | Effective Caveman state. `caveman_output` is a boolean |
+| `source` | `active_env_file` (file has a profile), `shell_fallback` (no usable file, shell has a profile), `unset` (nothing usable). A file without a profile gives `unset`, like `wx` (output stays raw) |
+| `active_env_file` | Path that was checked |
+| `shell_profile` | The shell's profile when it differs from `profile`, else `null` |
+| `stale_shell` | `true` when the shell has a profile, the source is not `shell_fallback`, and the profiles differ |
+| `use_shell_state` | `true` when `AICONTEXT_USE_SHELL_STATE=true` is set. `wx` then uses shell variables, but this JSON still describes the file |
+
+Still open:
+* The extension does not call `status --json` yet. It still parses `active_mode.env` by regex.
+* No `modes --json`, `set --json`, or `report --json` (see `docs/EXTENSION_ALIGNMENT_DESIGN.md`).
+* `status --json` does not include `description`, `caveman_shrink`, or the other exported variables. Add fields only with a `schema_version` rule: new fields are additive, removed or renamed fields bump the version.
+
+## Non-sourced entry point (2026-10-07)
+
+Fixed: **"no non-sourced entry point"**. `scripts/workflow-cli.sh` (executable) runs `scripts/workflow.sh` in its own Bash process. Tools no longer need `bash -c "source ..."`.
+
+* Locates `workflow.sh` beside itself (follows symlinks, works from any directory). Arguments go to `workflow.sh` as they are, with no `eval`.
+* A separate process, so it never changes the caller's shell. A test compares the caller's `AICONTEXT_*` variables before and after.
+* Supports every `workflow.sh` mode and command: `status`, `status --json`, `<mode>` (`code`, `micro`, ...), `doctor [--json]`, `report`, `reset-session`, `init`, `setup`, `help`. Mode switches write `active_mode.env`.
+* Exit codes are the command's: `0` ok, `1` failed (for example an unknown mode), `2` usage error (for example `status --bogus`).
+* Refuses to be sourced (returns 2).
+* Hardening in `workflow.sh`: a mode id must be lowercase letters, digits, and hyphens. Anything else is rejected as "not found" before it reaches a jq program. Valid ids are unchanged.
+* The usage text names the entry point that was used.
+
+Still open:
+* The VS Code extension still runs `bash -c 'source "$1" "$2"'`. Switch it to `workflow-cli.sh` (resolve it beside `scriptPath`, call `execFile` with an argument array).
+* `wx` is not exposed. Tools cannot run `workflow-cli.sh wx <command>`.
+* No `version`, `modes --json`, or `report --json` commands. Compatibility between extension and CLI versions is undecided.
+* The executable bit must survive checkout and packaging. Check it when the CLI is bundled or installed on Windows/WSL paths such as `/mnt/c`.
+* `status` (text) through the CLI shows the variables of the CLI's own process, which inherits the caller's exported variables. Use `status --json` for controller state.

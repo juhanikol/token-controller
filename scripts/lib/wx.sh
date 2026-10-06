@@ -37,10 +37,22 @@ _wx_apply_env_file() {
   done < "$_WX_FILE"
 }
 
+# Drop every AICONTEXT_* policy variable. Path and override settings stay. Call it only in a subshell
+# or inside wx, never in the caller's own shell.
+_wx_unset_policy_state() {
+  local _WX_NAME
+
+  while IFS= read -r _WX_NAME; do
+    case "$_WX_NAME" in
+      AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE) ;;
+      *) unset "$_WX_NAME" ;;
+    esac
+  done < <(compgen -A variable AICONTEXT_)
+}
+
 _wx_load_policy_state() {
   local _WX_FILE="$1"
   local _WX_SHELL_PROFILE="${AICONTEXT_PROFILE:-}"
-  local _WX_NAME
 
   _WX_POLICY_SOURCE=shell
   _WX_STALE_SHELL_PROFILE=""
@@ -57,13 +69,7 @@ _wx_load_policy_state() {
     return 0
   fi
 
-  while IFS= read -r _WX_NAME; do
-    case "$_WX_NAME" in
-      AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE) ;;
-      *) unset "$_WX_NAME" ;;
-    esac
-  done < <(compgen -A variable AICONTEXT_)
-
+  _wx_unset_policy_state
   _wx_apply_env_file "$_WX_FILE"
   _WX_POLICY_SOURCE=active_mode.env
 
@@ -253,4 +259,4 @@ wx() {
   workflow_run "$@"
 }
 
-export -f _wx_apply_env_file _wx_load_policy_state workflow_run wx
+export -f _wx_apply_env_file _wx_unset_policy_state _wx_load_policy_state workflow_run wx

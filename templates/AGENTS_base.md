@@ -1,7 +1,7 @@
 <!-- ai-workflow-controller:start -->
 ## AI Context Policy
 
-Before broad work, read `~/.config/ai-workflow/active_mode.env`.
+Before broad work, read `~/.config/ai-workflow/active_mode.env`. It is the source of truth for the active profile. Do not rely only on `AICONTEXT_*` shell variables: a terminal that was already open can keep stale values after the mode changes in the editor. `wx` uses `active_mode.env` by default.
 
 Use the active profile to decide whether context-saving tools should be used. Prefer proven configured tools first:
 - RTK for noisy shell/build/test/install output.

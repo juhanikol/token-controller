@@ -34,7 +34,7 @@ _ai_workflow_main() {
 
   usage() {
     cat <<USAGE
-Usage: source scripts/workflow.sh <mode>
+Usage: ${AICONTEXT_ENTRYPOINT_NAME:-source scripts/workflow.sh} <mode>
 
 Modes:
   init         Initialize AGENTS.md in the current directory.
@@ -61,7 +61,7 @@ Modes:
   perf         Performance profiling and benchmarking.
   release      Release preparation.
   off          Disable all optimizers.
-  status       Show current profile.
+  status       Show current profile. Option: --json (reads the active mode file)
   doctor       Read-only check of settings, instruction files, and tools. Option: --json
                It can create an empty ~/.config/ai-workflow when run through workflow.sh.
   report       Summarize the current project's wx session.
@@ -128,14 +128,98 @@ USAGE
     fi
   }
 
+  # JSON status for tools (the VS Code extension, agents). It reads the active mode file as controller
+  # state, like wx does. It never changes the caller's shell: values are read in a subshell.
+  # Fields: see docs/TECHNICAL_DEBT.md (status --json). Needs jq.
+  status_json() {
+    need_jq || return 1
+
+    local _SHELL_PROFILE="${AICONTEXT_PROFILE:-}"
+    local _USE_SHELL_STATE=false
+    local _FILE_USABLE=false
+
+    [ "${AICONTEXT_USE_SHELL_STATE:-}" = true ] && _USE_SHELL_STATE=true
+    [ -f "$_ACTIVE_ENV_FILE" ] && [ -r "$_ACTIVE_ENV_FILE" ] && _FILE_USABLE=true
+
+    (
+      local _SOURCE=unset
+
+      if [ "$_FILE_USABLE" = true ]; then
+        _wx_unset_policy_state
+        _wx_apply_env_file "$_ACTIVE_ENV_FILE"
+        # A file without a profile is not usable state. wx keeps output raw in that case.
+        [ -n "${AICONTEXT_PROFILE:-}" ] && _SOURCE=active_env_file
+      elif [ -n "$_SHELL_PROFILE" ]; then
+        _SOURCE=shell_fallback
+      fi
+
+      jq -n \
+        --arg source "$_SOURCE" \
+        --arg env_file "$_ACTIVE_ENV_FILE" \
+        --arg shell_profile "$_SHELL_PROFILE" \
+        --argjson use_shell_state "$_USE_SHELL_STATE" \
+        --arg profile "${AICONTEXT_PROFILE:-}" \
+        --arg risk "${AICONTEXT_RISK:-}" \
+        --arg output_style "${AICONTEXT_OUTPUT_STYLE:-}" \
+        --arg raw_on_fail "${AICONTEXT_RAW_ON_FAIL:-}" \
+        --arg keep_raw_logs "${AICONTEXT_KEEP_RAW_LOGS:-}" \
+        --arg compress_shell "${AICONTEXT_COMPRESS_SHELL:-}" \
+        --arg compress_files "${AICONTEXT_COMPRESS_FILES:-}" \
+        --arg rtk_mode "${AICONTEXT_RTK_MODE:-}" \
+        --arg leanctx_mode "${AICONTEXT_LEANCTX_MODE:-}" \
+        --arg headroom_mode "${AICONTEXT_HEADROOM_MODE:-}" \
+        --arg caveman_mode "${AICONTEXT_CAVEMAN_MODE:-}" \
+        --arg caveman_max "${AICONTEXT_CAVEMAN_MAX:-}" \
+        --arg caveman_output "${AICONTEXT_CAVEMAN_OUTPUT:-}" \
+        '
+        def s: if . == "" then null else . end;
+        def b: if . == "true" then true elif . == "false" then false else null end;
+        ($profile | s) as $p
+        | {
+            schema_version: 1,
+            profile: $p,
+            risk: ($risk | s),
+            output_style: ($output_style | s),
+            raw_on_fail: ($raw_on_fail | b),
+            keep_raw_logs: ($keep_raw_logs | b),
+            compress_shell: ($compress_shell | s),
+            compress_files: ($compress_files | s),
+            rtk_mode: ($rtk_mode | s),
+            leanctx_mode: ($leanctx_mode | s),
+            headroom_mode: ($headroom_mode | s),
+            caveman_mode: ($caveman_mode | s),
+            caveman_max: ($caveman_max | s),
+            caveman_output: ($caveman_output | b),
+            source: $source,
+            active_env_file: $env_file,
+            shell_profile: (if ($shell_profile != "") and ($shell_profile != $profile) then $shell_profile else null end),
+            stale_shell: (($shell_profile != "") and ($source != "shell_fallback") and ($shell_profile != $profile)),
+            use_shell_state: $use_shell_state
+          }'
+    )
+  }
+
   case "$_MODE" in
     -h|--help|help)
       usage
       return 0
       ;;
     status|"")
-      status
-      return 0
+      [ "$#" -gt 0 ] && shift
+      case "${1:-}" in
+        --json)
+          status_json
+          return $?
+          ;;
+        "")
+          status
+          return 0
+          ;;
+        *)
+          echo "Error: unknown status option: $1. Use: workflow status [--json]" >&2
+          return 2
+          ;;
+      esac
       ;;
     doctor)
       shift
@@ -425,6 +509,14 @@ USAGE
       ;;
     ci)
       _MODE="cicd"
+      ;;
+  esac
+
+  # Mode ids are lowercase words with hyphens. Reject anything else before it reaches a jq program.
+  case "$_MODE" in
+    ''|-*|*[!a-z0-9-]*)
+      echo "Error: profile '$_MODE' not found in $_SETTINGS_FILE" >&2
+      return 1
       ;;
   esac
 

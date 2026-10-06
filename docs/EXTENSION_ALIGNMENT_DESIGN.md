@@ -51,13 +51,13 @@ Rules:
 
 ## CLI contract
 
-New non-sourced entry point: `scripts/workflow-cli.sh`. `workflow.sh` stays sourced-only for terminals. JSON on stdout, human text on stderr. Every JSON object has `schema_version`. Exit codes: `0` ok, `1` the command found a problem, `2` usage or internal error.
+Non-sourced entry point: `scripts/workflow-cli.sh` (**implemented**). It runs `workflow.sh` in its own Bash process and passes arguments through. Today it supports every `workflow.sh` mode and command (`status [--json]`, `<mode>`, `doctor`, `report`, `init`, ...). The dedicated `version`, `modes --json`, `set --json`, and `report --json` commands below are not built. `workflow.sh` stays sourced-only for terminals. JSON on stdout, human text on stderr. Every JSON object has `schema_version`. Exit codes: `0` ok, `1` the command found a problem, `2` usage or internal error.
 
 | Command | Purpose | Status |
 |---|---|---|
 | `version --json` | `{cli_version, protocol}`. The extension refuses a CLI outside its supported `protocol` range | new |
 | `modes --json` | `[{id, description, risk, aliases}]`, built from `workflow_settings.json` | new. Needs `description` per mode in config |
-| `status --json` | Profile and risk from the env file, effective tool settings (`rtk`, `leanctx`, `headroom`, `caveman`), `env_file`, `settings_file`. `profile: null` if none | new |
+| `status --json` | Profile, risk, tool modes, `source`, `stale_shell` from the env file (not the caller's shell). `profile: null` if none | **implemented** as `workflow status --json` with flat field names (`rtk_mode`, not `tools.rtk`). Schema: `docs/TECHNICAL_DEBT.md`. Not yet behind a non-sourced entry point |
 | `set <mode> --json` | Switch without sourcing. Returns the new status. Errors: `{error:{code,message}}` | new. Reuses the existing activation code |
 | `doctor --json --project <dir>` | Tools, warnings, environment | exists |
 | `report --json --project <dir>` | Commands, raw and visible bytes, reduction %, failures, last run time, or `{available:false}` | new. The text version exists but reads only the current directory |
@@ -139,7 +139,7 @@ git diff --check
 
 ## Open decisions
 
-1. **Stale terminals: resolved for `wx`.** `wx` now prefers `active_mode.env` over shell `AICONTEXT_*` variables (escape hatch: `AICONTEXT_USE_SHELL_STATE=true`). An old terminal that kept an old profile no longer changes `wx` behavior after a status-bar switch. Variables an agent reads directly from the shell are still stale until the terminal runs `workflow <mode>`. Open: set variables for new terminals with `environmentVariableCollection`, or a "restart terminals" prompt.
-2. **`status` meaning.** `status --json` reads the env file. Keep the shell-variable `workflow status` as well.
+1. **Stale terminals: resolved for `wx`.** `wx` now prefers `active_mode.env` over shell `AICONTEXT_*` variables (escape hatch: `AICONTEXT_USE_SHELL_STATE=true`). An old terminal that kept an old profile no longer changes `wx` behavior after a status-bar switch. Variables read directly from the shell are still stale until the terminal runs `workflow <mode>`. The AGENTS template now tells agents to treat `active_mode.env` as the source of truth, which mitigates this for compliant agents only. Open: set variables for new terminals with `environmentVariableCollection`, or a "restart terminals" prompt.
+2. **`status` meaning: resolved.** `status --json` reads the env file. The text `workflow status` still prints shell variables, and now also the env-file profile with a warning when they differ.
 3. **Mode descriptions in config.** Each mode needs a `description`. `workflow help` can then be generated from the config, which removes the second copy of the mode list.
 4. **Protocol policy.** Decide how the extension and CLI versions are compatible. The VSIX and the controller repository are installed separately.
