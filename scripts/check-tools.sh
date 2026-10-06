@@ -3,7 +3,7 @@ set -u
 
 printf 'AI Context Workflow tool check\n'
 printf '================================\n'
-printf 'Routing: wx intercepts RTK; LeanCTX, Headroom, and MemStack require IDE/MCP integration plus active AICONTEXT_* policy.\n'
+printf 'Note: workflow <mode> only exports AICONTEXT_* policy. wx captures raw output and does not invoke RTK, LeanCTX, Headroom, MemStack, or Caveman. Each tool needs its own shell/IDE/MCP setup.\n'
 
 check() {
   local name="$1"

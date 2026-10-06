@@ -40,7 +40,7 @@ Primary candidates. Each one is optional and detected, never required:
 | Headroom | Proxy/MCP compression, recoverable context, observability | Modes that need byte-exact payloads |
 | Caveman | Terse agent output; possibly shrink/proxy | Docs, precise instructions, release text, security findings, user-facing explanations |
 
-MemStack is still exported as `MEMSTACK_ACTIVE`. Decide whether to keep it or replace it with a LeanCTX/memory setting.
+MemStack is legacy and open. It is still exported as `MEMSTACK_ACTIVE`. Do not remove it until the RTK/LeanCTX/Headroom/Caveman orchestration shape is clearer.
 
 Research candidates. Do not install or integrate them yet:
 
@@ -83,11 +83,8 @@ GNU-specific shell code (`stat -c`, `date +%3N`) can stay in the CLI backend.
 
 | File | Issue |
 |---|---|
-| `.github/copilot-instructions.md` | Says the project "implements compression itself". Requires validation-matrix updates for every profile change |
-| `README.md` | Positioned as "policy controller plus `wx`". No orchestrator direction. Too long. Duplicated as the extension README |
-| `extensions/vscode/README.md` | Identical copy of root README. Needs a short, extension-specific README |
-| `docs/WX_DETERMINISTIC_WRAPPER_DESIGN.md` | "Must not depend on RTK" and "RTK experimental". Reframe RTK as a post-capture compressor. `measurements.jsonl` differs from the implemented `session.jsonl` |
-| `scripts/check-tools.sh` | Says "wx intercepts RTK" (false). No Caveman check |
+| `README.md` | Too long. Repository layout omits `tests/`, `extensions/`, and newer docs |
+| `scripts/check-tools.sh` | No Caveman check (behavior change, not text) |
 | `scripts/install-optional-tools.sh` | No Caveman. MemStack status unclear |
 | `config/workflow_settings.json` | No `micro`, `caveman_output`, `default_output_style`, or tool-fallback fields. `rtk_mode` values are policy labels, not RTK options |
 | `extensions/vscode/src/extension.ts` | Hard-coded partial mode list. Linux-only `exec` with string-built shell command |

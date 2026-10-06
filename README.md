@@ -2,7 +2,9 @@
 
 **Choose how agents should handle context, while keeping high-risk evidence visible.**
 
-Token Controller is currently a policy/profile controller plus an explicit `wx` shell wrapper. It records the selected profile, installs project guidance for compatible agents, and captures commands invoked as `wx <command>` without relying on an optional context tool. For successful commands on the configured noisy-success allowlist, `wx` deterministically collapses consecutive identical stdout lines; it does not enforce agent compliance, measure token use, or guarantee token savings.
+Token Controller is a mode switcher for AI context policy. The goal is to orchestrate proven context tools (RTK, LeanCTX, Headroom, Caveman) per work mode. Today it records the selected profile, installs project guidance for compatible agents, and exports policy variables that those tools may act on. It does not yet launch or configure them.
+
+The `wx` wrapper is the safety and measurement layer: it captures raw output, preserves exit codes, and records byte counts for commands run as `wx <command>`. Its only built-in compression collapses consecutive identical stdout lines for successful allowlisted commands. It is a fallback, not the main token-saving mechanism. Token Controller does not enforce agent compliance, measure model tokens, or guarantee token savings.
 
 ## How it works
 
@@ -345,14 +347,14 @@ Optional integrations may increase `wx` coverage, but are not installed automati
 
 * **Claude Code hook example:** [`integrations/claude-code/README.md`](integrations/claude-code/README.md) documents an opt-in `PreToolUse` hook. It blocks selected direct test, build, install, and Docker commands and tells the agent to retry as `wx <command>`; it does not silently mutate commands.
 * **RTK:** `wx` no longer delegates command execution to RTK. Any future RTK integration must occur after the wrapper has captured authoritative raw output.
-* **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools.
+* **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools. MemStack support is legacy and under review.
 * **Caveman:** The controller exports a compatibility variable, disabled by the current profiles; no automatic invocation is implemented.
 
 There is no universal interception layer. Commands run directly remain outside `wx` unless a separately configured hook or host integration enforces wrapper usage. The included Claude Code hook is an example for that host only, not proof that other agents, IDEs, terminals, or MCP clients will route commands through `wx`.
 
 ## Controlling Changes (Validation Matrix)
 
-Whenever a new mode is added or a shell policy is changed, it must be documented to prevent regressions. We maintain a ledger in `docs/VALIDATION_MATRIX.md`.
+`docs/VALIDATION_MATRIX.md` records validation evidence for `wx` behavior. It becomes the required record for every mode or policy change once external tools are integrated and measurable.
 
 The ledger includes paired raw/visible/emitted byte measurements for deterministic fixtures. These measurements validate the wrapper behavior but do not prove tokenizer-measured or universal savings for the controller as a whole.
 
