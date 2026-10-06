@@ -51,7 +51,7 @@ True mode or alias
 * **The `cargo-test` filter drops the final newline.**
   * This is why the design records byte counts and doesn't assume the text is identical.
 
-## Decisions for you
+### Decisions for you
 
 1. **RTK hook conflict.**
    * `rtk init -g` installs a hook that rewrites commands to run through RTK directly. For those commands `wx` never sees the raw output.
@@ -67,3 +67,25 @@ True mode or alias
    * False fallbacks are safe. A missed warning is not. The exact pattern needs tuning against fixtures.
 
 **Unverified:** RTK has `[tracking] enabled = true` in its config. I did not check whether `rtk pipe` writes usage history. The doc says to check before implementing, and `wx` must never edit `~/.config/rtk`.
+
+## Caveman policy
+
+### What I could and couldn't verify
+
+* **Verified from the Caveman quickstart:**
+  * the levels `lite`, `full`, `ultra` and `wenyan`
+  * the `/caveman` switch and the "stop caveman" phrase
+  * the state file `~/.claude/.caveman-active`
+  * the skill's input cost of about 1,650 tokens
+  * the warning that one-line questions can cost more than they save
+* **Not verified:** the `shrink`, `proxy` and `stats` commands. The quickstart doesn't describe them and my search found no usable docs. The doc keeps shrink/proxy as an opt-in experiment with constraints that hold whatever the real design is. Those constraints are never on raw evidence, never in place on a user file, and recorded in `session.jsonl` like RTK. It says to read the upstream docs first.
+* **Savings numbers:** sources disagree (about 65% in project text, 8.5% in one JetBrains test). The doc quotes no number and requires an A/B measurement before any claim.
+
+### Decisions for you
+
+1. **Policy, not enforcement.** The prompt guards and "first failure" rules depend on the agent. The CLI can't read prompts, so I labelled them as policy. A Claude Code `UserPromptSubmit` hook example is the only mechanical option I proposed, and only as an opt-in example.
+2. **No automatic token-pressure detection.** The user opts in. This is simpler, but it differs from "high token pressure" as a trigger.
+3. **Opt-in input.** I suggested an env var such as `AICONTEXT_CAVEMAN_REQUEST=lite workflow code`, but the name and shape are open.
+4. **STE and Caveman are mutually exclusive.** Caveman drops articles and STE keeps them, so the output style is one or the other.
+5. **Doctor follow-up.** Doctor should read `.caveman-active`. Active in a hard-blocked mode is an `error`, above `caveman_max` or without opt-in is a `warn`, and not installed is an `info`.
+6. **`ultra` and `wenyan` unsupported.** `ultra` loses clarity. `wenyan` isn't English.
