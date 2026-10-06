@@ -8,9 +8,10 @@ Token Controller is a mode switcher for AI context policy. You select the work m
 
 ## What it does
 
-- Shows `AI Context: <mode>` in the status bar.
-- Click the item, or run **AI Context: Switch Mode**, to select a mode.
-- It runs `source <scriptPath> <mode>` in Bash. The CLI writes `~/.config/ai-workflow/active_mode.env`.
+- Shows `AI Context: <mode> · <risk>` in the status bar. A `critical` mode also gets a warning background.
+- Click the item, or run **AI Context: Switch Mode**, to select a mode. The list shows each mode's risk and description.
+- The mode list is read from `config/workflow_settings.json` beside the script. If that file cannot be read, a built-in list is used (temporary, see Limitations).
+- It runs `source <scriptPath> <mode>` in a child Bash. The script path and the mode are passed as arguments, never put into a command string. The CLI writes `~/.config/ai-workflow/active_mode.env`.
 - The extension watches that file. The status bar also updates when you switch from a terminal with `workflow <mode>`.
 
 ## Requirements
@@ -29,10 +30,18 @@ Token Controller is a mode switcher for AI context policy. You select the work m
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `tokenController.scriptPath` | `~/projects/token-controller/scripts/workflow.sh` | Path to `workflow.sh`. `~` is expanded. |
+| `tokenController.scriptPath` | `~/projects/token-controller/scripts/workflow.sh` | Path to `workflow.sh`. Absolute, or starting with `~/`. The file must be named `workflow.sh`. |
+
+The setting has `machine` scope. Set it in user settings (or remote machine settings in WSL). A value in a workspace's `.vscode/settings.json` is ignored, and the extension shows a warning once. This stops a cloned repository from pointing the extension at its own script.
+
+## Workspace Trust
+
+The extension declares limited support for untrusted workspaces. Mode switching uses only the script path from your user settings, so it works in an untrusted workspace. The workspace cannot change which script runs or which mode ids are accepted.
 
 ## Limitations
 
-- The mode list in the picker is a subset of the modes in `config/workflow_settings.json`. To use other modes, run `workflow <mode>` in a terminal.
-- Mode switching depends on a Bash/WSL environment. A native Windows backend is planned but not implemented.
+- The built-in fallback mode list is temporary and can drift from the config. A CLI command that lists modes is planned.
+- The mode list is read from the config next to `scriptPath`. A settings file chosen with `AICONTEXT_SETTINGS_FILE` in your shell is not used.
+- Mode switching needs Bash. It works on Linux and WSL. On Windows without WSL it shows an error. A Windows backend is planned but not implemented.
+- A terminal that already ran `workflow <mode>` keeps its old variables until you switch again there.
 - The extension only selects policy. Agent compliance, external context tools, and `wx` capture are separate. See the main README.

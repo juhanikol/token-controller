@@ -200,7 +200,7 @@ else
       _SHELL_MATCH=true
     else
       _SHELL_MATCH=false
-      add "Active mode" warn mode.shell_mismatch "This shell has profile '$AICONTEXT_PROFILE'. The file has '$_PROFILE'." "$_ACTIVE_ENV_FILE" "Run: workflow ${_PROFILE:-<mode>}"
+      add "Active mode" warn mode.shell_mismatch "This shell has profile '$AICONTEXT_PROFILE'. The file has '$_PROFILE'. wx uses the file." "$_ACTIVE_ENV_FILE" "Run: workflow ${_PROFILE:-<mode>}"
     fi
   fi
 fi

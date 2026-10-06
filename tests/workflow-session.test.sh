@@ -78,4 +78,12 @@ assert_file_contains "$_WX_TEST_ROOT/after-reset.report" 'No workflow session da
 source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" reset-session >"$_WX_TEST_ROOT/empty-reset.out"
 assert_file_contains "$_WX_TEST_ROOT/empty-reset.out" 'Nothing to reset.'
 
+# Stale terminal: the shell says code, the env file says security. The report uses the env file.
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" security >"$_WX_TEST_ROOT/activation-security.out"
+wx echo hello >/dev/null 2>&1
+export AICONTEXT_PROFILE=code
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" report >"$_WX_TEST_ROOT/stale.report"
+assert_file_contains "$_WX_TEST_ROOT/stale.report" 'active profile: security'
+[ "$AICONTEXT_PROFILE" = code ] || fail 'report changed the caller shell profile'
+
 printf '%s\n' 'PASS: workflow report and reset-session'

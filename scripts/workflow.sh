@@ -117,6 +117,15 @@ USAGE
     echo "  AICONTEXT_RAW_ON_FAIL=${AICONTEXT_RAW_ON_FAIL:-unset}"
     echo "  AICONTEXT_KEEP_RAW_LOGS=${AICONTEXT_KEEP_RAW_LOGS:-unset}"
     echo "  Active env cache: $_ACTIVE_ENV_FILE"
+    # The lines above are this shell's state. wx uses the env file, so show that too.
+    local _FILE_PROFILE=""
+    if [ -f "$_ACTIVE_ENV_FILE" ] && [ -r "$_ACTIVE_ENV_FILE" ]; then
+      _FILE_PROFILE="$(sed -n 's/^export AICONTEXT_PROFILE="\(.*\)"$/\1/p' "$_ACTIVE_ENV_FILE" | head -n 1)"
+    fi
+    echo "  Env file profile (used by wx): ${_FILE_PROFILE:-none}"
+    if [ -n "$_FILE_PROFILE" ] && [ -n "${AICONTEXT_PROFILE:-}" ] && [ "$AICONTEXT_PROFILE" != "$_FILE_PROFILE" ]; then
+      echo "  Warning: this shell has profile '$AICONTEXT_PROFILE', but the env file has '$_FILE_PROFILE'. wx uses the env file. Run: workflow $_FILE_PROFILE"
+    fi
   }
 
   case "$_MODE" in

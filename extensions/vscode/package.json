@@ -21,6 +21,15 @@
   "extensionKind": [
     "workspace"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Mode switching runs the workflow.sh from your user settings. It does not use workspace settings, so it works in untrusted workspaces. The script path cannot be set from a workspace.",
+      "restrictedConfigurations": [
+        "tokenController.scriptPath"
+      ]
+    }
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/juhanikol/token-controller"
@@ -41,7 +50,8 @@
         "tokenController.scriptPath": {
           "type": "string",
           "default": "~/projects/token-controller/scripts/workflow.sh",
-          "description": "The path to your token-controller workflow.sh script. Use ~ for your home directory."
+          "description": "Absolute path (or ~/...) to workflow.sh. Set it in user or remote machine settings. Workspace settings are ignored. The file must be named workflow.sh.",
+          "scope": "machine"
         }
       }
     }

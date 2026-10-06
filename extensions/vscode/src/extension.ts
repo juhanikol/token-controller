@@ -2,41 +2,49 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { exec } from 'child_process';
+import { resolveScriptPath, runModeSwitch, ScriptResolution } from './controller';
+import { isValidModeId, isValidRisk, loadModes, ModeInfo } from './modes';
 
 let statusBarItem: vscode.StatusBarItem;
+let warnedWorkspaceOverride = false;
 
-interface ModeOption extends vscode.QuickPickItem {
-    mode: string;
+// Codicon per mode id. Presentation only. A mode without an entry gets the default icon.
+const ICONS: Record<string, string> = {
+    code: 'code', debug: 'bug', test: 'beaker', 'test-full': 'beaker-stop', architect: 'milestone',
+    scope: 'search', security: 'shield', db: 'database', cicd: 'server-process', 'rapid-prototype': 'rocket',
+    review: 'eye', raw: 'flame', off: 'circle-slash', micro: 'dash', snippet: 'symbol-snippet',
+    docs: 'book', release: 'package', migration: 'arrow-swap', perf: 'dashboard', decisions: 'law',
+    agent: 'robot', 'data-analysis': 'graph'
+};
+
+interface ActiveState {
+    profile: string;
+    risk?: string;
 }
 
-// These match the modes defined in your workflow_settings.json
-const MODES: ModeOption[] = [
-    { label: "$(code) Code", mode: "code", description: "Standard coding, reversible compression, target files raw" },
-    { label: "$(bug) Debug", mode: "debug", description: "Bug fixing, raw first failure, suppress repetitive noise" },
-    { label: "$(beaker) Test", mode: "test", description: "Unit/integration tests, compress passing logs" },
-    { label: "$(beaker-stop) Test-Full", mode: "test-full", description: "Full app / broad automated test routine" },
-    { label: "$(milestone) Architect", mode: "architect", description: "Architecture, structure, codebase overview" },
-    { label: "$(search) Scope", mode: "scope", description: "Requirements gathering, safe summaries" },
-    { label: "$(shield) Security", mode: "security", description: "Vulnerability & secret scans, 100% raw/lossless" },
-    { label: "$(database) Database", mode: "db", description: "Migrations & schemas, strictly raw/lossless" },
-    { label: "$(server-process) CI/CD", mode: "cicd", description: "Boilerplate strip, preserve exit codes and errors" },
-    { label: "$(rocket) Rapid Prototype", mode: "rapid-prototype", description: "Aggressive on success, raw on API/DB fail" },
-    { label: "$(eye) Review", mode: "review", description: "Whole repo review, interfaces + diffs" },
-    { label: "$(flame) Raw (Lossless)", mode: "raw", description: "Disable all compression across the board" },
-    { label: "$(circle-slash) Off", mode: "off", description: "Turn off workflow optimizers" }
-];
+/**
+ * The script path comes from user or machine settings only. A workspace value is ignored, because a
+ * cloned repository could otherwise point it at its own script.
+ */
+function getScriptPath(): ScriptResolution {
+    const info = vscode.workspace.getConfiguration('tokenController').inspect<string>('scriptPath');
+    if (!warnedWorkspaceOverride && (info?.workspaceValue !== undefined || info?.workspaceFolderValue !== undefined)) {
+        warnedWorkspaceOverride = true;
+        void vscode.window.showWarningMessage(
+            'Token Controller ignores tokenController.scriptPath from workspace settings. Set it in your user settings.'
+        );
+    }
+    return resolveScriptPath(info?.globalValue ?? info?.defaultValue);
+}
 
 export function activate(context: vscode.ExtensionContext) {
     const configDir = process.env.AICONTEXT_CONFIG_DIR || path.join(os.homedir(), '.config', 'ai-workflow');
     const activeEnvFile = path.join(configDir, 'active_mode.env');
 
-    // Create the Status Bar Item
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBarItem.command = 'tokenController.selectMode';
     context.subscriptions.push(statusBarItem);
 
-    // Initial update
     updateStatusBar(activeEnvFile);
 
     // Watch the file for external changes (like running the script from CLI)
@@ -45,72 +53,110 @@ export function activate(context: vscode.ExtensionContext) {
     fileWatcher.onDidCreate(() => updateStatusBar(activeEnvFile));
     context.subscriptions.push(fileWatcher);
 
-    // Register Mode Selection Command
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (event.affectsConfiguration('tokenController.scriptPath')) {
+                updateStatusBar(activeEnvFile);
+            }
+        })
+    );
+
     const selectModeDisposable = vscode.commands.registerCommand('tokenController.selectMode', async () => {
-        const selected = await vscode.window.showQuickPick(MODES, {
-            placeHolder: 'Select active AI Context Workflow Mode',
+        const script = getScriptPath();
+        const loaded = loadModes(script.ok ? script.path : undefined);
+        const current = readActiveState(activeEnvFile).profile;
+
+        const items = loaded.modes.map((mode) => toQuickPickItem(mode, mode.id === current));
+        const note = loaded.source === 'fallback' ? ' (built-in mode list, config not found)' : '';
+        const selected = await vscode.window.showQuickPick(items, {
+            placeHolder: `Select active AI Context Workflow Mode${note}`,
             matchOnDescription: true
         });
 
         if (selected) {
-            await switchMode(selected.mode, activeEnvFile);
+            await switchMode(selected.mode, loaded.modes, activeEnvFile);
         }
     });
 
     context.subscriptions.push(selectModeDisposable);
 }
 
-function updateStatusBar(activeEnvFile: string) {
-    let activeProfile = "off";
+interface ModeQuickPickItem extends vscode.QuickPickItem {
+    mode: string;
+}
+
+function toQuickPickItem(mode: ModeInfo, isCurrent: boolean): ModeQuickPickItem {
+    const icon = ICONS[mode.id] ?? 'symbol-misc';
+    const parts = [mode.risk ? `risk: ${mode.risk}` : '', mode.description].filter((part) => part !== '');
+    return {
+        label: `$(${icon}) ${mode.id}${isCurrent ? ' (current)' : ''}`,
+        description: parts.join(' · '),
+        mode: mode.id
+    };
+}
+
+function readActiveState(activeEnvFile: string): ActiveState {
+    let profile = 'off';
+    let risk: string | undefined;
 
     if (fs.existsSync(activeEnvFile)) {
         try {
             const content = fs.readFileSync(activeEnvFile, 'utf8');
-            const match = content.match(/export AICONTEXT_PROFILE="([^"]+)"/);
-            if (match && match[1]) {
-                activeProfile = match[1];
+            const profileMatch = content.match(/^export AICONTEXT_PROFILE="([^"]+)"$/m);
+            if (profileMatch && profileMatch[1]) {
+                profile = isValidModeId(profileMatch[1]) ? profileMatch[1] : 'unknown';
+            }
+            const riskMatch = content.match(/^export AICONTEXT_RISK="([^"]+)"$/m);
+            if (riskMatch && isValidRisk(riskMatch[1])) {
+                risk = riskMatch[1];
             }
         } catch {
-            activeProfile = "error";
+            profile = 'error';
         }
     }
+    return { profile, risk };
+}
 
-    statusBarItem.text = `$(zap) AI Context: ${activeProfile}`;
-    statusBarItem.tooltip = `Current AI context mode: ${activeProfile}. Click to switch.`;
+function updateStatusBar(activeEnvFile: string) {
+    const { profile, risk } = readActiveState(activeEnvFile);
+    const script = getScriptPath();
+    const description = loadModes(script.ok ? script.path : undefined).modes.find((mode) => mode.id === profile)?.description;
+
+    statusBarItem.text = `$(zap) AI Context: ${profile}${risk ? ` · ${risk}` : ''}`;
+    statusBarItem.tooltip = [
+        `Current AI context mode: ${profile}${risk ? ` (risk: ${risk})` : ''}.`,
+        description ?? '',
+        script.ok ? '' : script.reason,
+        'Click to switch.'
+    ].filter((line) => line !== '').join('\n');
+    statusBarItem.backgroundColor = risk === 'critical'
+        ? new vscode.ThemeColor('statusBarItem.warningBackground')
+        : undefined;
     statusBarItem.show();
 }
 
-async function switchMode(mode: string, activeEnvFile: string) {
-    // Resolve the script path globally in ~/projects/token-controller/scripts/workflow.sh as instructed in your README
-    // 1. Read the path from VS Code User Settings
-    const config = vscode.workspace.getConfiguration('tokenController');
-    let scriptPath = config.get<string>('scriptPath');
-
-    if (!scriptPath) {
-        vscode.window.showErrorMessage("Workflow script path is not configured.");
+async function switchMode(mode: string, knownModes: ModeInfo[], activeEnvFile: string) {
+    // Only ids from the loaded mode list may reach the shell script.
+    if (!knownModes.some((known) => known.id === mode) || !isValidModeId(mode)) {
+        vscode.window.showErrorMessage(`Unknown mode: ${mode}`);
         return;
     }
-    // 2. Expand the '~' to the actual home directory
-    if (scriptPath.startsWith('~')) {
-        scriptPath = path.join(os.homedir(), scriptPath.slice(1));
-    }
-    // 3. Verify it exists
-    if (!fs.existsSync(scriptPath)) {
-        vscode.window.showErrorMessage(`Workflow script not found at: ${scriptPath}. Please update your settings.`);
+    const script = getScriptPath();
+    if (!script.ok) {
+        vscode.window.showErrorMessage(`${script.reason} Set tokenController.scriptPath in your user settings.`);
         return;
     }
 
-    const command = `bash -c "source \\"${scriptPath}\\" ${mode}"`;
+    try {
+        await runModeSwitch(script.path, mode);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`Failed to switch mode: ${message}`);
+        return;
+    }
 
-    exec(command, (error) => {
-        if (error) {
-            vscode.window.showErrorMessage(`Failed to switch mode: ${error.message}`);
-            return;
-        }
-
-        updateStatusBar(activeEnvFile);
-        vscode.window.showInformationMessage(`AI Context switched to: ${mode}`);
-    });
+    updateStatusBar(activeEnvFile);
+    vscode.window.showInformationMessage(`AI Context switched to: ${mode}`);
 }
 
 export function deactivate() {}

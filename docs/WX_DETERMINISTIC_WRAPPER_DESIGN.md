@@ -116,6 +116,16 @@ Byte and line counts are exact. Token fields should be absent or `null` unless a
 - Trap interruption signals, forward them to the child, wait for it, finalize available evidence, and return the child's signal-derived status.
 - Never allow a wrapper error to hide existing raw evidence or replace a command failure with a successful status.
 
+## Policy state precedence
+
+`wx` is the safety layer, so the active mode file wins over shell variables:
+
+1. `active_mode.env` (`$AICONTEXT_CONFIG_DIR` or `~/.config/ai-workflow`) when it is a readable file. Stale `AICONTEXT_*` shell variables are dropped first. The file is parsed, not sourced: only `export AICONTEXT_NAME="plain value"` lines are used. A file without a profile leaves all policy unset, so output stays raw, and `wx` prints a warning.
+2. Shell `AICONTEXT_*` variables, when the file is missing or unreadable.
+3. Escape hatch: `AICONTEXT_USE_SHELL_STATE=true` keeps the shell variables. The file is read only when no profile is set.
+
+Each `session.jsonl` record has `policy_source` (`active_mode.env` or `shell`) and `stale_shell_profile` (the replaced shell profile, or `null`). When a stale shell profile is replaced, `wx` prints one note on stderr. `workflow report` uses the same precedence. `workflow status` prints the shell state and the env-file profile, and warns when they differ.
+
 ## Backward compatibility
 
 - Preserve `wx <command> [args...]`, argument boundaries, working directory, environment, stdout/stderr destinations, and the command's exit status.

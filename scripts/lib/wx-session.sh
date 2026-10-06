@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 
+# Sourced by scripts/workflow.sh after wx.sh. Uses the same policy precedence as wx
+# (_wx_load_policy_state in wx.sh): active_mode.env first, shell variables as fallback.
 _wx_session_load_profile() {
-  local _WX_ACTIVE_ENV_FILE="$1"
-
-  if [ -z "${AICONTEXT_PROFILE:-}" ] && [ -r "$_WX_ACTIVE_ENV_FILE" ]; then
-    # shellcheck source=/dev/null
-    source "$_WX_ACTIVE_ENV_FILE"
-  fi
+  _wx_load_policy_state "$1"
 }
 
 _wx_session_validate() {

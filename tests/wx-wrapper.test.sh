@@ -83,6 +83,57 @@ source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" status >"$_WX_TEST_ROOT/status
 assert_file_contains "$_WX_TEST_ROOT/status.out" 'Current AI Context Workflow Status:'
 jq -e -s 'length == 7' .ai-context/session.jsonl >/dev/null || fail 'session JSONL did not contain seven valid records'
 
+# Stale terminal safety. The shell says "code" (compressible), active_mode.env says "security" (protected).
+# wx must use the env file by default.
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" security >"$_WX_TEST_ROOT/activation-stale.out"
+export AICONTEXT_PROFILE=code AICONTEXT_RISK=normal AICONTEXT_COMPRESS_SHELL=safe
+wx npm install >"$_WX_TEST_ROOT/stale.stdout" 2>"$_WX_TEST_ROOT/stale.stderr"
+[ "$?" -eq 0 ] || fail 'stale-shell fixture failed'
+[ "$(grep -Fc 'PASS tests/widget.test.js' "$_WX_TEST_ROOT/stale.stdout")" -eq 12 ] || fail 'stale shell state compressed protected output'
+if grep -Fq '[wx] repeated' "$_WX_TEST_ROOT/stale.stdout"; then
+  fail 'stale shell state produced a compression marker'
+fi
+assert_file_contains "$_WX_TEST_ROOT/stale.stderr" 'Using profile "security" from active_mode.env'
+jq -e -s '
+  .[-1].profile == "security"
+  and .[-1].output_policy == "raw-protected-profile"
+  and .[-1].policy_source == "active_mode.env"
+  and .[-1].stale_shell_profile == "code"
+  and .[-1].raw.stdout_bytes == .[-1].visible.stdout_bytes
+' .ai-context/session.jsonl >/dev/null || fail 'stale-shell metadata is invalid'
+# The caller's shell is not changed by wx.
+[ "$AICONTEXT_PROFILE" = code ] || fail 'wx changed the caller shell profile'
+
+# workflow status shows both states.
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" status >"$_WX_TEST_ROOT/status-stale.out"
+assert_file_contains "$_WX_TEST_ROOT/status-stale.out" 'AICONTEXT_PROFILE=code'
+assert_file_contains "$_WX_TEST_ROOT/status-stale.out" 'Env file profile (used by wx): security'
+assert_file_contains "$_WX_TEST_ROOT/status-stale.out" "Warning: this shell has profile 'code', but the env file has 'security'"
+
+# Escape hatch: AICONTEXT_USE_SHELL_STATE=true keeps the shell state.
+AICONTEXT_USE_SHELL_STATE=true wx npm install >"$_WX_TEST_ROOT/shellstate.stdout" 2>"$_WX_TEST_ROOT/shellstate.stderr"
+jq -e -s '
+  .[-1].profile == "code"
+  and .[-1].policy_source == "shell"
+  and .[-1].output_policy == "compress-exact-repeats-v1"
+' .ai-context/session.jsonl >/dev/null || fail 'escape hatch did not keep the shell state'
+
+# Old terminal with an env file that is missing: shell state is the fallback.
+_WX_SAVED_CONFIG_DIR="$AICONTEXT_CONFIG_DIR"
+export AICONTEXT_CONFIG_DIR="$_WX_TEST_ROOT/no-config"
+wx npm install >"$_WX_TEST_ROOT/nofile.stdout" 2>"$_WX_TEST_ROOT/nofile.stderr"
+jq -e -s '.[-1].profile == "code" and .[-1].policy_source == "shell"' .ai-context/session.jsonl >/dev/null || fail 'missing env file did not fall back to shell state'
+
+# Env file with an unsafe line and no profile: the line is not executed, output stays raw.
+mkdir -p "$_WX_TEST_ROOT/bad-config"
+printf 'export AICONTEXT_COMPRESS_SHELL="safe"; touch "%s"\nexport AICONTEXT_RISK="$(touch %s)"\n' "$_WX_TEST_ROOT/EXECUTED" "$_WX_TEST_ROOT/EXECUTED" > "$_WX_TEST_ROOT/bad-config/active_mode.env"
+export AICONTEXT_CONFIG_DIR="$_WX_TEST_ROOT/bad-config"
+wx npm install >"$_WX_TEST_ROOT/bad.stdout" 2>"$_WX_TEST_ROOT/bad.stderr"
+[ ! -e "$_WX_TEST_ROOT/EXECUTED" ] || fail 'env file content was executed'
+[ "$(grep -Fc 'PASS tests/widget.test.js' "$_WX_TEST_ROOT/bad.stdout")" -eq 12 ] || fail 'env file without a profile compressed output'
+assert_file_contains "$_WX_TEST_ROOT/bad.stderr" 'has no profile'
+export AICONTEXT_CONFIG_DIR="$_WX_SAVED_CONFIG_DIR"
+
 _WX_SUCCESS_RAW_BYTES="$(jq -r -s '.[0].raw.stdout_bytes' .ai-context/session.jsonl)"
 _WX_SUCCESS_VISIBLE_BYTES="$(jq -r -s '.[0].visible.stdout_bytes' .ai-context/session.jsonl)"
 printf 'PASS: wx wrapper compression, raw preservation, metadata, and exit codes (success stdout %s -> %s bytes)\n' \

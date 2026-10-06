@@ -166,3 +166,35 @@ Still open for doctor:
 * **RTK setup detection** is a text match on known Claude Code locations. Other hosts (Copilot, Cursor) are not checked.
 * **`.caveman-active` format** is assumed to hold the level name. Unknown values give a `warn`.
 * **Doctor JSON has no consumer yet.** `schema_version` stays `1` until the extension uses it.
+
+## Extension security and mode drift (2026-10-07)
+
+Fixed in `extensions/vscode` (not yet released, the tracked `.vsix` is still 1.1.0):
+* Shell string removed. `execFile('bash', ['-c', 'source "$1" "$2"', 'bash', script, mode])` passes values as arguments. A test shows the old string form ran an injected `touch` from a crafted path, and the new code does not.
+* `tokenController.scriptPath` has `machine` scope. Workspace values are ignored and the user gets one warning. The path must be absolute (or `~/`), exist, and be named `workflow.sh`.
+* `capabilities.untrustedWorkspaces`: `limited`, with the setting restricted. Mode switching works in untrusted workspaces because it uses only user-level settings.
+* Mode ids are validated (`^[a-z0-9][a-z0-9-]*$`) and must be in the loaded list before they reach the shell.
+* The mode list is read from `config/workflow_settings.json` beside the script. The built-in fallback has all 22 modes and is marked temporary. A unit test fails if the fallback differs from the repository config.
+* Risk is shown in the status bar and picker (`AICONTEXT_RISK` for the active mode, `risk` from config for the list).
+
+Still open:
+* **Dynamic mode loading:** the extension parses the config itself. The planned `workflow-cli.sh modes --json` is not built. The fallback list can drift when the extension runs without the repository config. `AICONTEXT_SETTINGS_FILE` is not honored.
+* **Windows:** `runModeSwitch` needs Bash and returns an error on `win32`. No backend interface yet (`docs/EXTENSION_ALIGNMENT_DESIGN.md`).
+* **Not verified in a real VS Code host:** `npm test` (`vscode-test`) was not run. The unit tests ran with plain mocha. `inspect().globalValue` behavior in a WSL remote window is untested.
+* **Stale terminals:** a terminal that already ran `workflow <mode>` keeps old variables. Decision open in `docs/EXTENSION_ALIGNMENT_DESIGN.md`.
+* **Tracked `.vsix`:** `extensions/vscode/token-controller-ui-1.1.0.vsix` is in git and does not contain these fixes. Rebuild and bump the version when you release.
+
+## Stale terminal safety (2026-10-07)
+
+Fixed:
+* `wx` and `workflow report` prefer `active_mode.env` over shell `AICONTEXT_*` variables. Stale shell policy variables are dropped before the file is applied. A test reproduces the old bug (shell `code`, file `security`: output was compressed) and passes now.
+* The env file is parsed, not sourced. Lines that are not plain `export AICONTEXT_NAME="value"` are ignored. A file without a profile leaves output raw and warns.
+* Escape hatch: `AICONTEXT_USE_SHELL_STATE=true`.
+* `AICONTEXT_RAW_LOG_DIR` is now read after the policy state loads. Before, a stale shell value or the default was used even when the file set it.
+* `session.jsonl` records `policy_source` and `stale_shell_profile` (additive fields, `schema_version` stays 2).
+* `workflow status` shows the env-file profile and warns when the shell differs. Doctor's shell mismatch warning says `wx` uses the file.
+
+Still open:
+* Agents that read shell variables directly (not through `wx`) still see stale values until the terminal runs `workflow <mode>`. Options are in `docs/EXTENSION_ALIGNMENT_DESIGN.md`.
+* There is no `status --json` yet. The text `workflow status` is the only place that shows both states.
+* `wx` ignores values with `$`, backticks, or backslashes in the env file. `workflow.sh` never writes them today.

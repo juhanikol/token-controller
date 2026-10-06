@@ -139,10 +139,7 @@ git diff --check
 
 ## Open decisions
 
-1. **Stale terminals.** The extension can only write `active_mode.env`. A terminal that already ran `workflow <mode>` keeps its old `AICONTEXT_*` variables. `wx` reads the env file only when `AICONTEXT_PROFILE` is unset (`scripts/lib/wx.sh`). After a switch from the status bar, an old terminal can still apply the old profile in `wx`, including a non-protected profile in place of a protected one. Options:
-   - change `wx` to prefer the env file (recommended, `wx` is the safety layer),
-   - set variables for new terminals with `environmentVariableCollection`,
-   - show a "restart terminals" prompt.
+1. **Stale terminals: resolved for `wx`.** `wx` now prefers `active_mode.env` over shell `AICONTEXT_*` variables (escape hatch: `AICONTEXT_USE_SHELL_STATE=true`). An old terminal that kept an old profile no longer changes `wx` behavior after a status-bar switch. Variables an agent reads directly from the shell are still stale until the terminal runs `workflow <mode>`. Open: set variables for new terminals with `environmentVariableCollection`, or a "restart terminals" prompt.
 2. **`status` meaning.** `status --json` reads the env file. Keep the shell-variable `workflow status` as well.
 3. **Mode descriptions in config.** Each mode needs a `description`. `workflow help` can then be generated from the config, which removes the second copy of the mode list.
 4. **Protocol policy.** Decide how the extension and CLI versions are compatible. The VSIX and the controller repository are installed separately.
