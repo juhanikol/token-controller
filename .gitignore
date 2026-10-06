@@ -1,4 +1,5 @@
 config/active_mode.env
+.ai-context/
 .memstack/
 node_modules/
 backup/

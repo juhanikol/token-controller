@@ -2,7 +2,7 @@
 
 ## Current behavior
 
-`workflow_run` is defined in `scripts/workflow.sh` and exposed as the `wx` alias. It loads `active_mode.env` when needed, then either invokes `rtk <command>` when RTK is enabled and installed or invokes the command directly. It does not retain the command's raw stdout/stderr, create measurements, or independently enforce the profile's preservation rules. `workflow.sh` also owns profile activation, so wrapper execution and profile management are currently coupled.
+The mechanical layer is implemented in `scripts/lib/wx.sh` and `scripts/lib/wx-compress.sh`, exposed as the `wx` function. It stores raw stdout and stderr under `.ai-context/raw/`, appends raw/visible byte measurements to `.ai-context/session.jsonl`, prints the raw-log location, and returns the command's exit code. Successful allowlisted noisy commands may collapse exact consecutive repetitions; failures and protected profiles or commands remain raw.
 
 ## Proposed behavior
 
@@ -18,6 +18,8 @@ Keep `workflow.sh` responsible for selecting profiles, exporting policy variable
 Compression is post-processing; an optional tool must never replace the authoritative raw capture. The initial implementation should not depend on RTK for its deterministic baseline.
 
 ## File layout
+
+The current layer keeps capture/metadata logic in `scripts/lib/wx.sh` and deterministic policy/reduction logic in `scripts/lib/wx-compress.sh`. A later expansion may split toward this target layout:
 
 ```text
 scripts/
@@ -56,6 +58,7 @@ The runner buffers output on disk rather than in shell variables, avoiding binar
 - Store each invocation in a unique directory such as `YYYYMMDD/<UTC timestamp>-<pid>-<counter>/` with `stdout.raw`, `stderr.raw`, and `run.json`.
 - Create directories with mode `0700` and files with mode `0600`; reject symlinked run directories and never overwrite an existing run.
 - Retain raw logs for successes, failures, compression failures, and interrupted commands. Do not delete logs automatically in the first implementation.
+- `workflow reset-session` archives only `session.jsonl` under `.ai-context/archive/`; it never deletes raw logs.
 - Document that raw logs may contain secrets and should be gitignored. A future explicit prune command may implement age/size retention without changing capture semantics.
 
 ## Compression rules
@@ -67,7 +70,7 @@ Policy resolution is ordered and first-match wins:
 3. When `AICONTEXT_RAW_ON_FAIL=true`, emit the complete raw stdout and stderr for any nonzero exit. This guarantees that the first failing `debug` output is not destructively compressed.
 4. Emit stderr verbatim whenever `AICONTEXT_PRESERVE_STDERR=true`, including successful commands that produced warnings.
 5. Emit raw output when shell compression is `off` or policy resolution is unknown.
-6. Otherwise, apply only a versioned built-in reducer to stdout. Version 1 may collapse consecutive identical lines and excess blank lines, inserting an explicit count marker. It must not truncate unknown content or rewrite numbers, paths, diagnostics, warning/error lines, or command summaries.
+6. Otherwise, apply only a versioned built-in reducer to stdout. Version 1 collapses consecutive identical lines, including repeated blank lines, and inserts an explicit count marker. It does not truncate unknown content or rewrite numbers, paths, diagnostics, warning/error lines, or command summaries.
 
 Command-specific reducers may be added only with fixtures proving their preserved fields. An optional RTK adapter can remain experimental, but its output and version must be recorded and it must operate only after the direct command output has been captured.
 
@@ -89,14 +92,16 @@ Append one JSON object per invocation to `.ai-context/measurements.jsonl` using 
   "exit_code": 0,
   "decision": "compress-exact-repeats",
   "compressor": "builtin/exact-repeat-v1",
-  "raw": {"stdout_bytes": 12000, "stderr_bytes": 0, "stdout_lines": 400},
-  "emitted": {"stdout_bytes": 1800, "stderr_bytes": 0, "stdout_lines": 42},
+  "raw": {"stdout_bytes": 12000, "stderr_bytes": 0},
+  "visible": {"stdout_bytes": 1800, "stderr_bytes": 0},
   "raw_log_dir": ".ai-context/raw/20261006/...",
   "wrapper_error": null
 }
 ```
 
 Byte and line counts are exact. Token fields should be absent or `null` unless a named tokenizer and version actually calculate them; byte reduction must not be labeled token savings. Store only the executable name and an argv hash by default so measurements do not duplicate secret arguments.
+
+`workflow report` aggregates command count, raw and visible bytes, byte-reduction percentage, and failures from valid JSONL records. It reports the active profile and raw-log directory without mutating either the session or raw evidence.
 
 ## Failure behavior
 

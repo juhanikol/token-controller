@@ -1,0 +1,40 @@
+{
+  "modes": {
+    "plan": {
+      "rtk_hook_enabled": false,
+      "headroom_strategy": "ast-interfaces-only",
+      "memstack_active": true,
+      "caveman_output": false
+    },
+    "code": {
+      "rtk_hook_enabled": false,
+      "headroom_strategy": "reversible-ccr",
+      "memstack_active": true,
+      "caveman_output": false
+    },
+    "test": {
+      "rtk_hook_enabled": true,
+      "headroom_strategy": "aggressive-logs",
+      "memstack_active": false,
+      "caveman_output": true
+    },
+    "debug": {
+      "rtk_hook_enabled": true,
+      "headroom_strategy": "safety-first-lossless",
+      "memstack_active": true,
+      "caveman_output": false
+    },
+    "cicd": {
+      "rtk_hook_enabled": true,
+      "headroom_strategy": "strip-boilerplate",
+      "memstack_active": false,
+      "caveman_output": true
+    },
+    "off": {
+      "rtk_hook_enabled": false,
+      "headroom_strategy": "bypass",
+      "memstack_active": false,
+      "caveman_output": false
+    }
+  }
+}

@@ -504,3 +504,97 @@ Copy this block for each experiment.
 - Did the agent reach the same conclusion with compressed context? Yes; exact raw checks independently verified placement and claim boundaries
 - Pass/fail: PASS
 - Recommended profile change: none
+
+### Experiment: deterministic conservative wx compression
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: compress repeated successful boilerplate while preserving raw logs and all failure or protected evidence
+- Profile: `code`, followed by `security`, `db`, `release`, and `migration` protection checks
+- Tools installed: Bash, jq, awk, grep, sed, standard GNU utilities
+- Command(s):
+  - `bash tests/wx-wrapper.test.sh`
+  - fixture `wx npm install` with 12 consecutive identical pass lines
+  - fixture failure with stderr, two stack frames, file paths, line numbers, and exit code 3
+  - protected `wx npm audit` and noisy-success fixtures under each protected profile
+- Raw output location: isolated `.ai-context/raw/` test directory removed by the fixture cleanup trap
+- Compressed output location: emitted stdout captured by the test fixture
+- Raw size / estimated tokens: successful fixture stdout 336 bytes; tokens not measured
+- Compressed size / estimated tokens: successful visible stdout 102 bytes; tokens not measured
+- Evidence preserved:
+  - raw stdout and stderr files remained byte-for-byte complete
+  - failure exit code remained 3
+  - complete failure stderr, first error, stack trace origins, paths, line numbers, cause, and last relevant line remained visible
+  - `npm audit`, `security`, `db`, `release`, and `migration` outputs remained uncompressed
+  - every JSONL record contained raw and visible byte counts
+- Evidence lost or possibly hidden: eleven redundant visible copies of one successful pass line; the visible marker recorded the exact omitted count
+- Did the agent reach the same conclusion with compressed context? Yes; the success summary retained the pass identity and count, while all failure/protected evidence remained raw
+- Pass/fail: PASS
+- Recommended profile change: none
+
+### Experiment: workflow session reporting and reset
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: report aggregate wrapper measurements and safely start a new session without deleting raw evidence
+- Profile: `code`
+- Command(s):
+  - `bash tests/workflow-session.test.sh`
+  - `workflow report` with no session, one command, and three commands including one failure
+  - `workflow reset-session` with populated and empty sessions
+- Raw output location: isolated `.ai-context/raw/` test directory removed by the fixture cleanup trap
+- Compressed output location: fixture-visible stdout/stderr captured by the test
+- Evidence preserved:
+  - every live and archived JSONL record parsed with `jq`
+  - report totals matched independently aggregated raw and visible byte counts
+  - one-command report showed 6 raw and 6 visible bytes with 0.00% reduction
+  - multiple-command report showed three commands and one failure
+  - reset produced a valid three-record archive and a new empty session
+  - raw-log file count was identical before and after reset
+- Evidence lost or possibly hidden: none; reset archived metadata and did not alter raw logs
+- Pass/fail: PASS
+- Recommended profile change: none
+
+### Experiment: practical `wx` context-reduction benchmark
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: compare normal-shell output with total `wx` emitted output while preserving authoritative raw evidence
+- Profiles: `code`, `debug`, `security`, and `db`
+- Command: `bash benchmarks/run-benchmark.sh`
+- Optional tools active: none; the suite uses Bash, `jq`, `awk`, `grep`, `cmp`, and standard Ubuntu utilities
+- Results:
+
+| Fixture | Profile | Exit | Raw bytes | Visible command bytes | Emitted bytes | Practical reduction | Evidence |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| noisy-pass | `code` | 0 | 5430 | 110 | 219 | 95.97% | PASS |
+| failing-stacktrace | `debug` | 7 | 293 | 293 | 402 | -37.20% | PASS |
+| security | `security` | 0 | 407 | 407 | 516 | -26.78% | PASS |
+| db | `db` | 0 | 391 | 391 | 500 | -27.88% | PASS |
+
+- Aggregate raw bytes: 6521
+- Aggregate emitted bytes: 1637
+- Aggregate practical reduction: 74.90%
+- Evidence preserved: command exit codes, raw stdout/stderr, failure stack paths and line numbers, security findings, and database migration warnings
+- Evidence lost or possibly hidden: none in the protected fixtures; the noisy-success fixture intentionally collapses exact consecutive repetitions
+- Pass/fail: PASS
+- Interpretation: proves practical byte reduction for this noisy-success fixture, including wrapper overhead, but does not establish universal or tokenizer-backed token savings. Protected short outputs grow because the mandatory raw-log pointer is included.
+- Coverage condition: these measurements apply only when commands run through `wx`, whether explicitly or because a configured integration requires a retry through `wx`.
+- Recommended profile change: none
+
+### Experiment: opt-in Claude Code `PreToolUse` example
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: require selected direct Claude Code Bash commands to be retried through `wx` without silently rewriting tool input
+- Files: `integrations/claude-code/settings.example.json`, `integrations/claude-code/hooks/pretooluse-bash-policy.sh`, and `integrations/claude-code/README.md`
+- Commands:
+  - `bash -n integrations/claude-code/hooks/pretooluse-bash-policy.sh`
+  - `jq . integrations/claude-code/settings.example.json >/dev/null`
+  - pipe the documented `npm test` and `wx npm test` JSON samples into the hook
+- Expected behavior: direct `npm test` returns a Claude Code deny decision with `wx npm test` guidance; an already wrapped command produces no output; both hook invocations exit 0
+- Installation behavior: example only; nothing installs or enables the hook automatically
+- Evidence preserved: original command text appears in the retry guidance; the hook does not emit `updatedInput` or mutate the command
+- Limitation: matcher coverage is conservative and host-specific; it does not cover every nested shell form or any non-Claude host
+- Pass/fail: PASS
+- Recommended profile change: none

@@ -1,33 +1,18 @@
 #!/usr/bin/env bash
 # Path: scripts/workflow.sh
 # Usage: source scripts/workflow.sh <mode>
-# Modes: init setup raw scope architect decisions code snippet agent test test-full debug docs cicd review security migration db perf release off status
+# Modes: init setup raw scope architect decisions code snippet agent test test-full debug docs cicd review security migration db perf release off status report reset-session
 # Backward-compatible aliases: plan=architect, ci=cicd
 
 # This script is intended to be sourced, because it exports variables to the current shell.
 # It does not install token tools and does not invoke AI agents directly.
 
-workflow_run() {
-  if [ "$#" -eq 0 ]; then
-    printf 'Usage: wx <command> [args...]\n' >&2
-    return 2
-  fi
-
-  # Fallback to active_mode.env if variable is unset in current subshell
-  if [ -z "${RTK_HOOK_ENABLED:-}" ] && [ -f "$HOME/.config/ai-workflow/active_mode.env" ]; then
-    # shellcheck source=/dev/null
-    source "$HOME/.config/ai-workflow/active_mode.env"
-  fi
-
-  if [ "${RTK_HOOK_ENABLED:-false}" = true ] && command -v rtk >/dev/null 2>&1; then
-    command rtk "$@"
-  else
-    command "$@"
-  fi
-}
-
-export -f workflow_run
-alias wx='workflow_run'
+_AI_WORKFLOW_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/wx.sh
+source "$_AI_WORKFLOW_SCRIPT_DIR/lib/wx.sh"
+# shellcheck source=lib/wx-session.sh
+source "$_AI_WORKFLOW_SCRIPT_DIR/lib/wx-session.sh"
+unset _AI_WORKFLOW_SCRIPT_DIR
 
 _ai_workflow_main() {
   local _MODE="${1:-status}"
@@ -74,6 +59,8 @@ Modes:
   release      Release preparation.
   off          Disable all optimizers.
   status       Show current profile.
+  report       Summarize the current project's wx session.
+  reset-session Archive the current wx session and start a new one.
 
 Aliases:
   plan -> architect
@@ -113,6 +100,16 @@ USAGE
     status|"")
       status
       return 0
+      ;;
+    report)
+      need_jq || return 1
+      workflow_report "$_ACTIVE_ENV_FILE"
+      return $?
+      ;;
+    reset-session)
+      need_jq || return 1
+      workflow_reset_session "$_ACTIVE_ENV_FILE"
+      return $?
       ;;
     init)
       local _AGENTS_TEMPLATE="$_PROJECT_ROOT/templates/AGENTS_base.md"
