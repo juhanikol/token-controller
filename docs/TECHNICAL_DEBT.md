@@ -124,3 +124,19 @@ True mode or alias
    * I'd pick the first, since `wx` is the safety layer.
 2. **`status` source.** `status --json` reads the env file, not the calling shell. This differs from the current `workflow status`, which prints shell variables. I'd keep both and name the difference.
 3. **Config `description` field.** Each mode needs one. It would also let `workflow help` be generated from config, removing a second copy of the mode list.
+
+## Foundation debt status (2026-10-07)
+
+Fixed (text, comments, help text only):
+* `workflow.sh` header lists all modes, including `rapid-prototype` and `data-analysis`. Help text lists `rapid-prototype`.
+* `check-tools.sh` and `install-optional-tools.sh` have Caveman entries. Nothing is installed automatically. MemStack is labelled legacy.
+* README: extension install detail now lives only in `extensions/vscode/README.md`. Repository layout and the command table are current.
+* `templates/AGENTS_base.md`: the first-failure rule is restored. "legal/compliance" is replaced by "regulated or high-risk work".
+
+Still open:
+* `config/workflow_settings.json`: `rtk_mode` values are labels, not RTK options. No `description` per mode. `caveman_*` keys from `docs/integrations/CAVEMAN.md` are not added.
+* `workflow.sh` `setup` writes the same instruction to several user-level files without a conflict check.
+* `default_output_style` is not exported by `workflow.sh`.
+* `extension.ts`: hard-coded mode list, `exec` with a shell string, workspace-settable script path.
+* `integrations/README.md` says Token Controller "automatically governs agent use" of MCP servers. That overstates a policy-layer behavior.
+* `docs/integrations/CAVEMAN.md` keeps "legal and compliance-like work" as a blocked task type. It is a task guard, not a mode.

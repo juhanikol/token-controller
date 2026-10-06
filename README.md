@@ -51,32 +51,6 @@ Environment requirements and assumptions:
 * Keep `~/.config` writable so the active-mode file can be created and updated.
 * Optional context tools are not required. Install them only if you intend to use their features.
 
-For the VS Code button, install the extension into the **WSL extension host**, not only into local Windows VS Code. See the [VS Code extension requirements](extensions/vscode/README.md).
-
-## VS Code Extension Installation (WSL & Remote)
-
-If you use VS Code with WSL, installing the extension via the terminal can sometimes fail to register with the Windows UI. The most reliable method is using the VS Code graphical interface:
-
-**SIMPLE METHOD:** Download the 'extensions/vscode/token-controller-ui-x.x.x.vsix' and install it via VS Code UI
-
-**OR**
-
-## Clone the repository
-
-1. Clone the repository and navigate into it
-2. Build the extension inside your WSL terminal
-
-   ```bash
-   cd extensions/vscode
-   npx vsce package
-   ```
-3. Open VS Code (ensure you are connected to your WSL environment).
-4. Open the Extensions panel (Ctrl + Shift + X).
-5. Click the ... (Views and More Actions) icon at the top right of the Extensions panel.
-6. Select Install from VSIX...
-7. Navigate to the generated .vsix file and select it.
-8. Reload the window (Ctrl + Shift + P -> Developer: Reload Window).
-
 You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md` with instructions telling compatible coding agents to check the active workflow mode before they answer or modify files.
 
 The selected policy is saved in:
@@ -103,6 +77,10 @@ For everyday use, remember only two commands:
 workflow init
 workflow code
 ```
+
+## VS Code extension
+
+The extension is optional. It shows the active mode in the status bar and lets you switch modes. Install it into the **WSL extension host**, not only into local Windows VS Code. Install steps, requirements, and limits: [extensions/vscode/README.md](extensions/vscode/README.md).
 
 ## Quick start and dependencies
 
@@ -416,6 +394,7 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 | `workflow setup`  | Configure optional global editor instructions            |
 | `workflow <mode>` | Select a context mode                                    |
 | `workflow status` | Show the active mode and policy                          |
+| `workflow doctor` | Read-only check of settings, instruction files, and tools (`--json` available) |
 | `wx <command>`    | Capture, preserve, optionally compress, and measure output |
 | `workflow report` | Summarize command, byte, reduction, and failure counts   |
 | `workflow reset-session` | Archive session metadata without deleting raw logs |
@@ -426,29 +405,39 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 
 ```text
 token-controller/
+├── AGENTS.md                      # short development rules for this repository
 ├── README.md
-├── benchmarks/
-│   ├── README.md
-│   ├── run-benchmark.sh
-│   └── fixtures/
+├── benchmarks/                    # wx byte-reduction benchmark and fixtures
 ├── config/
-│   └── workflow_settings.json
+│   └── workflow_settings.json     # source of mode policy
 ├── docs/
-│   └── VALIDATION_MATRIX.md
-├── integrations/
-│   └── claude-code/
+│   ├── MODE_SWITCHER_AND_ORCHESTRATOR_PLAN.md
+│   ├── WORKFLOW_DOCTOR_DESIGN.md
+│   ├── EXTENSION_ALIGNMENT_DESIGN.md
+│   ├── WX_DETERMINISTIC_WRAPPER_DESIGN.md
+│   ├── USER_SETTINGS_AND_AGENT_CONFIG.md
+│   ├── TECHNICAL_DEBT.md
+│   ├── VALIDATION_MATRIX.md
+│   ├── integrations/              # design notes: RTK.md, CAVEMAN.md (not implemented)
+│   ├── DRAFTS/                    # non-directive drafts
+│   └── OLD/                       # archived material
+├── extensions/
+│   └── vscode/                    # VS Code status-bar extension (TypeScript)
+├── integrations/                  # opt-in examples: claude-code/, MCP template
 ├── prompts/
 │   └── vscode-agent-prompts.md
 ├── scripts/
+│   ├── workflow.sh                # sourced: mode switching and commands
+│   ├── doctor.sh                  # read-only checks (workflow doctor)
 │   ├── check-tools.sh
-│   ├── install-optional-tools.sh
-│   ├── workflow.sh
+│   ├── install-optional-tools.sh  # prints optional install commands only
 │   └── lib/
 │       ├── wx.sh
 │       ├── wx-compress.sh
 │       └── wx-session.sh
-└── templates/
-    └── AGENTS_base.md
+├── templates/
+│   └── AGENTS_base.md             # block added by workflow init
+└── tests/                         # shell tests and fixtures
 ```
 
 ## Development checks
@@ -461,6 +450,7 @@ find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
 jq . config/workflow_settings.json >/dev/null
 bash tests/wx-wrapper.test.sh
 bash tests/workflow-session.test.sh
+bash tests/doctor.test.sh
 bash benchmarks/run-benchmark.sh
 ```
 

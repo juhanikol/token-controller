@@ -11,7 +11,9 @@ Use the active profile to decide whether context-saving tools should be used. Pr
 
 Use `wx` for test/build/install/diagnostic commands when raw evidence and measurement are required. `wx` must preserve raw stdout/stderr and exit codes before any compression.
 
-Do not use compression or terse-output modes for security, database migrations, releases, legal/compliance, precise documentation, or first failing debug evidence.
+Do not use compression or terse-output modes for security, database migrations, releases, regulated or high-risk work, or precise documentation.
+
+For debug, test, and cicd work, preserve the first failure completely: error message, stack trace, stderr, exit code, file paths, and line numbers. Summarize only repetitive success output.
 
 For tiny single-file or snippet tasks, prefer no context tool unless output is expected to be large.
 <!-- ai-workflow-controller:end -->
