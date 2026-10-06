@@ -1,3 +1,51 @@
+# Technical Debt
+
+## Open issues (quick view)
+
+Last reviewed: 2026-10-07. This table is the **current state**. The sections below are the detailed history and findings. Their "Open" lists are not kept up to date, so use this table.
+
+How to keep it:
+* **Add a row** when a new debt, decision, missing feature, risk, or contradiction is found. Use the next free ID (never reuse an ID). Add the details as a section below, in the same style as now.
+* **Remove the row** when the issue is fixed. Do not mark it "done" in the table. Say what was fixed in the details section.
+* **Change the Status** when it moves (Open, Mitigated, Decision needed). Update "Last reviewed".
+* Types: **Debt** (code or doc that should change), **Contradiction** (text says something false), **Not implemented** (planned, not built), **Decision** (needs an owner decision), **Risk** (known and accepted or unresolved exposure).
+* Severity: **High** (blocks the product direction or can hide evidence), **Medium** (limits a release or weakens a guarantee), **Low** (tidy-up).
+
+| ID | Type | Severity | Area | Issue | Status | Details |
+|---|---|---|---|---|---|---|
+| D-01 | Not implemented | High | Orchestration | LeanCTX is not orchestrated. `leanctx_mode` is exported state only. There is no design doc and no code. | Open | Plan work package 7 |
+| D-02 | Not implemented | High | Orchestration | Headroom is not orchestrated. `headroom_mode` is exported state only. No design doc, no code. | Open | Plan work package 7 |
+| D-03 | Not implemented | Medium | Config | Mode to tool mapping uses free-text labels. Only `off` or not-`off` is read. `compress_files`, `memory_layer`, `codebase_index`, `leanctx_mode`, `headroom_mode` have no consumer. | Open | Plan work package 4 |
+| D-04 | Decision | Medium | Config | MemStack is legacy. `MEMSTACK_ACTIVE` and `memory_layer` are kept until the tool shape is clear. | Decision needed | Plan, "LeanCTX/Headroom" |
+| D-05 | Not implemented | Medium | Output style | `AICONTEXT_OUTPUT_STYLE` (`ste-inspired`) is exported but nothing uses it. The template does not mention it. | Open | Foundation debt status |
+| D-06 | Decision | Medium | Validation | `docs/VALIDATION_MATRIX.md` has no entry for the RTK prototype. The benchmark has no RTK scenario, so no measured RTK reduction exists. Required after a second tool is integrated. | Decision needed | RTK post-capture prototype |
+| D-07 | Debt | Medium | RTK | Evidence guard v1 needs tuning. Real RTK 0.42.4 drops `warning:` lines from pytest-like output, so the guard falls back to raw. Coverage is six filters (no `python -m pytest`, `npx`, `npm test`, `dotnet test`, `log`). | Open | RTK post-capture prototype |
+| D-08 | Risk | Medium | RTK | An RTK global hook rewrites commands and skips `wx` capture. Doctor only warns. Other hosts (Copilot, Cursor) are not checked. | Open | RTK post-capture prototype |
+| D-09 | Risk | Low | RTK | Side effects of `rtk --version` and `rtk pipe` (tracking, telemetry) were checked once, in one scratch `HOME`. | Open | RTK PLAN |
+| D-10 | Not implemented | Medium | Caveman | Prompt guards are not implemented. Caveman rules for first-failure evidence are policy text. Only `debug` is blocked in code, so failing `test` and `cicd` runs rely on the template. | Open | Caveman policy state |
+| D-11 | Not implemented | Medium | Caveman | Shrink and proxy are not implemented (`caveman_shrink` has no effect). Upstream questions are open: state file format, session-start hook, `caveman-compress` vs the managed block, gateway data flow. | Open | `docs/integrations/CAVEMAN.md` |
+| D-12 | Risk | Low | Caveman | `AICONTEXT_CAVEMAN_REQUEST` exported in a shell profile opts in on every activation. Doctor does not check it. | Open | Caveman policy state |
+| D-13 | Risk | Medium | Stale terminals | Already-open terminals keep old `AICONTEXT_*` variables. `wx` and `report` are protected. A person, script, or agent that reads the variables directly can see the wrong profile. The extension cannot inspect terminals. | Mitigated | Stale terminal safety |
+| D-14 | Debt | Medium | `workflow.sh` | `workflow setup` writes the same instruction to several user-level files without a conflict check. | Open | Foundation debt status |
+| D-15 | Debt | Low | `workflow.sh` | `workflow.sh` runs `mkdir -p ~/.config/ai-workflow` before any command, so `doctor`, `status`, and `help` are not read-only through it. Documented, not fixed. | Open | Workflow --doctor |
+| D-16 | Debt | Low | `workflow.sh` | `workflow help` mode list and `Aliases:` lines are hand-written, a fourth copy of the mode list. | Open | `workflow modes --json` |
+| D-17 | Debt | Low | `workflow.sh` | `off-*` labels: `workflow.sh` treats only exact `off` as RTK off, `wx` treats `off` and `off-*` as off. No config value triggers it today. | Open | Foundation debt status |
+| D-18 | Debt | Low | Config | The Caveman level rules exist twice (bash and jq). The blocked list exists in four places (`workflow.sh` twice, `doctor.sh`, config). Tests guard them. | Open | Caveman policy state |
+| D-19 | Debt | Low | Config | Legacy `caveman_output` key stays in config defaults but is not read. Kept so the validation matrix entry stays true. | Open | Foundation debt status |
+| D-20 | Contradiction | Low | Scripts | `scripts/check-tools.sh` prints that `wx` does not invoke RTK. `wx` now calls `rtk pipe` for six commands. | Open | Debt review (this file) |
+| D-21 | Debt | Low | Scripts | `ccusage` is checked by doctor but not by `check-tools.sh` or `install-optional-tools.sh`. | Open | Debt review (this file) |
+| D-22 | Debt | Low | Docs | README does not document `AICONTEXT_USE_SHELL_STATE`, `AICONTEXT_CAVEMAN_REQUEST`, `AICONTEXT_RTK_BIN`, `AICONTEXT_RTK_TIMEOUT`. README is long (475 lines). | Open | Debt review (this file) |
+| D-23 | Contradiction | Low | Docs | `docs/MODE_SWITCHER_AND_ORCHESTRATOR_PLAN.md` "Documents to revise" table and work packages are out of date. | Open | Debt review (this file) |
+| D-24 | Debt | Low | Doctor | MCP config checks are not implemented. RTK setup detection is a text match on known Claude Code locations. `.caveman-active` format is assumed to be a level name. | Open | Doctor improvements |
+| D-25 | Not implemented | Medium | CLI | No `version` command or schema compatibility rule. No `set --json` or `report --json`. `wx` is not reachable through `workflow-cli.sh`. `status --json` has no `description` or `caveman_shrink`. | Open | Non-sourced entry point |
+| D-26 | Not implemented | Medium | Extension | Report summary, doctor summary, and tool availability are not shown. No Caveman toggle. `caveman_requested` is not shown. | Open | Extension uses the CLI JSON interface |
+| D-27 | Not implemented | Medium | Windows | No Windows or WSL backend, no environment check (`remoteName`, distro), no Windows CI. The CLI uses GNU tools (`timeout`, `stat -c`, `awk`) and Bash. | Open | Extension alignment design |
+| D-28 | Debt | Medium | Extension | Not tested in a real VS Code or WSL window. `vscode-test` was not run. The status bar, picker, and watcher code has no automated test. Manifest scope, `inspect()`, and `isTrusted` behavior are untested. | Open | Extension configuration and trust hardening |
+| D-29 | Debt | Low | Extension | The tracked `.vsix` is 1.1.0 and does not contain the fixes. Version and CHANGELOG are "Unreleased". | Open | Extension uses the CLI JSON interface |
+| D-30 | Risk | Medium | Extension | The configured script is trusted code with no check of content or owner. A trusted workspace may contain the controller. The CLI inherits the host environment. Multi-root and virtual workspaces are only partly covered. | Risk accepted | Extension configuration and trust hardening |
+| D-31 | Debt | Low | Extension | Missing `jq` or an old controller shows "unavailable" with no install help. `stale_shell` describes the VS Code environment, not a terminal. | Open | Extension uses the CLI JSON interface |
+| D-32 | Not implemented | Low | Research | Research candidates are not evaluated: ccusage, Aider repo map, token-optimizer, token-savior. | Open | Plan, "External tools" |
+
 ## Remaining contradictions (fixing these changes code or behavior, so I left them)
 
 * **[extension.ts](vscode-webview://1d92r06pf6r5i5e0tlt3ud5jsfuc048p2sdg47044c8hftprks6p/extensions/vscode/src/extension.ts):** its mode list is hard-coded and partial. The new extension README lists this as a limitation.
@@ -358,3 +406,30 @@ Still open:
 * **Exported `AICONTEXT_CAVEMAN_REQUEST` in a shell profile** opts in on every activation. Doctor does not check for it.
 * The Caveman level rules still exist twice (bash and jq). The parity test guards them. The blocked list exists in four places (`workflow.sh` twice, `doctor.sh`, config). Tests cover the code lists.
 * Extension: no Caveman toggle, and it does not show `caveman_requested`.
+
+## Debt review (2026-10-07)
+
+Every "Open" item in the sections above was checked against the current code, config, tests, and docs. The test suites (`wx-wrapper`, `workflow-session`, `doctor`, the extension adapter and security tests) passed at the time of the review.
+
+**Confirmed fixed** (these were listed as open in older sections, and are not in the table):
+* Extension hard-coded and partial mode list. The extension uses `modes --json`. It has no fallback list.
+* Extension security: the `exec` shell string is gone (`execFile` with an argument array), `scriptPath` has `machine` scope and workspace values are ignored, and an untrusted workspace cannot run a controller that is inside it.
+* No non-sourced entry point (`scripts/workflow-cli.sh`), no `modes --json`, no `status --json`, and the extension parsing `active_mode.env` by regex.
+* RTK was "only exported as state". `wx` now runs `rtk pipe` after raw capture for six commands, with fallbacks and an evidence guard.
+* Caveman: the opt-in input (`AICONTEXT_CAVEMAN_REQUEST`) exists, `debug` is hard-blocked, and doctor reads `.caveman-active` (errors in blocked profiles, warnings for no opt-in).
+* Doctor JSON `paths` entries are `{path, line}` everywhere.
+* Stale `.vscode/settings.json`: it is no longer tracked in git (the folder is empty).
+* `integrations/README.md` overclaim: reworded (by the user).
+* Earlier foundation items (header mode list, README layout, template wording, `micro`, descriptions, `rtk_mode` labels, `AICONTEXT_OUTPUT_STYLE` export, Caveman config keys, tool script entries): fixed, as listed above.
+
+**Accepted, not debt** (removed from the list):
+* `docs/integrations/CAVEMAN.md` keeps "legal and compliance-like work" as a blocked task type. It is a task guard for agents, not a mode, and the template no longer uses that wording.
+
+**New findings in this review** (added to the table):
+* **D-20:** `scripts/check-tools.sh` still prints that `wx` does not invoke RTK. That became false when the RTK prototype was added.
+* **D-21:** `ccusage` is checked by doctor, but not by `check-tools.sh` or `install-optional-tools.sh`.
+* **D-22:** The README documents none of `AICONTEXT_USE_SHELL_STATE`, `AICONTEXT_CAVEMAN_REQUEST`, `AICONTEXT_RTK_BIN`, `AICONTEXT_RTK_TIMEOUT`.
+* **D-23:** The "Documents to revise" table and the work packages in the plan document describe work that is now done.
+* **D-01 to D-03, D-05:** These are the largest gaps against the product direction, and they were not on any earlier list. LeanCTX and Headroom have no design doc and no code. Their config values (`leanctx_mode`, `headroom_mode`), and `compress_files`, `memory_layer`, and `codebase_index`, are exported as state and read by nothing. `compress_shell` and `rtk_mode` are the only labels that `wx` interprets. `AICONTEXT_OUTPUT_STYLE` is exported and used by nothing.
+
+**Still open:** see the table. Counts at this review: 32 rows. By type: Not implemented 10, Debt 13, Risk 5, Decision 2, Contradiction 2. By status: Open 28, Decision needed 2 (D-04, D-06), Mitigated 1 (D-13), Risk accepted 1 (D-30). By severity: High 2, Medium 15, Low 15.
