@@ -11,8 +11,13 @@
     "preserve_first_error": true,
     "preserve_warnings": true,
     "preserve_numbers": true,
+    "default_output_style": "ste-inspired",
+    "caveman_output": false,
     "raw_log_dir": ".ai-context/raw",
     "compressed_log_dir": ".ai-context/compressed"
+  },
+  "legacy_notes": {
+    "memstack": "Legacy/open decision. memory_layer and MEMSTACK_ACTIVE are kept until RTK/LeanCTX/Headroom/Caveman orchestration is defined."
   },
   "modes": {
     "raw": {
@@ -90,6 +95,17 @@
       "headroom_mode": "off",
       "leanctx_mode": "off",
       "rtk_mode": "off"
+    },
+    "micro": {
+      "risk": "normal",
+      "compress_shell": "off",
+      "compress_files": "off-for-target",
+      "codebase_index": false,
+      "memory_layer": "off",
+      "headroom_mode": "off",
+      "leanctx_mode": "off",
+      "rtk_mode": "off",
+      "caveman_output": false
     },
     "agent": {
       "risk": "high",

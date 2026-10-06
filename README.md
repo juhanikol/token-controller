@@ -252,6 +252,7 @@ Use this table when you are unsure which mode to choose. It describes the policy
 | Normal coding                      | `workflow code`            | Keep target files full; summarize dependencies   | Edited files, nearby tests, compiler errors                 |
 | Rapid prototype                    | `workflow rapid-prototype` | Compress successful build noise aggressively     | Backend API errors, migration warnings, raw failure logs    |
 | Small snippet review               | `workflow snippet`         | Use little or no compression                     | The complete snippet, method, or file                       |
+| Very small task (one function/file) | `workflow micro`          | No context tools, no compression                 | The complete target file or snippet                         |
 | Agent-rule work                    | `workflow agent`           | Keep agent instructions stable                   | `AGENTS.md` and dynamic task-state files                    |
 | Data analysis                      | `workflow data-analysis`   | Preserve numeric evidence                        | Numbers, units, statistics, plots, data sources             |
 | Bug fixing                         | `workflow debug`           | Keep the first failure raw                       | Error, stderr, exit code, stack origin, paths, line numbers |

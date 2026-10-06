@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Path: scripts/workflow.sh
 # Usage: source scripts/workflow.sh <mode>
-# Modes: init setup raw scope architect decisions code snippet agent test test-full debug docs cicd review security migration db perf release off status report reset-session
+# Modes: init setup raw scope architect decisions code snippet micro agent test test-full debug docs cicd review security migration db perf release off status report reset-session
 # Backward-compatible aliases: plan=architect, ci=cicd
 
 # This script is intended to be sourced, because it exports variables to the current shell.
@@ -45,6 +45,7 @@ Modes:
   code         Normal implementation work.
   data-analysis Data analysis, stats, and visualization.
   snippet      Small file/method/snippet review.
+  micro        Very small task. No context tools, target file/snippet only.
   agent        Agent-governance / AGENTS.md workflows.
   test         Unit/integration test runs.
   test-full    Full app / broad automated test routine.
