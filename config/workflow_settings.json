@@ -13,14 +13,58 @@
     "preserve_numbers": true,
     "default_output_style": "ste-inspired",
     "caveman_output": false,
+    "caveman_mode": "off",
+    "caveman_max": "off",
+    "caveman_shrink": "off",
     "raw_log_dir": ".ai-context/raw",
     "compressed_log_dir": ".ai-context/compressed"
   },
   "legacy_notes": {
     "memstack": "Legacy/open decision. memory_layer and MEMSTACK_ACTIVE are kept until RTK/LeanCTX/Headroom/Caveman orchestration is defined."
   },
+  "caveman_policy": {
+    "supported_levels": [
+      "lite",
+      "full"
+    ],
+    "unsupported_levels": [
+      "ultra",
+      "wenyan"
+    ],
+    "hard_blocked_profiles": [
+      "raw",
+      "security",
+      "db",
+      "release",
+      "migration",
+      "docs"
+    ],
+    "prompt_guards": [
+      "detailed",
+      "exact",
+      "exactly",
+      "carefully",
+      "full explanation",
+      "documentation",
+      "README",
+      "instructions",
+      "step-by-step"
+    ],
+    "blocked_tasks": [
+      "documentation",
+      "readme",
+      "user-facing-instructions",
+      "step-by-step-instructions",
+      "release-notes",
+      "legal-compliance",
+      "first-failure-evidence",
+      "file-content"
+    ],
+    "opt_in_required": true
+  },
   "modes": {
     "raw": {
+      "description": "No compression. Highest fidelity.",
       "risk": "critical",
       "compress_shell": "off",
       "compress_files": "off",
@@ -31,6 +75,7 @@
       "rtk_mode": "off"
     },
     "scope": {
+      "description": "Requirements and scope discovery.",
       "risk": "high",
       "compress_shell": "off",
       "compress_files": "safe-summary",
@@ -41,6 +86,7 @@
       "rtk_mode": "off"
     },
     "architect": {
+      "description": "Architecture, structure, and codebase overview.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "interfaces-and-map",
@@ -51,6 +97,7 @@
       "rtk_mode": "off"
     },
     "decisions": {
+      "description": "ADRs, domain models, schemas, and types.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "interfaces-and-schemas",
@@ -61,6 +108,7 @@
       "rtk_mode": "off"
     },
     "code": {
+      "description": "Normal implementation work.",
       "risk": "normal",
       "compress_shell": "safe",
       "compress_files": "target-full-deps-signatures",
@@ -68,9 +116,11 @@
       "memory_layer": "session",
       "headroom_mode": "reversible",
       "leanctx_mode": "auto",
-      "rtk_mode": "noisy-success-only"
+      "rtk_mode": "success-only",
+      "caveman_max": "lite"
     },
     "rapid-prototype": {
+      "description": "Fast prototyping. Compress successful output only. Keep errors raw.",
       "risk": "high",
       "compress_shell": "aggressive-on-successful-builds-preserve-errors-and-warnings",
       "compress_files": "target-full-backend-api-and-migrations-full",
@@ -78,15 +128,17 @@
       "memory_layer": "session",
       "headroom_mode": "safe-reversible",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "aggressive-success-only",
+      "rtk_mode": "success-only",
       "raw_on_fail": true,
       "keep_raw_logs": true,
       "preserve_stderr": true,
       "preserve_exit_code": true,
       "preserve_first_error": true,
-      "preserve_warnings": true
+      "preserve_warnings": true,
+      "caveman_max": "full"
     },
     "snippet": {
+      "description": "Small file, method, or snippet review.",
       "risk": "normal",
       "compress_shell": "off",
       "compress_files": "off-for-target",
@@ -97,6 +149,7 @@
       "rtk_mode": "off"
     },
     "micro": {
+      "description": "Very small task. No context tools. Target file or snippet only.",
       "risk": "normal",
       "compress_shell": "off",
       "compress_files": "off-for-target",
@@ -108,6 +161,7 @@
       "caveman_output": false
     },
     "agent": {
+      "description": "Agent governance and AGENTS.md work.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "stable-prefix",
@@ -119,6 +173,7 @@
       "agents_mutation": "deny"
     },
     "test": {
+      "description": "Unit and integration test runs.",
       "risk": "high",
       "compress_shell": "safe-on-fail-aggressive-on-pass",
       "compress_files": "target-full-tests-full",
@@ -126,9 +181,10 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "tests-safe"
+      "rtk_mode": "success-only"
     },
     "test-full": {
+      "description": "Full application or broad automated test run.",
       "risk": "high",
       "compress_shell": "aggressive-on-success-safe-on-fail",
       "compress_files": "test-map",
@@ -136,9 +192,11 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "aggressive-success-only"
+      "rtk_mode": "success-only",
+      "caveman_max": "lite"
     },
     "debug": {
+      "description": "Failure investigation and bug fixing.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "target-full-related-signatures",
@@ -146,9 +204,10 @@
       "memory_layer": "session",
       "headroom_mode": "safe-reversible",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "off-first-failure"
+      "rtk_mode": "success-only"
     },
     "data-analysis": {
+      "description": "Data analysis, statistics, and visualization.",
       "risk": "high",
       "compress_shell": "preserve-numeric-metrics",
       "compress_files": "target-full",
@@ -160,6 +219,7 @@
       "preserve_numbers": true
     },
     "docs": {
+      "description": "Documentation and README work.",
       "risk": "normal",
       "compress_shell": "safe",
       "compress_files": "source-summary-target-full",
@@ -170,6 +230,7 @@
       "rtk_mode": "off"
     },
     "cicd": {
+      "description": "CI/CD, Docker, package-manager, and runner logs.",
       "risk": "high",
       "compress_shell": "strip-boilerplate-preserve-errors",
       "compress_files": "yaml-and-scripts-full",
@@ -177,9 +238,11 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "install-build-noise"
+      "rtk_mode": "success-only",
+      "caveman_max": "lite"
     },
     "review": {
+      "description": "Whole-codebase or pull request review.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "interfaces-and-diffs",
@@ -190,6 +253,7 @@
       "rtk_mode": "off"
     },
     "security": {
+      "description": "Security, auth, secrets, and vulnerability scans.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "off-for-security-critical",
@@ -200,6 +264,7 @@
       "rtk_mode": "off"
     },
     "migration": {
+      "description": "Large refactor or legacy migration.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "target-full-global-map",
@@ -210,6 +275,7 @@
       "rtk_mode": "off"
     },
     "db": {
+      "description": "Database, schema, and data migration.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "migrations-and-schema-full",
@@ -220,6 +286,7 @@
       "rtk_mode": "off"
     },
     "perf": {
+      "description": "Performance profiling and benchmarking.",
       "risk": "high",
       "compress_shell": "preserve-numeric-metrics",
       "compress_files": "target-full",
@@ -231,6 +298,7 @@
       "preserve_numbers": true
     },
     "release": {
+      "description": "Release preparation.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "release-files-full",
@@ -241,6 +309,7 @@
       "rtk_mode": "off"
     },
     "off": {
+      "description": "Disable all optimizers.",
       "risk": "normal",
       "compress_shell": "off",
       "compress_files": "off",

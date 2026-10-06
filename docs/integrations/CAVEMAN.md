@@ -1,6 +1,6 @@
 # Caveman Return Policy
 
-Status: design only. Nothing here is implemented. `caveman_output` is `false` in all modes today.
+Status: design. Only the config keys (`caveman_mode`, `caveman_max`, `caveman_shrink`, `caveman_policy`) and the state exports (`AICONTEXT_CAVEMAN_MODE`, `AICONTEXT_CAVEMAN_MAX`, `AICONTEXT_CAVEMAN_SHRINK`) exist. All default to `off`. Nothing calls Caveman, and no prompt guard or opt-in is implemented.
 
 ## What Caveman is (as far as verified)
 
@@ -73,7 +73,7 @@ Enforcement options, in order of effort:
 
 ## Config
 
-Keys to add. Nothing reads them yet.
+Keys (added to `config/workflow_settings.json`). `workflow.sh` reads `caveman_mode`, `caveman_max`, `caveman_shrink`, and `caveman_policy.hard_blocked_profiles`. The rest of `caveman_policy` is stored only.
 
 ```json
 "defaults": {
@@ -105,7 +105,7 @@ Per-mode keys (only where a mode differs from `defaults`):
 Why `ultra` and `wenyan` are unsupported: `ultra` drops too much clarity. `wenyan` is not English, and the default output style is English.
 
 Compatibility:
-- Keep `caveman_output` (boolean). `workflow.sh` reads it today. Derive it: `true` only when the effective level is not `off`.
+- Keep `caveman_output` (boolean) in config defaults as a legacy key. `workflow.sh` no longer reads it. The export is derived: `true` only when the effective level is not `off`.
 - Keep `CAVEMAN_OUTPUT` and `AICONTEXT_CAVEMAN_OUTPUT`.
 - Add exports `AICONTEXT_CAVEMAN_MODE` (effective level) and `AICONTEXT_CAVEMAN_MAX`.
 - If `caveman_mode` and the legacy `caveman_output` disagree, `caveman_mode` wins.

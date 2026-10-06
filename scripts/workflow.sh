@@ -79,6 +79,24 @@ USAGE
     fi
   }
 
+  # Caveman policy helpers. They only resolve state. Nothing here calls Caveman.
+  _aiw_caveman_rank() {
+    case "$1" in
+      off) echo 0 ;;
+      lite) echo 1 ;;
+      full) echo 2 ;;
+      *) return 1 ;;
+    esac
+  }
+
+  # Hard-blocked profiles stay off even if the config allows a level.
+  _aiw_caveman_blocked() {
+    case "$1" in
+      raw|security|db|release|migration|docs|micro|snippet|off) return 0 ;;
+    esac
+    jq -e --arg m "$1" '(.caveman_policy.hard_blocked_profiles // []) | index($m) != null' "$_SETTINGS_FILE" >/dev/null 2>&1
+  }
+
   status() {
     echo "Current AI Context Workflow Status:"
     echo "  AICONTEXT_PROFILE=${AICONTEXT_PROFILE:-unset}"
@@ -91,6 +109,10 @@ USAGE
     echo "  AICONTEXT_LEANCTX_MODE=${AICONTEXT_LEANCTX_MODE:-unset}"
     echo "  AICONTEXT_RTK_MODE=${AICONTEXT_RTK_MODE:-unset}"
     echo "  AICONTEXT_CAVEMAN_OUTPUT=${AICONTEXT_CAVEMAN_OUTPUT:-unset}"
+    echo "  AICONTEXT_CAVEMAN_MODE=${AICONTEXT_CAVEMAN_MODE:-unset}"
+    echo "  AICONTEXT_CAVEMAN_MAX=${AICONTEXT_CAVEMAN_MAX:-unset}"
+    echo "  AICONTEXT_CAVEMAN_SHRINK=${AICONTEXT_CAVEMAN_SHRINK:-unset}"
+    echo "  AICONTEXT_OUTPUT_STYLE=${AICONTEXT_OUTPUT_STYLE:-unset}"
     echo "  AICONTEXT_RAW_ON_FAIL=${AICONTEXT_RAW_ON_FAIL:-unset}"
     echo "  AICONTEXT_KEEP_RAW_LOGS=${AICONTEXT_KEEP_RAW_LOGS:-unset}"
     echo "  Active env cache: $_ACTIVE_ENV_FILE"
@@ -419,7 +441,49 @@ USAGE
   export AICONTEXT_HEADROOM_MODE="$(jq -r ".modes[\"$_MODE\"].headroom_mode // \"off\"" "$_SETTINGS_FILE")"
   export AICONTEXT_LEANCTX_MODE="$(jq -r ".modes[\"$_MODE\"].leanctx_mode // \"off\"" "$_SETTINGS_FILE")"
   export AICONTEXT_RTK_MODE="$(jq -r ".modes[\"$_MODE\"].rtk_mode // \"off\"" "$_SETTINGS_FILE")"
-  export AICONTEXT_CAVEMAN_OUTPUT="$(jq -r ".modes[\"$_MODE\"].caveman_output // false" "$_SETTINGS_FILE")"
+  export AICONTEXT_OUTPUT_STYLE="$(jq -r '.defaults.default_output_style // "ste-inspired"' "$_SETTINGS_FILE")"
+
+  # Caveman state only. Valid levels are off, lite, full. Anything else (ultra, wenyan) becomes off.
+  local _CAVEMAN_REQUESTED
+  local _CAVEMAN_CAP
+  local _CAVEMAN_SHRINK
+  local _CAVEMAN_EFFECTIVE
+  _CAVEMAN_REQUESTED="$(jq -r ".modes[\"$_MODE\"].caveman_mode // .defaults.caveman_mode // \"off\"" "$_SETTINGS_FILE")"
+  _CAVEMAN_CAP="$(jq -r ".modes[\"$_MODE\"].caveman_max // .defaults.caveman_max // \"off\"" "$_SETTINGS_FILE")"
+  _CAVEMAN_SHRINK="$(jq -r ".modes[\"$_MODE\"].caveman_shrink // .defaults.caveman_shrink // \"off\"" "$_SETTINGS_FILE")"
+  if ! _aiw_caveman_rank "$_CAVEMAN_REQUESTED" >/dev/null; then
+    printf 'Warning: caveman_mode "%s" is not supported. Using off.\n' "$_CAVEMAN_REQUESTED" >&2
+    _CAVEMAN_REQUESTED=off
+  fi
+  if ! _aiw_caveman_rank "$_CAVEMAN_CAP" >/dev/null; then
+    printf 'Warning: caveman_max "%s" is not supported. Using off.\n' "$_CAVEMAN_CAP" >&2
+    _CAVEMAN_CAP=off
+  fi
+  case "$_CAVEMAN_SHRINK" in
+    off|experiment) ;;
+    *)
+      printf 'Warning: caveman_shrink "%s" is not supported. Using off.\n' "$_CAVEMAN_SHRINK" >&2
+      _CAVEMAN_SHRINK=off
+      ;;
+  esac
+  if _aiw_caveman_blocked "$_MODE"; then
+    _CAVEMAN_CAP=off
+    _CAVEMAN_SHRINK=off
+  fi
+  # Effective level is the lower of the requested level and the cap.
+  if [ "$(_aiw_caveman_rank "$_CAVEMAN_REQUESTED")" -le "$(_aiw_caveman_rank "$_CAVEMAN_CAP")" ]; then
+    _CAVEMAN_EFFECTIVE="$_CAVEMAN_REQUESTED"
+  else
+    _CAVEMAN_EFFECTIVE="$_CAVEMAN_CAP"
+  fi
+  export AICONTEXT_CAVEMAN_MODE="$_CAVEMAN_EFFECTIVE"
+  export AICONTEXT_CAVEMAN_MAX="$_CAVEMAN_CAP"
+  export AICONTEXT_CAVEMAN_SHRINK="$_CAVEMAN_SHRINK"
+  if [ "$_CAVEMAN_EFFECTIVE" = "off" ]; then
+    export AICONTEXT_CAVEMAN_OUTPUT=false
+  else
+    export AICONTEXT_CAVEMAN_OUTPUT=true
+  fi
   export AICONTEXT_CACHE_ALIGN="$(jq -r ".modes[\"$_MODE\"].cache_align // .defaults.cache_align // true" "$_SETTINGS_FILE")"
   export AICONTEXT_RAW_ON_FAIL="$(jq -r ".modes[\"$_MODE\"].raw_on_fail // .defaults.raw_on_fail // true" "$_SETTINGS_FILE")"
   export AICONTEXT_KEEP_RAW_LOGS="$(jq -r ".modes[\"$_MODE\"].keep_raw_logs // .defaults.keep_raw_logs // true" "$_SETTINGS_FILE")"
@@ -455,6 +519,10 @@ export AICONTEXT_HEADROOM_MODE="$AICONTEXT_HEADROOM_MODE"
 export AICONTEXT_LEANCTX_MODE="$AICONTEXT_LEANCTX_MODE"
 export AICONTEXT_RTK_MODE="$AICONTEXT_RTK_MODE"
 export AICONTEXT_CAVEMAN_OUTPUT="$AICONTEXT_CAVEMAN_OUTPUT"
+export AICONTEXT_CAVEMAN_MODE="$AICONTEXT_CAVEMAN_MODE"
+export AICONTEXT_CAVEMAN_MAX="$AICONTEXT_CAVEMAN_MAX"
+export AICONTEXT_CAVEMAN_SHRINK="$AICONTEXT_CAVEMAN_SHRINK"
+export AICONTEXT_OUTPUT_STYLE="$AICONTEXT_OUTPUT_STYLE"
 export AICONTEXT_CACHE_ALIGN="$AICONTEXT_CACHE_ALIGN"
 export AICONTEXT_RAW_ON_FAIL="$AICONTEXT_RAW_ON_FAIL"
 export AICONTEXT_KEEP_RAW_LOGS="$AICONTEXT_KEEP_RAW_LOGS"
@@ -476,7 +544,8 @@ ENV
 
   printf 'Activated AI context profile: %s\n' "$AICONTEXT_PROFILE"
   printf '  risk=%s shell=%s files=%s index=%s memory=%s\n' "$AICONTEXT_RISK" "$AICONTEXT_COMPRESS_SHELL" "$AICONTEXT_COMPRESS_FILES" "$AICONTEXT_CODEBASE_INDEX" "$AICONTEXT_MEMORY_LAYER"
-  printf '  rtk=%s headroom=%s leanctx=%s caveman=%s raw_on_fail=%s\n' "$AICONTEXT_RTK_MODE" "$AICONTEXT_HEADROOM_MODE" "$AICONTEXT_LEANCTX_MODE" "$AICONTEXT_CAVEMAN_OUTPUT" "$AICONTEXT_RAW_ON_FAIL"
+  printf '  rtk=%s headroom=%s leanctx=%s caveman=%s raw_on_fail=%s\n' "$AICONTEXT_RTK_MODE" "$AICONTEXT_HEADROOM_MODE" "$AICONTEXT_LEANCTX_MODE" "$AICONTEXT_CAVEMAN_MODE" "$AICONTEXT_RAW_ON_FAIL"
+  printf '  output_style=%s caveman_max=%s caveman_shrink=%s\n' "$AICONTEXT_OUTPUT_STYLE" "$AICONTEXT_CAVEMAN_MAX" "$AICONTEXT_CAVEMAN_SHRINK"
   printf '  env_cache=%s\n' "$_ACTIVE_ENV_FILE"
 
   return 0

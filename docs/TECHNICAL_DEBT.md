@@ -127,16 +127,25 @@ True mode or alias
 
 ## Foundation debt status (2026-10-07)
 
-Fixed (text, comments, help text only):
-* `workflow.sh` header lists all modes, including `rapid-prototype` and `data-analysis`. Help text lists `rapid-prototype`.
-* `check-tools.sh` and `install-optional-tools.sh` have Caveman entries. Nothing is installed automatically. MemStack is labelled legacy.
-* README: extension install detail now lives only in `extensions/vscode/README.md`. Repository layout and the command table are current.
-* `templates/AGENTS_base.md`: the first-failure rule is restored. "legal/compliance" is replaced by "regulated or high-risk work".
+Fixed:
+* Docs and help text: `workflow.sh` header lists all modes, help lists `rapid-prototype`, README extension install detail points to `extensions/vscode/README.md`, README layout and command table are current, template first-failure rule restored, "legal/compliance" removed from the template.
+* Tool scripts: `check-tools.sh` and `install-optional-tools.sh` have Caveman entries. Nothing is installed automatically. MemStack is labelled legacy.
+* `micro` is a true mode (not an alias).
+* `default_output_style` is `"ste-inspired"` in config and exported as `AICONTEXT_OUTPUT_STYLE`.
+* Caveman policy keys exist in config (`caveman_mode`, `caveman_max`, `caveman_shrink`, `caveman_policy`). All default to `off`. `workflow.sh` exports the resolved state only (`AICONTEXT_CAVEMAN_MODE`, `AICONTEXT_CAVEMAN_MAX`, `AICONTEXT_CAVEMAN_SHRINK`). Levels other than `off`, `lite`, `full` (for example `ultra`, `wenyan`) resolve to `off` with a warning. Nothing calls Caveman.
+* Every mode has a `description` in config.
+* `rtk_mode` labels are `off` or `success-only`. Old labels (`noisy-success-only`, `aggressive-success-only`, `tests-safe`, `off-first-failure`, `install-build-noise`) are gone. `RTK_HOOK_ENABLED` is unchanged for every mode.
 
-Still open:
-* `config/workflow_settings.json`: `rtk_mode` values are labels, not RTK options. No `description` per mode. `caveman_*` keys from `docs/integrations/CAVEMAN.md` are not added.
-* `workflow.sh` `setup` writes the same instruction to several user-level files without a conflict check.
-* `default_output_style` is not exported by `workflow.sh`.
-* `extension.ts`: hard-coded mode list, `exec` with a shell string, workspace-settable script path.
-* `integrations/README.md` says Token Controller "automatically governs agent use" of MCP servers. That overstates a policy-layer behavior.
-* `docs/integrations/CAVEMAN.md` keeps "legal and compliance-like work" as a blocked task type. It is a task guard, not a mode.
+Open:
+* **`workflow setup` conflict:** it writes the same instruction to several user-level files without a conflict check.
+* **Extension hard-coded modes:** `extension.ts` has its own partial mode list.
+* **Extension security:** `exec` with a shell string, and a workspace-settable script path.
+* **RTK implementation:** `rtk_mode` is only exported as state. `wx` does not call RTK. See `docs/integrations/RTK.md`. The `aggressive` vs `safe` distinction is dropped until RTK is implemented. Add a separate key then, if needed.
+* **Caveman execution:** not implemented. There is no opt-in input (`AICONTEXT_CAVEMAN_REQUEST` is a proposal), no prompt guards, no doctor check for `.caveman-active`. `prompt_guards`, `blocked_tasks`, `supported_levels`, `unsupported_levels`, and `opt_in_required` in `caveman_policy` are stored, not read.
+* **Output style is state only:** nothing consumes `AICONTEXT_OUTPUT_STYLE` yet (the template does not mention it).
+* **Help text is hand-written:** `workflow help` is not generated from the config `description` fields.
+* **`off-*` labels:** `workflow.sh` treats only the exact value `off` as RTK off. `wx` treats `off` and `off-*` as off for `compress_shell`. No config value triggers the mismatch today.
+* **Legacy `caveman_output` key:** still in config defaults, but no longer read. The export is derived from the resolved level. It stays so the existing validation matrix entry (every `caveman_output` is `false`) remains true.
+* **Stale `.vscode/settings.json`:** a tracked legacy file with an old `modes` object (including `caveman_output: true`). Nothing reads it.
+* **`integrations/README.md`:** says Token Controller "automatically governs agent use" of MCP servers. Overstated.
+* **`docs/integrations/CAVEMAN.md`:** keeps "legal and compliance-like work" as a blocked task type. It is a task guard, not a mode.

@@ -63,7 +63,7 @@ Initial filter map: `cargo-test`, `pytest`, `go-test`, `go-build`, `tsc`, `vites
 5. `rtk_mode` is `off` → built-in reducer or raw.
 6. No mapped filter → built-in reducer or raw.
 
-`debug` has `rtk_mode: off-first-failure` in the config today. Because rule 3 already keeps failures raw, RTK may run on a passing `debug` command. Decide in the config step whether to rename `rtk_mode` values to a small set (`off`, `success-only`). Do not change the values before that.
+`rtk_mode` is `off` or `success-only` in the config. `debug` is `success-only`: because rule 3 already keeps failures raw, RTK may run on a passing `debug` command. The old `aggressive` distinction was dropped. Add a separate key if it is needed.
 
 ## Fallback behavior
 
@@ -171,7 +171,7 @@ git diff --check
 
 ## Implementation order
 
-1. Config: add `rtk_filters`. Settle the `rtk_mode` values.
+1. Config: add `rtk_filters`. (`rtk_mode` values are already `off` or `success-only`.)
 2. `wx-compress.sh`: add the RTK step after the existing gates. Keep one function per compressor.
 3. `wx.sh`: write the `compressor` object. No other record fields move.
 4. Tests 1-15 with the fake RTK.
