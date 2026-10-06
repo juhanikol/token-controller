@@ -2,6 +2,9 @@
 # Path: scripts/doctor.sh
 # Usage: bash scripts/doctor.sh [--json] [--project <dir>]
 # Read-only. Inspects settings, instruction files, and tools. Never writes or installs.
+# It never runs "rtk init" or any tool setup command, and never edits ~/.config/rtk.
+# The only tool command it runs is "<tool> --version".
+# Skipped on purpose: MCP config files (not implemented).
 # Exit code: 0 no error finding, 1 at least one error finding, 2 doctor failed.
 
 set -u
@@ -32,7 +35,7 @@ while [ "$#" -gt 0 ]; do
       _PROJECT="$(cd "$1" && pwd)"
       ;;
     -h|--help)
-      printf 'Usage: workflow doctor [--json] [--project <dir>]\nRead-only check of context settings and tools.\n'
+      printf 'Usage: workflow doctor [--json] [--project <dir>]\nRead-only check of context settings and tools.\nscripts/doctor.sh writes nothing. Run through workflow.sh, it can create an empty ~/.config/ai-workflow.\n'
       exit 0
       ;;
     *)
@@ -90,6 +93,29 @@ has_policy() {
   [ -f "$1" ] && grep -Eq 'ai-workflow-controller:start|active_mode\.env' "$1" 2>/dev/null
 }
 
+# First line number of policy text in a file. Empty when none.
+policy_line() {
+  grep -nE 'ai-workflow-controller:start|active_mode\.env' "$1" 2>/dev/null | head -n 1 | cut -d: -f1
+}
+
+# Path entry for findings: "path" or "path<TAB>line". Text prints path:line. JSON prints {path, line}.
+pl() {
+  if [ -n "${2:-}" ]; then
+    printf '%s\t%s' "$1" "$2"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+fmt_path() {
+  local _p="${1%%$'\t'*}"
+  local _l=""
+  case "$1" in *$'\t'*) _l="${1#*$'\t'}" ;; esac
+  printf '%s%s' "$(short "$_p")" "${_l:+:$_l}"
+}
+
+_CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
 # ---------- environment ----------
 _PLATFORM=linux
 _DISTRO=""
@@ -114,11 +140,13 @@ done
 
 # ---------- workflow alias ----------
 _ALIAS_FILES=()
+_ALIAS_LINES=()
 _ALIAS_TARGETS=()
 for _rc in "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_aliases"; do
   [ -f "$_rc" ] || continue
   while IFS= read -r _line; do
-    _ALIAS_FILES+=("$_rc:${_line%%:*}")
+    _ALIAS_FILES+=("$_rc")
+    _ALIAS_LINES+=("${_line%%:*}")
     _line="${_line#*:}"
     _target="${_line#*source }"
     _target="${_target%%\'*}"
@@ -131,13 +159,17 @@ if [ "${#_ALIAS_FILES[@]}" -eq 0 ]; then
   add Workflow warn workflow.alias_missing "No workflow alias in ~/.bashrc, ~/.profile, or ~/.bash_aliases." "" "Add: alias workflow='source $(short "$_DOCTOR_DIR")/workflow.sh'"
 else
   if [ "${#_ALIAS_FILES[@]}" -gt 1 ]; then
-    add Workflow warn workflow.alias_duplicate "Workflow alias is defined ${#_ALIAS_FILES[@]} times." "$(printf '%s\n' "${_ALIAS_FILES[@]}")" "Keep one alias line."
+    _alias_paths=""
+    for ((_ai = 0; _ai < ${#_ALIAS_FILES[@]}; _ai++)); do
+      _alias_paths+="$(pl "${_ALIAS_FILES[$_ai]}" "${_ALIAS_LINES[$_ai]}")"$'\n'
+    done
+    add Workflow warn workflow.alias_duplicate "Workflow alias is defined ${#_ALIAS_FILES[@]} times." "$_alias_paths" "Keep one alias line."
   else
-    add Workflow ok workflow.alias "Workflow alias found." "${_ALIAS_FILES[0]}"
+    add Workflow ok workflow.alias "Workflow alias found." "$(pl "${_ALIAS_FILES[0]}" "${_ALIAS_LINES[0]}")"
   fi
   _first_target="$(expand_tilde "${_ALIAS_TARGETS[0]}")"
   if [ ! -f "$_first_target" ]; then
-    add Workflow error workflow.alias_target "Alias target does not exist: $(short "$_first_target")" "${_ALIAS_FILES[0]}" "Fix the path in the alias."
+    add Workflow error workflow.alias_target "Alias target does not exist: $(short "$_first_target")" "$(pl "${_ALIAS_FILES[0]}" "${_ALIAS_LINES[0]}")" "Fix the path in the alias."
   elif [ "$(cd "$(dirname "$_first_target")" && pwd)/$(basename "$_first_target")" != "$_DOCTOR_DIR/workflow.sh" ]; then
     add Workflow warn workflow.alias_other_copy "Alias points to another copy of workflow.sh." "$_first_target" "Use one controller copy."
   fi
@@ -190,7 +222,7 @@ for _f in "${_VSCODE_FILES[@]}"; do
   if [ -f "$_f" ]; then
     _VSCODE_FOUND+=("$_f")
     _pol=false
-    has_policy "$_f" && { _pol=true; _VSCODE_POLICY+=("$_f"); }
+    has_policy "$_f" && { _pol=true; _VSCODE_POLICY+=("$(pl "$_f" "$(policy_line "$_f")")"); }
     _LOCATIONS+=("vscode_settings|$_f|true|$_pol")
     # Text match: settings files may contain comments, so jq may fail.
     _sp="$(sed -n 's/.*"tokenController\.scriptPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_f" | head -n 1)"
@@ -234,7 +266,7 @@ _check_agent_file() { # id path
   if [ -f "$_path" ]; then
     if has_policy "$_path"; then
       _pol=true
-      _POLICY_FILES+=("$_path")
+      _POLICY_FILES+=("$(pl "$_path" "$(policy_line "$_path")")")
     fi
     _LOCATIONS+=("$_id|$_path|true|$_pol")
     # Managed block integrity
@@ -242,7 +274,7 @@ _check_agent_file() { # id path
     grep -Fqx -- "$_MANAGED_START" "$_path" 2>/dev/null && _s=true
     grep -Fqx -- "$_MANAGED_END" "$_path" 2>/dev/null && _e=true
     if [ "$_s" != "$_e" ]; then
-      add "Agent files" error policy.incomplete_block "Incomplete managed block." "$_path" "Fix or remove the block by hand. Then run: workflow init"
+      add "Agent files" error policy.incomplete_block "Incomplete managed block." "$(pl "$_path" "$(grep -nFxe "$_MANAGED_START" -e "$_MANAGED_END" "$_path" 2>/dev/null | head -n 1 | cut -d: -f1)")" "Fix or remove the block by hand. Then run: workflow init"
     fi
   else
     _LOCATIONS+=("$_id|$_path|false|false")
@@ -285,30 +317,124 @@ else
   add Policy info policy.none "No policy text found. Run: workflow init"
 fi
 
-# Hook and mode mismatch (text match only)
-if [ "$_RTK_MODE" = off ]; then
-  _rtk_hooks=()
-  for _f in "$_PROJECT/.claude/settings.json" "$HOME/.claude/settings.json"; do
-    [ -f "$_f" ] && grep -qi 'rtk' "$_f" 2>/dev/null && _rtk_hooks+=("$_f")
-  done
-  if [ "${#_rtk_hooks[@]}" -gt 0 ]; then
-    add Policy warn policy.rtk_hook_mismatch "RTK is in Claude settings, but mode '$_PROFILE' sets rtk off." "$(printf '%s\n' "${_rtk_hooks[@]}")" "Check the RTK hook, or choose another mode."
+# RTK global setup. Any hook rewrites commands to run through RTK and skips wx raw capture,
+# so this is reported in every mode. Text match only. Doctor never runs "rtk init" or edits RTK config.
+_RTK_WORD='(^|[^[:alnum:]_])rtk([^[:alnum:]_]|$)'
+_rtk_hook_paths=()
+for _f in "$_PROJECT/.claude/settings.json" "$_CLAUDE_DIR/settings.json"; do
+  if [ -f "$_f" ]; then
+    _rl="$(grep -niE "$_RTK_WORD" "$_f" 2>/dev/null | head -n 1 | cut -d: -f1)"
+    [ -n "$_rl" ] && _rtk_hook_paths+=("$(pl "$_f" "$_rl")")
+  fi
+done
+for _f in "$_CLAUDE_DIR/RTK.md" "$_CLAUDE_DIR"/hooks/*rtk*; do
+  [ -e "$_f" ] && _rtk_hook_paths+=("$(pl "$_f" "")")
+done
+for _f in "$_CLAUDE_DIR/CLAUDE.md" "$_PROJECT/CLAUDE.md"; do
+  if [ -f "$_f" ]; then
+    _rl="$(grep -nE '(^|[^[:alnum:]_])@?RTK\.md' "$_f" 2>/dev/null | head -n 1 | cut -d: -f1)"
+    [ -n "$_rl" ] && _rtk_hook_paths+=("$(pl "$_f" "$_rl")")
+  fi
+done
+if [ "${#_rtk_hook_paths[@]}" -gt 0 ]; then
+  _rtk_paths_text="$(printf '%s\n' "${_rtk_hook_paths[@]}")"
+  add Policy warn policy.rtk_hook "RTK hook or setup found. Commands it rewrites run through RTK and skip wx raw capture." "$_rtk_paths_text" "Choose one route per command. Doctor does not run rtk init or edit RTK config."
+  if [ "$_RTK_MODE" = off ]; then
+    add Policy warn policy.rtk_hook_mismatch "RTK setup exists, but mode '$_PROFILE' sets rtk off." "$_rtk_paths_text" "Check the RTK hook, or choose another mode."
   fi
 fi
 
 # ---------- tools ----------
+# _TOOLS entry: name|found|kind|path|version   (version last, it may contain text)
 for _tool in rtk lean-ctx headroom caveman ccusage; do
   _tpath="$(command -v "$_tool" 2>/dev/null || true)"
   if [ -n "$_tpath" ] && [ -x "$_tpath" ]; then
     # --version only. Short timeout. No input.
     _tver="$(timeout 3 "$_tpath" --version </dev/null 2>&1 | head -n 1 | cut -c1-80)"
-    _TOOLS+=("$_tool|true|$_tpath|$_tver")
-    add Tools ok "tool.$_tool" "$_tool: ${_tver:-found}" "$_tpath"
+    _TOOLS+=("$_tool|true|command|$_tpath|$_tver")
+    add Tools ok "tool.$_tool" "$_tool: ${_tver:-found}" "$(pl "$_tpath" "")"
+    continue
+  fi
+  _tfound=""
+  if [ "$_tool" = caveman ]; then
+    # Caveman is mainly a Claude Code skill or plugin. Look for its files. Run nothing.
+    for _e in "$_CLAUDE_DIR/skills/caveman" "$_CLAUDE_DIR"/skills/caveman* "$_CLAUDE_DIR"/plugins/*caveman* "$_CLAUDE_DIR/.caveman-active"; do
+      if [ -e "$_e" ]; then
+        _tfound="$_e"
+        break
+      fi
+    done
+  fi
+  if [ -n "$_tfound" ]; then
+    _TOOLS+=("$_tool|true|claude-skill|$_tfound|")
+    add Tools ok "tool.$_tool" "$_tool: Claude Code skill or plugin found. No command on PATH." "$(pl "$_tfound" "")"
   else
-    _TOOLS+=("$_tool|false||")
+    _TOOLS+=("$_tool|false|none||")
     add Tools info "tool.$_tool" "$_tool not found."
   fi
 done
+
+# ---------- caveman state ----------
+# Doctor only reads the state file. It never changes it. Token Controller's own state comes from the env file.
+_CAVE_STATE="$_CLAUDE_DIR/.caveman-active"
+_TC_CAVE_MODE=""
+[ -f "$_ACTIVE_ENV_FILE" ] && _TC_CAVE_MODE="$(sed -n 's/^export AICONTEXT_CAVEMAN_MODE="\(.*\)"$/\1/p' "$_ACTIVE_ENV_FILE" | head -n 1)"
+[ -n "$_TC_CAVE_MODE" ] || _TC_CAVE_MODE=off
+
+caveman_rank() {
+  case "$1" in
+    off) echo 0 ;;
+    lite) echo 1 ;;
+    full) echo 2 ;;
+    *) echo 3 ;;
+  esac
+}
+
+# Same hard-blocked set as workflow.sh. Config may add profiles.
+caveman_hard_blocked() {
+  case "$1" in
+    raw|security|db|release|migration|docs) return 0 ;;
+  esac
+  [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1 &&
+    jq -e --arg m "$1" '(.caveman_policy.hard_blocked_profiles // []) | index($m) != null' "$_SETTINGS_FILE" >/dev/null 2>&1
+}
+
+if [ -e "$_CAVE_STATE" ]; then
+  if [ ! -f "$_CAVE_STATE" ] || [ ! -r "$_CAVE_STATE" ]; then
+    add Caveman warn caveman.state_unreadable "Caveman state file cannot be read." "$(pl "$_CAVE_STATE" "")"
+  else
+    _cave_level="$(head -c 64 "$_CAVE_STATE" | tr -d '\r\n\t ' | tr 'A-Z' 'a-z')"
+    case "$_cave_level" in
+      ''|off|none|false|0)
+        add Caveman ok caveman.inactive "Caveman is not active." "$(pl "$_CAVE_STATE" "")"
+        ;;
+      *[!a-z0-9_-]*)
+        add Caveman warn caveman.level_unknown "Caveman state file has an unknown level." "$(pl "$_CAVE_STATE" "")" "Say 'stop caveman' in the agent session."
+        ;;
+      *)
+        _cave_hint="Say 'stop caveman' in the agent session. Doctor does not edit the state file."
+        _cave_path="$(pl "$_CAVE_STATE" "")"
+        if [ -n "$_PROFILE" ] && caveman_hard_blocked "$_PROFILE"; then
+          add Caveman error caveman.active_blocked_profile "Caveman is active (level $_cave_level) in mode '$_PROFILE'. This mode must stay off." "$_cave_path" "$_cave_hint"
+        elif [ "$_cave_level" = ultra ] || [ "${_cave_level#wenyan}" != "$_cave_level" ]; then
+          add Caveman warn caveman.unsupported_level "Caveman level '$_cave_level' is not supported by Token Controller." "$_cave_path" "Use lite or full, or turn Caveman off. $_cave_hint"
+        elif [ "$_TC_CAVE_MODE" = off ]; then
+          add Caveman warn caveman.active_no_opt_in "Caveman is active (level $_cave_level), but Token Controller has no Caveman opt-in for mode '${_PROFILE:-none}'." "$_cave_path" "$_cave_hint"
+        elif [ "$(caveman_rank "$_cave_level")" -gt "$(caveman_rank "$_TC_CAVE_MODE")" ]; then
+          add Caveman warn caveman.above_policy "Caveman level '$_cave_level' is above the Token Controller level '$_TC_CAVE_MODE'." "$_cave_path" "$_cave_hint"
+        else
+          add Caveman ok caveman.active_ok "Caveman level '$_cave_level' matches Token Controller policy." "$_cave_path"
+        fi
+        ;;
+    esac
+  fi
+fi
+
+# ---------- side effect note ----------
+# workflow.sh runs mkdir -p on the config directory before it starts any command.
+if [ "${AICONTEXT_DOCTOR_VIA_WORKFLOW:-}" = 1 ]; then
+  add Doctor info doctor.config_dir "Run through workflow.sh, doctor can create an empty $(short "$_CONFIG_DIR"). scripts/doctor.sh run directly writes nothing." "$(pl "$_CONFIG_DIR" "")"
+fi
 
 # ---------- output ----------
 _ERRORS=0 _WARNS=0 _INFOS=0
@@ -333,7 +459,7 @@ print_text() {
     _paths="${_F_PATHS[$_i]}"
     if [ -n "$_paths" ] && [ "${_F_SEV[$_i]}" != ok ]; then
       while IFS= read -r _p; do
-        [ -n "$_p" ] && printf '        %s\n' "$(short "$_p")"
+        [ -n "$_p" ] && printf '        %s\n' "$(fmt_path "$_p")"
       done <<< "$_paths"
     fi
     [ -n "${_F_SUGGEST[$_i]}" ] && printf '        -> %s\n' "${_F_SUGGEST[$_i]}"
@@ -342,7 +468,7 @@ print_text() {
 }
 
 print_json() {
-  local _i _t _l _tname _tfound _tpath _tver _lid _lpath _lex _lpol
+  local _i _t _l _tname _tfound _tkind _tpath _tver _lid _lpath _lex _lpol
   {
     jq -cn \
       --arg project "$_PROJECT" \
@@ -370,10 +496,10 @@ print_json() {
         summary: {error: $errors, warn: $warns, info: $infos}
       }'
     for _t in "${_TOOLS[@]}"; do
-      IFS='|' read -r _tname _tfound _tpath _tver <<< "$_t"
-      jq -cn --arg name "$_tname" --arg found "$_tfound" --arg path "$_tpath" --arg version "$_tver" \
+      IFS='|' read -r _tname _tfound _tkind _tpath _tver <<< "$_t"
+      jq -cn --arg name "$_tname" --arg found "$_tfound" --arg kind "$_tkind" --arg path "$_tpath" --arg version "$_tver" \
         '{tool: ({name: $name, found: ($found == "true")}
-          + (if $found == "true" then {path: $path, version: (if $version == "" then null else $version end)} else {} end))}'
+          + (if $found == "true" then {kind: $kind, path: $path, version: (if $version == "" then null else $version end)} else {} end))}'
     done
     for _l in "${_LOCATIONS[@]}"; do
       IFS='|' read -r _lid _lpath _lex _lpol <<< "$_l"
@@ -384,7 +510,7 @@ print_json() {
       jq -cn --arg id "${_F_ID[$_i]}" --arg sev "${_F_SEV[$_i]}" --arg msg "${_F_MSG[$_i]}" \
         --arg paths "${_F_PATHS[$_i]}" --arg suggest "${_F_SUGGEST[$_i]}" --arg group "${_F_GROUP[$_i]}" \
         '{finding: {id: $id, severity: $sev, group: $group, message: $msg,
-          paths: ($paths | split("\n") | map(select(. != ""))),
+          paths: ($paths | split("\n") | map(select(. != "")) | map(split("\t") | {path: .[0], line: (if length > 1 then (.[1] | tonumber) else null end)})),
           suggestion: (if $suggest == "" then null else $suggest end)}}'
     done
   } | jq -s '

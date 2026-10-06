@@ -128,6 +128,7 @@ True mode or alias
 ## Foundation debt status (2026-10-07)
 
 Fixed:
+* `integrations/README.md` no longer claims automatic governance of MCP servers 
 * Docs and help text: `workflow.sh` header lists all modes, help lists `rapid-prototype`, README extension install detail points to `extensions/vscode/README.md`, README layout and command table are current, template first-failure rule restored, "legal/compliance" removed from the template.
 * Tool scripts: `check-tools.sh` and `install-optional-tools.sh` have Caveman entries. Nothing is installed automatically. MemStack is labelled legacy.
 * `micro` is a true mode (not an alias).
@@ -147,5 +148,21 @@ Open:
 * **`off-*` labels:** `workflow.sh` treats only the exact value `off` as RTK off. `wx` treats `off` and `off-*` as off for `compress_shell`. No config value triggers the mismatch today.
 * **Legacy `caveman_output` key:** still in config defaults, but no longer read. The export is derived from the resolved level. It stays so the existing validation matrix entry (every `caveman_output` is `false`) remains true.
 * **Stale `.vscode/settings.json`:** a tracked legacy file with an old `modes` object (including `caveman_output: true`). Nothing reads it.
-* **`integrations/README.md`:** says Token Controller "automatically governs agent use" of MCP servers. Overstated.
 * **`docs/integrations/CAVEMAN.md`:** keeps "legal and compliance-like work" as a blocked task type. It is a task guard, not a mode.
+
+## Doctor improvements (2026-10-07)
+
+Fixed:
+* RTK hook or setup is a `warn` in every mode (`policy.rtk_hook`). Doctor never runs `rtk init` and never touches `~/.config/rtk`. The only tool command it runs is `--version`.
+* Caveman checks: installed (command or Claude Code skill), `.caveman-active` level, `error` in hard-blocked profiles, `warn` for no opt-in, above Token Controller level, and `ultra`/`wenyan`.
+* Duplicate policy text is a `warn`. Tests assert it.
+* Side effect of `workflow.sh` (`mkdir -p ~/.config/ai-workflow`) is stated in help text and as an `info` finding.
+* JSON `paths` entries are `{path, line}` everywhere.
+
+Still open for doctor:
+* **MCP config checks** are not implemented.
+* **`workflow.sh` still creates `~/.config/ai-workflow`** before it dispatches `doctor` (and `status`, `help`). Moving the `mkdir` after the early commands would make doctor truly read-only through `workflow.sh`. It is a behavior change, so it was not done.
+* **Caveman opt-in** is the env file value only. There is no request input yet.
+* **RTK setup detection** is a text match on known Claude Code locations. Other hosts (Copilot, Cursor) are not checked.
+* **`.caveman-active` format** is assumed to hold the level name. Unknown values give a `warn`.
+* **Doctor JSON has no consumer yet.** `schema_version` stays `1` until the extension uses it.

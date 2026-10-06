@@ -134,7 +134,7 @@ Only four modes allow Caveman. Everything else needs a config change to allow it
 
 ## Conflicts
 
-- **Caveman starts itself.** The plugin can keep its own active level (`.caveman-active`, default `full`). That ignores the Token Controller mode. `workflow doctor` should read that file and report:
+- **Caveman starts itself.** The plugin can keep its own active level (`.caveman-active`, default `full`). That ignores the Token Controller mode. `workflow doctor` reads that file and reports:
   - `error`: Caveman active while the mode is hard-blocked.
   - `warn`: Caveman active above `caveman_max`, or while no opt-in exists.
   - `info`: Caveman plugin not installed.
@@ -190,7 +190,7 @@ Until then the README says only that Token Controller "manages context policy" f
 1. Config: add the keys above. No behavior change.
 2. `workflow.sh`: resolve the effective level, export the new variables, keep the old ones.
 3. Table-driven test for scenarios 1-10.
-4. Doctor: `.caveman-active` checks (scenarios 11-13).
+4. Doctor: `.caveman-active` checks (scenarios 11-13). Done in `scripts/doctor.sh`.
 5. Agent instruction text and the optional prompt-guard hook example.
 6. Measurement run, then the validation matrix entry.
 7. Shrink/proxy: read upstream docs first. Then a separate design.

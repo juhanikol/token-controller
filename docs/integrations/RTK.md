@@ -35,7 +35,7 @@ Run only after the gates below pass, and only for a command that has a mapped fi
 3. Record the version string in every run that calls RTK.
 4. "Tested with" version is kept in one place (config). A different version is allowed. `workflow doctor` shows an `info` finding.
 
-`workflow doctor` already reports RTK path and version. It should also report the hook conflict below.
+`workflow doctor` reports RTK path and version, and warns about any RTK hook or setup (`policy.rtk_hook`) in every mode. It never runs `rtk init`.
 
 ## When RTK may be used
 

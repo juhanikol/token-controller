@@ -63,6 +63,7 @@ Modes:
   off          Disable all optimizers.
   status       Show current profile.
   doctor       Read-only check of settings, instruction files, and tools. Option: --json
+               It can create an empty ~/.config/ai-workflow when run through workflow.sh.
   report       Summarize the current project's wx session.
   reset-session Archive the current wx session and start a new one.
 
@@ -130,7 +131,7 @@ USAGE
     doctor)
       shift
       # Read-only check. Runs in a child process so it cannot change this shell.
-      bash "$_SCRIPT_DIR/doctor.sh" "$@"
+      AICONTEXT_DOCTOR_VIA_WORKFLOW=1 bash "$_SCRIPT_DIR/doctor.sh" "$@"
       return $?
       ;;
     report)

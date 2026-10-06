@@ -1,6 +1,6 @@
 # `workflow doctor` Design
 
-Status: design only. Nothing here is implemented.
+Status: implemented in `scripts/doctor.sh` (v1, read-only). The section "Implemented differences" at the end lists what differs from this design.
 
 ## Purpose
 
@@ -177,3 +177,13 @@ Doctor must not create new files, not even a cache or log. Output goes to stdout
 1. Add the locations function and tool detection first. They also feed `check-tools.sh` and the extension status.
 2. Add `tests/doctor.test.sh` with fixture home directories (set `HOME`, `XDG_CONFIG_HOME`, `AICONTEXT_CONFIG_DIR`). Cover: empty home, duplicate block, incomplete block, JSON validity, secret redaction, and a read-only check that compares file hashes before and after.
 3. The extension reads `workflow doctor --json` and shows the worst severity in the status bar tooltip.
+
+## Implemented differences
+
+- **MCP config checks are not implemented.** They stay out until they are designed and tested.
+- **RTK:** any RTK hook or setup is a `warn` (`policy.rtk_hook`) in every mode. Doctor looks at `settings.json` (project and `~/.claude`), `RTK.md`, `hooks/*rtk*`, and `RTK.md` includes in `CLAUDE.md`. It never runs `rtk init` and never touches `~/.config/rtk`. `policy.rtk_hook_mismatch` is an extra `warn` when the mode sets rtk `off`.
+- **Caveman:** reads `${CLAUDE_CONFIG_DIR:-~/.claude}/.caveman-active`. Active in `raw`, `security`, `db`, `release`, `migration`, `docs` (or a profile in `caveman_policy.hard_blocked_profiles`) is an `error`. Level `ultra` or `wenyan*`, no Token Controller opt-in, or a level above the Token Controller level is a `warn`. Opt-in today means a non-`off` `AICONTEXT_CAVEMAN_MODE` in the env file (set through the config). Doctor never edits the state file.
+- **Duplicate policy text** is a `warn`, never an `error`. An incomplete managed block is an `error`.
+- **Side effect note:** `workflow.sh` runs `mkdir -p ~/.config/ai-workflow` before any command. Through `workflow doctor` the directory can be created (empty). Doctor says so as an `info` finding (`doctor.config_dir`). `scripts/doctor.sh` run directly writes nothing.
+- **JSON paths:** every `paths` entry is `{path, line}`. `line` is a number or `null`. Text output prints `path:line`.
+- **Tools:** each tool has a `kind` (`command` or `claude-skill`). Caveman can be found as a Claude Code skill without a command on `PATH`.
