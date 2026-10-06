@@ -554,3 +554,47 @@ Copy this block for each experiment.
 - Evidence lost or possibly hidden: none; reset archived metadata and did not alter raw logs
 - Pass/fail: PASS
 - Recommended profile change: none
+
+### Experiment: practical `wx` context-reduction benchmark
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: compare normal-shell output with total `wx` emitted output while preserving authoritative raw evidence
+- Profiles: `code`, `debug`, `security`, and `db`
+- Command: `bash benchmarks/run-benchmark.sh`
+- Optional tools active: none; the suite uses Bash, `jq`, `awk`, `grep`, `cmp`, and standard Ubuntu utilities
+- Results:
+
+| Fixture | Profile | Exit | Raw bytes | Visible command bytes | Emitted bytes | Practical reduction | Evidence |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| noisy-pass | `code` | 0 | 5430 | 110 | 219 | 95.97% | PASS |
+| failing-stacktrace | `debug` | 7 | 293 | 293 | 402 | -37.20% | PASS |
+| security | `security` | 0 | 407 | 407 | 516 | -26.78% | PASS |
+| db | `db` | 0 | 391 | 391 | 500 | -27.88% | PASS |
+
+- Aggregate raw bytes: 6521
+- Aggregate emitted bytes: 1637
+- Aggregate practical reduction: 74.90%
+- Evidence preserved: command exit codes, raw stdout/stderr, failure stack paths and line numbers, security findings, and database migration warnings
+- Evidence lost or possibly hidden: none in the protected fixtures; the noisy-success fixture intentionally collapses exact consecutive repetitions
+- Pass/fail: PASS
+- Interpretation: proves practical byte reduction for this noisy-success fixture, including wrapper overhead, but does not establish universal or tokenizer-backed token savings. Protected short outputs grow because the mandatory raw-log pointer is included.
+- Coverage condition: these measurements apply only when commands run through `wx`, whether explicitly or because a configured integration requires a retry through `wx`.
+- Recommended profile change: none
+
+### Experiment: opt-in Claude Code `PreToolUse` example
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: require selected direct Claude Code Bash commands to be retried through `wx` without silently rewriting tool input
+- Files: `integrations/claude-code/settings.example.json`, `integrations/claude-code/hooks/pretooluse-bash-policy.sh`, and `integrations/claude-code/README.md`
+- Commands:
+  - `bash -n integrations/claude-code/hooks/pretooluse-bash-policy.sh`
+  - `jq . integrations/claude-code/settings.example.json >/dev/null`
+  - pipe the documented `npm test` and `wx npm test` JSON samples into the hook
+- Expected behavior: direct `npm test` returns a Claude Code deny decision with `wx npm test` guidance; an already wrapped command produces no output; both hook invocations exit 0
+- Installation behavior: example only; nothing installs or enables the hook automatically
+- Evidence preserved: original command text appears in the retry guidance; the hook does not emit `updatedInput` or mutate the command
+- Limitation: matcher coverage is conservative and host-specific; it does not cover every nested shell form or any non-Claude host
+- Pass/fail: PASS
+- Recommended profile change: none

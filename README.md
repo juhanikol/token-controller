@@ -19,7 +19,7 @@ The implementation has three distinct layers:
 | --- | --- |
 | Policy layer | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy. |
 | Mechanical layer | The explicit `wx` wrapper captures raw evidence and collapses exact consecutive repetitions only for eligible successful stdout. Failures and protected profiles or commands remain raw. |
-| Measured savings layer | Per-run metadata records raw and visible byte counts. Fixture validation demonstrates byte reduction, but no tokenizer-backed token-saving result has been established. |
+| Measured savings layer | Per-run metadata records raw and visible byte counts; the benchmark also captures total emitted bytes including wrapper diagnostics. Fixture validation demonstrates byte reduction, but no tokenizer-backed token-saving result has been established. |
 
 ## Why this matters (even with million-token context windows)
 
@@ -102,7 +102,7 @@ workflow init
 workflow code
 ```
 
-## Quick start and depencies
+## Quick start and dependencies
 
 You need the supported WSL2/Ubuntu environment described above, plus Bash, Git, and `jq`. If Git or `jq` is missing:
 
@@ -115,7 +115,7 @@ sudo apt install -y jq git
 Choose one central location and keep the controller there:
 
 ```bash
-mkdir -p ~/tools
+mkdir -p ~/projects
 git clone <repository-url> ~/projects/token-controller
 ```
 
@@ -164,6 +164,16 @@ workflow debug
 ```
 
 The selected mode applies to the current shell and is also written to `~/.config/ai-workflow/active_mode.env` for agents to read.
+
+Because the alias sources `workflow.sh`, it also makes the `wx` function available in that shell. Commands are mechanically captured and measured only when they are invoked through `wx`:
+
+```bash
+workflow code
+wx npm test
+workflow report
+```
+
+Direct `npm test` output is not captured or compressed by Token Controller unless an optional integration blocks the direct command and requires a retry through `wx`.
 
 See the current mode at any time:
 
@@ -325,29 +335,49 @@ If you choose to install the Python tools using those printed commands, their vi
 * Headroom: `~/.venvs/headroom`
 * MemStack: `~/.venvs/memstack`
 
-## Experimental and integration-dependent mechanical layer
+## Mechanical `wx` layer and optional integrations
 
-Installing an optional tool does not by itself activate automatic interception. The current integration boundary is:
+The built-in mechanical boundary is explicit: `wx <command>` runs the command, captures raw stdout and stderr under `.ai-context/raw/`, preserves the exit code, emits either lossless or deterministic exact-repeat output, prints a raw-log pointer, and appends byte measurements to `.ai-context/session.jsonl`.
 
+Compression is conservative. A successful command is compressed only when it matches `noisy_success_can_compress` in `config/workflow_settings.json`. Nonzero exits and profiles or commands classified as security, database, release, migration, or `preserve_raw_or_lossless` remain lossless.
+
+Optional integrations may increase `wx` coverage, but are not installed automatically:
+
+* **Claude Code hook example:** [`integrations/claude-code/README.md`](integrations/claude-code/README.md) documents an opt-in `PreToolUse` hook. It blocks selected direct test, build, install, and Docker commands and tells the agent to retry as `wx <command>`; it does not silently mutate commands.
 * **RTK:** `wx` no longer delegates command execution to RTK. Any future RTK integration must occur after the wrapper has captured authoritative raw output.
 * **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools.
 * **Caveman:** The controller exports a compatibility variable, disabled by the current profiles; no automatic invocation is implemented.
 
-Automatic shell hooks, transparent interception of commands not invoked through `wx`, and enforcement by IDE or MCP integrations should be treated as planned or experimental behavior until they are implemented and validated end to end.
+There is no universal interception layer. Commands run directly remain outside `wx` unless a separately configured hook or host integration enforces wrapper usage. The included Claude Code hook is an example for that host only, not proof that other agents, IDEs, terminals, or MCP clients will route commands through `wx`.
 
 ## Controlling Changes (Validation Matrix)
 
 Whenever a new mode is added or a shell policy is changed, it must be documented to prevent regressions. We maintain a ledger in `docs/VALIDATION_MATRIX.md`.
 
-The ledger now includes paired raw/visible byte measurements for deterministic fixtures. These measurements validate the wrapper behavior but do not prove tokenizer-measured savings for the controller as a whole.
+The ledger includes paired raw/visible/emitted byte measurements for deterministic fixtures. These measurements validate the wrapper behavior but do not prove tokenizer-measured or universal savings for the controller as a whole.
+
+Run the WSL2/Ubuntu benchmark from the repository root:
+
+```bash
+bash benchmarks/run-benchmark.sh
+```
+
+To retain its copy-ready Markdown summary:
+
+```bash
+bash benchmarks/run-benchmark.sh > /tmp/token-controller-benchmark.md
+```
+
+The benchmark compares each fixture through a normal shell and through `wx`, includes the raw-log pointer in emitted-byte totals, and verifies that failure, security, and database evidence stays lossless. See [`benchmarks/README.md`](benchmarks/README.md) for metric definitions.
 
 When testing a change, you must record:
 
 1. The target scenario and the active profile.
 2. The exact commands executed (e.g., `wx build`).
 3. Which optional tools were active versus missing.
-4. The estimated raw token size vs. the compressed token size.
-5. The pass/fail result indicating if critical evidence (like a stack trace) was safely preserved.
+4. The measured raw, visible-command, and total emitted byte counts.
+5. Any separately measured tokenizer counts, including the tokenizer and version; byte reduction alone is not token reduction.
+6. The pass/fail result indicating whether critical evidence, such as a stack trace, was preserved.
 
 ## Session reporting and reset
 
@@ -365,6 +395,15 @@ workflow reset-session
 
 Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is stored under `.ai-context/archive/`.
 
+## Limitations
+
+* Savings depend on command coverage. Token Controller measures only commands run through `wx`; direct commands are unchanged unless an opt-in hook forces a retry through `wx`.
+* Compression is deterministic exact-repeat collapsing, not semantic or AI-generated summarization. Non-repetitive successful output may not become smaller.
+* The mandatory raw-log pointer adds visible bytes. Short or protected commands can therefore emit more bytes than the original command.
+* Reported percentages are byte reductions derived from `.ai-context/session.jsonl`, not universal model-token, latency, quality, or cost guarantees.
+* Raw logs are retained intentionally and may contain sensitive command output. Protect `.ai-context/` appropriately and remove logs only through an explicit user-controlled process.
+* The Claude Code hook is an optional example. It recognizes a conservative command set, does not parse every nested shell form, and does not cover other hosts automatically.
+
 ## Useful commands
 
 
@@ -374,6 +413,7 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 | `workflow setup`  | Configure optional global editor instructions            |
 | `workflow <mode>` | Select a context mode                                    |
 | `workflow status` | Show the active mode and policy                          |
+| `wx <command>`    | Capture, preserve, optionally compress, and measure output |
 | `workflow report` | Summarize command, byte, reduction, and failure counts   |
 | `workflow reset-session` | Archive session metadata without deleting raw logs |
 | `workflow off`    | Select the off policy                                      |
@@ -384,16 +424,26 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 ```text
 token-controller/
 ├── README.md
+├── benchmarks/
+│   ├── README.md
+│   ├── run-benchmark.sh
+│   └── fixtures/
 ├── config/
 │   └── workflow_settings.json
 ├── docs/
 │   └── VALIDATION_MATRIX.md
+├── integrations/
+│   └── claude-code/
 ├── prompts/
 │   └── vscode-agent-prompts.md
 ├── scripts/
 │   ├── check-tools.sh
 │   ├── install-optional-tools.sh
-│   └── workflow.sh
+│   ├── workflow.sh
+│   └── lib/
+│       ├── wx.sh
+│       ├── wx-compress.sh
+│       └── wx-session.sh
 └── templates/
     └── AGENTS_base.md
 ```
@@ -404,7 +454,26 @@ The controller itself needs only Bash and `jq` for its basic checks:
 
 ```bash
 bash -n scripts/workflow.sh
+find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
 jq . config/workflow_settings.json >/dev/null
+bash tests/wx-wrapper.test.sh
+bash tests/workflow-session.test.sh
+bash benchmarks/run-benchmark.sh
+```
+
+Validate the optional Claude Code example separately:
+
+```bash
+bash -n integrations/claude-code/hooks/pretooluse-bash-policy.sh
+jq . integrations/claude-code/settings.example.json >/dev/null
+```
+
+Build and package the VS Code extension:
+
+```bash
+cd extensions/vscode
+npm run compile
+npx vsce package
 ```
 
 Detailed validation results live in `docs/VALIDATION_MATRIX.md`.
