@@ -2,13 +2,13 @@
 
 **Choose how agents should handle context, while keeping high-risk evidence visible.**
 
-Token Controller is currently a policy/profile controller plus an explicit `wx` shell wrapper. It records the selected profile, installs project guidance for compatible agents, and captures commands invoked as `wx <command>` without relying on an optional context tool. It does not yet compress output, enforce agent compliance, measure token use, or guarantee token savings.
+Token Controller is currently a policy/profile controller plus an explicit `wx` shell wrapper. It records the selected profile, installs project guidance for compatible agents, and captures commands invoked as `wx <command>` without relying on an optional context tool. For successful commands on the configured noisy-success allowlist, `wx` deterministically collapses consecutive identical stdout lines; it does not enforce agent compliance, measure token use, or guarantee token savings.
 
 ## How it works
 
 * **Profile control:** `workflow <mode>` exports policy variables and writes them to `~/.config/ai-workflow/active_mode.env`.
 * **Project guidance:** `workflow init` creates or extends `AGENTS.md` with instructions for agents to read the active profile and preserve specified evidence.
-* **Explicit command capture:** `wx <command>` runs the command directly, saves raw stdout/stderr and JSONL metadata under `.ai-context/`, replays the raw output, and preserves the command's exit code.
+* **Explicit command capture:** `wx <command>` runs the command directly, always saves raw stdout/stderr, applies only eligible conservative compression, records raw and visible byte counts under `.ai-context/`, prints the raw-log location, and preserves the command's exit code.
 * **VS Code control:** The Status Bar dropdown provides another way to select a profile.
 
 ![select context](assets/20260824_212040_image.png)
@@ -18,8 +18,8 @@ The implementation has three distinct layers:
 | Layer | Current status |
 | --- | --- |
 | Policy layer | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy. |
-| Mechanical layer | The explicit `wx` wrapper captures raw command evidence and metadata. Compression and automatic hook-based enforcement are not implemented yet. |
-| Measured savings layer | Not established yet. The validation matrix records controller checks, but it does not contain paired end-to-end measurements proving token savings. |
+| Mechanical layer | The explicit `wx` wrapper captures raw evidence and collapses exact consecutive repetitions only for eligible successful stdout. Failures and protected profiles or commands remain raw. |
+| Measured savings layer | Per-run metadata records raw and visible byte counts. Fixture validation demonstrates byte reduction, but no tokenizer-backed token-saving result has been established. |
 
 ## Why this matters (even with million-token context windows)
 
@@ -339,7 +339,7 @@ Automatic shell hooks, transparent interception of commands not invoked through 
 
 Whenever a new mode is added or a shell policy is changed, it must be documented to prevent regressions. We maintain a ledger in `docs/VALIDATION_MATRIX.md`.
 
-The existing ledger validates profile activation, configuration, initialization, and related safety behavior. It does not yet prove a measured token-saving result for the controller as a whole.
+The ledger now includes paired raw/visible byte measurements for deterministic fixtures. These measurements validate the wrapper behavior but do not prove tokenizer-measured savings for the controller as a whole.
 
 When testing a change, you must record:
 

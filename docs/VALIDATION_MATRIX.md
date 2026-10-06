@@ -504,3 +504,30 @@ Copy this block for each experiment.
 - Did the agent reach the same conclusion with compressed context? Yes; exact raw checks independently verified placement and claim boundaries
 - Pass/fail: PASS
 - Recommended profile change: none
+
+### Experiment: deterministic conservative wx compression
+
+- Date: 2026-10-06
+- Repository / branch: token-controller / current working tree
+- Scenario: compress repeated successful boilerplate while preserving raw logs and all failure or protected evidence
+- Profile: `code`, followed by `security`, `db`, `release`, and `migration` protection checks
+- Tools installed: Bash, jq, awk, grep, sed, standard GNU utilities
+- Command(s):
+  - `bash tests/wx-wrapper.test.sh`
+  - fixture `wx npm install` with 12 consecutive identical pass lines
+  - fixture failure with stderr, two stack frames, file paths, line numbers, and exit code 3
+  - protected `wx npm audit` and noisy-success fixtures under each protected profile
+- Raw output location: isolated `.ai-context/raw/` test directory removed by the fixture cleanup trap
+- Compressed output location: emitted stdout captured by the test fixture
+- Raw size / estimated tokens: successful fixture stdout 336 bytes; tokens not measured
+- Compressed size / estimated tokens: successful visible stdout 102 bytes; tokens not measured
+- Evidence preserved:
+  - raw stdout and stderr files remained byte-for-byte complete
+  - failure exit code remained 3
+  - complete failure stderr, first error, stack trace origins, paths, line numbers, cause, and last relevant line remained visible
+  - `npm audit`, `security`, `db`, `release`, and `migration` outputs remained uncompressed
+  - every JSONL record contained raw and visible byte counts
+- Evidence lost or possibly hidden: eleven redundant visible copies of one successful pass line; the visible marker recorded the exact omitted count
+- Did the agent reach the same conclusion with compressed context? Yes; the success summary retained the pass identity and count, while all failure/protected evidence remained raw
+- Pass/fail: PASS
+- Recommended profile change: none

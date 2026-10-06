@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+case "${1:-}" in
+  install)
+    _WX_FIXTURE_INDEX=1
+    while [ "$_WX_FIXTURE_INDEX" -le 12 ]; do
+      printf '%s\n' 'PASS tests/widget.test.js'
+      _WX_FIXTURE_INDEX=$((_WX_FIXTURE_INDEX + 1))
+    done
+    printf '%s\n' 'added 42 packages in 1s'
+    ;;
+  audit)
+    printf '%s\n' 'VULNERABILITY CVE-2099-0001 package-a:1.0.0'
+    printf '%s\n' 'VULNERABILITY CVE-2099-0001 package-a:1.0.0'
+    printf '%s\n' 'Review remediation before upgrading.'
+    ;;
+  *)
+    printf 'fixture npm: unsupported command: %s\n' "${1:-<none>}" >&2
+    exit 2
+    ;;
+esac

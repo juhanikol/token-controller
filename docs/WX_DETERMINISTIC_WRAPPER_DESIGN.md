@@ -2,7 +2,7 @@
 
 ## Current behavior
 
-The first mechanical layer is implemented in `scripts/lib/wx.sh` and exposed as the `wx` function. It runs the supplied command directly, stores raw stdout and stderr under `.ai-context/raw/`, appends command metadata to `.ai-context/session.jsonl`, replays the uncompressed streams, prints the raw-log location, and returns the command's exit code. `scripts/workflow.sh` now sources the wrapper while remaining responsible for profile activation. Policy-aware compression remains unimplemented.
+The mechanical layer is implemented in `scripts/lib/wx.sh` and `scripts/lib/wx-compress.sh`, exposed as the `wx` function. It stores raw stdout and stderr under `.ai-context/raw/`, appends raw/visible byte measurements to `.ai-context/session.jsonl`, prints the raw-log location, and returns the command's exit code. Successful allowlisted noisy commands may collapse exact consecutive repetitions; failures and protected profiles or commands remain raw.
 
 ## Proposed behavior
 
@@ -19,7 +19,7 @@ Compression is post-processing; an optional tool must never replace the authorit
 
 ## File layout
 
-The first layer keeps capture and metadata logic in `scripts/lib/wx.sh`. When policy-aware compression is added, split toward this target layout:
+The current layer keeps capture/metadata logic in `scripts/lib/wx.sh` and deterministic policy/reduction logic in `scripts/lib/wx-compress.sh`. A later expansion may split toward this target layout:
 
 ```text
 scripts/
@@ -69,7 +69,7 @@ Policy resolution is ordered and first-match wins:
 3. When `AICONTEXT_RAW_ON_FAIL=true`, emit the complete raw stdout and stderr for any nonzero exit. This guarantees that the first failing `debug` output is not destructively compressed.
 4. Emit stderr verbatim whenever `AICONTEXT_PRESERVE_STDERR=true`, including successful commands that produced warnings.
 5. Emit raw output when shell compression is `off` or policy resolution is unknown.
-6. Otherwise, apply only a versioned built-in reducer to stdout. Version 1 may collapse consecutive identical lines and excess blank lines, inserting an explicit count marker. It must not truncate unknown content or rewrite numbers, paths, diagnostics, warning/error lines, or command summaries.
+6. Otherwise, apply only a versioned built-in reducer to stdout. Version 1 collapses consecutive identical lines, including repeated blank lines, and inserts an explicit count marker. It does not truncate unknown content or rewrite numbers, paths, diagnostics, warning/error lines, or command summaries.
 
 Command-specific reducers may be added only with fixtures proving their preserved fields. An optional RTK adapter can remain experimental, but its output and version must be recorded and it must operate only after the direct command output has been captured.
 
@@ -91,8 +91,8 @@ Append one JSON object per invocation to `.ai-context/measurements.jsonl` using 
   "exit_code": 0,
   "decision": "compress-exact-repeats",
   "compressor": "builtin/exact-repeat-v1",
-  "raw": {"stdout_bytes": 12000, "stderr_bytes": 0, "stdout_lines": 400},
-  "emitted": {"stdout_bytes": 1800, "stderr_bytes": 0, "stdout_lines": 42},
+  "raw": {"stdout_bytes": 12000, "stderr_bytes": 0},
+  "visible": {"stdout_bytes": 1800, "stderr_bytes": 0},
   "raw_log_dir": ".ai-context/raw/20261006/...",
   "wrapper_error": null
 }
