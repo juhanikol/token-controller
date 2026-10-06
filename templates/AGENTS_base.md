@@ -1,17 +1,11 @@
 <!-- ai-workflow-controller:start -->
-# AI Context Policy
-
-## Active Profile
-Before executing tasks, check `~/.config/ai-workflow/active_mode.env` for `AICONTEXT_PROFILE` and `AICONTEXT_RISK`. Correctness and safety strictly supersede token reduction.
-
 ## Execution Rules
-- **Terminal Execution:** Prefix terminal test, build, and package commands with `wx` (e.g., `wx npm test`).
-- **Tool Routing:** `wx` directly intercepts commands only for RTK. LeanCTX, Headroom, and MemStack are integration-driven; use them only when they are installed, exposed through the IDE or MCP, and enabled by `AICONTEXT_LEANCTX_MODE`, `AICONTEXT_HEADROOM_MODE`, `AICONTEXT_CODEBASE_INDEX`, or `AICONTEXT_MEMORY_LAYER` as applicable.
-- **Code Exploration:** If LeanCTX or Headroom MCP tools are available, prioritize them over standard `cat` or `grep` for codebase exploration. Use raw file reads when the active profile requires full fidelity or when those MCP tools are unavailable.
 
-## Behavioral Guardrails (Default & Tool-Free)
-- If no optional tool is available, use standard tools and apply these guardrails manually.
-- **`raw` / `security` / `db` / `release`:** 100% lossless. Read target files completely; preserve all SQL, auth code, CVE findings, and data warnings.
-- **`debug` / `test` / `cicd`:** Preserve the first failure, stack trace, line numbers, stderr, and exit code. Summarize repetitive passing noise.
-- **`code` / `architect` / `scope`:** Read target files being edited in full; summarize broad dependency trees and boilerplate.
+- Check `~/.config/ai-workflow/active_mode.env` before broad reads, tests, builds, or code changes.
+- Prefix test, build, install, and diagnostic commands with `wx`, for example `wx npm test`.
+- `wx` preserves raw stdout/stderr under `.ai-context/raw/`, records byte counts in `.ai-context/session.jsonl`, preserves exit codes, and may only compress successful allowlisted noisy output.
+- Direct commands such as `npm test` are not captured by Token Controller unless a separate hook or IDE integration forces `wx`.
+- For `raw`, `security`, `db`, `release`, and `migration`, treat context as lossless. Do not summarize away CVEs, secrets, SQL, migration warnings, artifact hashes, auth code, or first failures.
+- For `debug`, `test`, and `cicd`, preserve the first failure, stack trace, stderr, exit code, file paths, and line numbers. Summarize only repetitive success noise.
+- Optional tools such as LeanCTX, Headroom, RTK, Repomix, or code-memory MCPs may be used only when installed and appropriate. Their output must not override preserved raw evidence.
 <!-- ai-workflow-controller:end -->
