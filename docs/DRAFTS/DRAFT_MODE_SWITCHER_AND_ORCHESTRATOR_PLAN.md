@@ -131,6 +131,12 @@ But block Caveman automatically for:
 
 This should be handled by Token Controller policy, not trusted only to Caveman. Current Caveman docs show modes/config and default activation controls, but I would still implement your own profile-level gate because your project knows the engineering scenario.
 
+## Other output tools and DEFAULT action:
+
+Add ASD-STE100-inspired default output to the first IDE-agent prompt, but do not require strict certified ASD-STE100 compliance.
+
+ASD-STE100 is a controlled language for technical documentation with writing rules and controlled vocabulary. Official material also warns that AI text can look compliant without correctly applying the standard, so use “STE-inspired” wording unless checker is added.
+
 ## Small task / no-tool mode
 
 For tiny changes, tools may cost more tokens than they save. Caveman docs explicitly note the skill can be net-negative for one-line questions because the skill itself consumes input tokens.
@@ -206,3 +212,23 @@ These should be revised or removed after branching:
 | `README.md` | Mostly good and honest, but should later be updated from “policy + wx wrapper” toward “mode switcher/orchestrator + wx safety layer.”  |
 | `config/workflow_settings.json` | Already has external-tool concepts, but they are currently more like hints than real orchestration settings.  |
 | `docs/VALIDATION_MATRIX.md` | Keep it, but do not make it central yet. Use it later when at least two external tools are integrated. |
+
+## Should other tools be considered now?
+
+Yes, but mostly as candidates in the plan, not first implementation.
+
+| Tool | Take into account now? | Why |
+|---|---:|---|
+| **Aider repo map** | Yes, conceptually | Aider’s repo map selects important code structure to fit the token budget, which is directly relevant to architecture/codebase modes. ([aider.chat][1]) |
+| **ccusage** | Yes | Good for `workflow doctor` / user visibility. It tracks token/cost usage across many agent CLIs, including Claude Code, Codex, Copilot CLI, Gemini CLI, etc. ([GitHub][2]) |
+| **alexgreensh/token-optimizer** | Candidate | Claude-focused context hygiene/plugin idea. Add to research list, not core path yet. ([GitHub][3]) |
+| **Mibayy/token-savior** | Candidate, interesting | MCP server with structural code navigation, memory, hooks, and strong claimed benchmark numbers, but benchmark source/fixtures are not currently published, so do not treat it as proven yet. ([GitHub][4]) |
+| **Token Savior before LeanCTX/RTK?** | No | Interesting, but RTK/LeanCTX/Headroom/Caveman are still better first orchestration targets. |
+
+[1]: https://aider.chat/docs/repomap.html?utm_source=chatgpt.com "Repository map | aider"
+
+[2]: https://github.com/ccusage/ccusage/blob/main/docs/guide/index.md?utm_source=chatgpt.com "ccusage/docs/guide/index.md at main · ccusage/ccusage · GitHub"
+
+[3]: https://github.com/alexgreensh/token-optimizer?utm_source=chatgpt.com "GitHub - alexgreensh/token-optimizer: Find the ghost tokens. Fix them. Survive compaction. Avoid context quality decay. · GitHub"
+
+[4]: https://github.com/mibayy/token-savior?utm_source=chatgpt.com "GitHub - Mibayy/token-savior: MCP server that gets Claude to 97.9% (188/192) on a real coding benchmark at -80% active tokens and -83% wall time, vs 78.3% plain. Structural code navigation + persistent memory engine. Works with every MCP client. · GitHub"

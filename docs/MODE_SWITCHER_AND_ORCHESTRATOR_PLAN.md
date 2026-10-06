@@ -27,6 +27,12 @@ The intended solution is a hybrid architecture:
    - `wx` preserves protected evidence for high-risk modes.
    - `wx` may delegate to external tools later, but raw capture remains authoritative.
 
+4. **Deterministic `OUTPUT` safety layer**
+   - Use short, clear, technical English inspired by ASD-STE100 Simplified Technical English.
+   - Prefer short sentences, one instruction per sentence, concrete verbs, and unambiguous terms.
+   - Do not claim strict ASD-STE100 compliance. Do not use Caveman-style terse output for documentation, precise instructions, or user-facing release text.
+   - JSON setting: "default_output_style": "ste-inspired"
+
 4. **Environment and configuration audit**
    - Installation must check user-level settings, VS Code settings, WSL environment, shell configuration, agent instruction files, and existing tool configs.
    - The controller should warn about duplicated or conflicting policies before writing changes.
