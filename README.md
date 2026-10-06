@@ -297,7 +297,7 @@ The VS Code settings updater expects a strict JSON `settings.json`. It stops wit
 
 ## Optional context tools
 
-RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The `wx` capture layer does not invoke them; outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
+RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The `wx` capture layer invokes only RTK, and only as described below (a prototype); outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
 
 To inspect what is installed:
 
@@ -325,7 +325,7 @@ Compression is conservative. A successful command is compressed only when it mat
 Optional integrations may increase `wx` coverage, but are not installed automatically:
 
 * **Claude Code hook example:** [`integrations/claude-code/README.md`](integrations/claude-code/README.md) documents an opt-in `PreToolUse` hook. It blocks selected direct test, build, install, and Docker commands and tells the agent to retry as `wx <command>`; it does not silently mutate commands.
-* **RTK:** `wx` no longer delegates command execution to RTK. Any future RTK integration must occur after the wrapper has captured authoritative raw output.
+* **RTK (prototype):** if `rtk` is installed and the mode allows it, `wx` can run `rtk pipe -f <filter>` on the captured stdout of a successful `cargo test`, `pytest`, `go test`, `go build`, `tsc`, or `vitest`. RTK never runs your command. The raw output is saved first, and `wx` shows the RTK output only if it is smaller and keeps every error and warning line of the raw output. Otherwise it shows the raw output and records why in `.ai-context/session.jsonl`. It does not run `rtk init`. If RTK has installed its own command hook, `workflow doctor` warns, because hooked commands skip `wx` capture. Only byte counts are recorded, and no savings claim is made for RTK.
 * **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools. MemStack support is legacy and under review.
 * **Caveman:** The controller exports a compatibility variable, disabled by the current profiles; no automatic invocation is implemented.
 
@@ -400,6 +400,7 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 | `workflow reset-session` | Archive session metadata without deleting raw logs |
 | `workflow off`    | Select the off policy                                      |
 | `workflow help`   | List available commands and modes                        |
+| `workflow modes`  | List modes and aliases from the settings file (`--json` for tools) |
 | `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes `active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
 
 ## Repository layout
@@ -419,7 +420,7 @@ token-controller/
 │   ├── USER_SETTINGS_AND_AGENT_CONFIG.md
 │   ├── TECHNICAL_DEBT.md
 │   ├── VALIDATION_MATRIX.md
-│   ├── integrations/              # design notes: RTK.md, CAVEMAN.md (not implemented)
+│   ├── integrations/              # RTK.md (prototype in wx), CAVEMAN.md (design only)
 │   ├── DRAFTS/                    # non-directive drafts
 │   └── OLD/                       # archived material
 ├── extensions/

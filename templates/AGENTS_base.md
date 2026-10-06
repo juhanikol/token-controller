@@ -7,7 +7,7 @@ Use the active profile to decide whether context-saving tools should be used. Pr
 - RTK for noisy shell/build/test/install output.
 - LeanCTX for context-aware file, symbol, search, shell, and retrieval workflows.
 - Headroom for proxy/MCP compression and recoverable context.
-- Caveman only when output brevity is appropriate and not harmful.
+- Caveman (terse output) is off by default. Use it only if `AICONTEXT_CAVEMAN_MODE` in `active_mode.env` is `lite` or `full`. Never in docs, security, db, release, migration, or debug work. Never for first-failure evidence or for instructions a person must follow.
 
 Use `wx` for test/build/install/diagnostic commands when raw evidence and measurement are required. `wx` must preserve raw stdout/stderr and exit codes before any compression.
 

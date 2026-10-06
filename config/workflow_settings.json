@@ -37,7 +37,8 @@
       "db",
       "release",
       "migration",
-      "docs"
+      "docs",
+      "debug"
     ],
     "prompt_guards": [
       "detailed",
@@ -61,6 +62,10 @@
       "file-content"
     ],
     "opt_in_required": true
+  },
+  "aliases": {
+    "plan": "architect",
+    "ci": "cicd"
   },
   "modes": {
     "raw": {
@@ -350,6 +355,14 @@
       "npm test",
       "dotnet test",
       "cargo test"
-    ]
+    ],
+    "rtk_filters": {
+      "cargo test": "cargo-test",
+      "pytest": "pytest",
+      "go test": "go-test",
+      "go build": "go-build",
+      "tsc": "tsc",
+      "vitest": "vitest"
+    }
   }
 }

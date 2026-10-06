@@ -8,11 +8,38 @@ Token Controller is a mode switcher for AI context policy. You select the work m
 
 ## What it does
 
-- Shows `AI Context: <mode> · <risk>` in the status bar. A `critical` mode also gets a warning background.
+- Shows the active mode in the status bar, for example `AI Context: debug · high`.
 - Click the item, or run **AI Context: Switch Mode**, to select a mode. The list shows each mode's risk and description.
-- The mode list is read from `config/workflow_settings.json` beside the script. If that file cannot be read, a built-in list is used (temporary, see Limitations).
-- It runs `source <scriptPath> <mode>` in a child Bash. The script path and the mode are passed as arguments, never put into a command string. The CLI writes `~/.config/ai-workflow/active_mode.env`.
-- The extension watches that file. The status bar also updates when you switch from a terminal with `workflow <mode>`.
+- The status, the mode list, and the mode switch all come from the Token Controller CLI (`scripts/workflow-cli.sh`). The extension does not read the config file or `active_mode.env` itself, and it keeps no mode list of its own.
+
+### CLI calls
+
+| Purpose | Call |
+|---|---|
+| Show the active mode | `workflow-cli.sh status --json` |
+| Fill the mode picker | `workflow-cli.sh modes --json` |
+| Switch mode | `workflow-cli.sh <mode>` |
+
+The extension runs `bash <path>/workflow-cli.sh <arguments>` without a shell command string. The path and every argument are passed as separate arguments. A mode id must match `^[a-z0-9][a-z0-9-]*$` and be in the list the CLI just returned. The extension accepts only `schema_version` 1 from the CLI.
+
+### Status bar
+
+| Display | Meaning |
+|---|---|
+| `AI Context: code · normal` | Active mode and risk, from `active_mode.env` |
+| `AI Context: none` | No mode is set |
+| `… (shell)` | No mode file. The profile comes from shell variables |
+| `… $(warning)` and a warning background | `stale_shell`: the environment of VS Code has a different `AICONTEXT_PROFILE`. The tooltip explains. `wx` is not affected, because it uses the mode file |
+| warning background | The mode has `critical` risk |
+| `$(error) AI Context: unavailable` | The CLI could not be run. The tooltip gives the reason |
+
+The tooltip also shows the source and the tool modes (rtk, leanctx, headroom, caveman). The status refreshes when `active_mode.env` changes (so also when you run `workflow <mode>` in a terminal) and when the setting changes. The extension watches the file but does not parse it.
+
+### Mode picker
+
+The picker calls `modes --json` every time it opens, marks the current mode, and shows risk and description. If that call fails, the extension shows the error with **Open Settings** and **Show Log**. It does **not** fall back to a built-in list, because a stale list could offer modes the controller does not have.
+
+The "stale shell" warning only covers the environment of VS Code. Terminals that are already open can have their own old `AICONTEXT_*` variables. The extension cannot check them.
 
 ## Requirements
 
@@ -32,16 +59,39 @@ Token Controller is a mode switcher for AI context policy. You select the work m
 |---|---|---|
 | `tokenController.scriptPath` | `~/projects/token-controller/scripts/workflow.sh` | Path to `workflow.sh`. Absolute, or starting with `~/`. The file must be named `workflow.sh`. |
 
-The setting has `machine` scope. Set it in user settings (or remote machine settings in WSL). A value in a workspace's `.vscode/settings.json` is ignored, and the extension shows a warning once. This stops a cloned repository from pointing the extension at its own script.
+## Security model
 
-## Workspace Trust
+The extension runs a shell script (the Token Controller CLI) with your user rights. These rules decide which script that is and when it may run.
 
-The extension declares limited support for untrusted workspaces. Mode switching uses only the script path from your user settings, so it works in an untrusted workspace. The workspace cannot change which script runs or which mode ids are accepted.
+**How the script is found**
+1. `tokenController.scriptPath` is read from **user or machine settings only**. The setting has `machine` scope, so VS Code does not accept it from a workspace's `.vscode/settings.json`.
+2. At run time the extension also inspects the setting and **ignores the workspace and workspace-folder values**. It shows one warning if it finds one.
+3. The path must be absolute (or start with `~/`), name an existing `workflow.sh`, and have `workflow-cli.sh` in the same folder. If the setting is not set, the default `~/projects/token-controller/scripts/workflow.sh` is used.
+
+**Workspace Trust**
+- The extension declares limited support for untrusted workspaces, and `tokenController.scriptPath` is a restricted setting.
+- In an **untrusted workspace**, the extension does **not** run the controller if the script is inside an open workspace folder. It checks the path as given and its real path, so symlinks in either direction do not hide it. The status bar shows `AI Context: restricted`, and clicking it shows a warning with **Manage Workspace Trust**.
+- A controller **outside** the workspace still runs in an untrusted workspace, because the workspace cannot change it.
+- When you trust the workspace, the extension refreshes and runs the controller.
+- Example: opening the controller's own clone (the default path) as an untrusted workspace shows `restricted` until you trust it.
+
+**How processes are started**
+- Every call is `execFile('bash', [cliPath, ...args])`. There is no shell command string, no `exec`, and no `bash -c`.
+- The CLI path and each argument are separate arguments. A mode id must match `^[a-z0-9][a-z0-9-]*$` and be in the list the CLI just returned.
+- Tests scan the source for `exec(`, `spawn`, `shell:` options, and `-c` strings, and check the manifest scope.
+
+**Remaining risk**
+- The script you configure runs with your user rights, and so does every file it loads from its own folder. Keep the controller somewhere you trust. The extension does not verify the script's content.
+- In a **trusted** workspace the controller may be inside the workspace and runs. Trusting a workspace means trusting that code.
+- A user-level setting is trusted. Anything that can write your user settings can change the script.
+- The CLI inherits the environment of the VS Code extension host.
+- Workspace Trust and `inspect()` behavior were tested with unit tests of the path logic only. They were not tested in a real VS Code or WSL window.
 
 ## Limitations
 
-- The built-in fallback mode list is temporary and can drift from the config. A CLI command that lists modes is planned.
-- The mode list is read from the config next to `scriptPath`. A settings file chosen with `AICONTEXT_SETTINGS_FILE` in your shell is not used.
-- Mode switching needs Bash. It works on Linux and WSL. On Windows without WSL it shows an error. A Windows backend is planned but not implemented.
+- The extension needs a controller that has `workflow-cli.sh` with `status --json` and `modes --json`, and answers with `schema_version` 1. An older controller shows "unavailable".
+- The CLI needs `jq`. Without it, the status shows "unavailable" with the CLI message.
+- The CLI call needs Bash. It works on Linux and WSL. On Windows without WSL it shows an error. A Windows backend is planned but not implemented.
+- The environment of the extension host decides what the CLI sees. A settings file chosen with `AICONTEXT_SETTINGS_FILE` in your terminal is used only if VS Code was started with it.
 - A terminal that already ran `workflow <mode>` keeps its old variables until you switch again there.
 - The extension only selects policy. Agent compliance, external context tools, and `wx` capture are separate. See the main README.

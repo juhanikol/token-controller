@@ -1,6 +1,6 @@
 # RTK Integration Design
 
-Status: design only. `wx` does not call RTK today. Checked against RTK 0.42.4.
+Status: **prototype implemented** in `scripts/lib/wx-compress.sh` and `scripts/lib/wx.sh` (see "Prototype status" at the end). Checked against RTK 0.42.4.
 
 ## Goal
 
@@ -177,3 +177,30 @@ git diff --check
 4. Tests 1-15 with the fake RTK.
 5. `workflow doctor`: RTK hook warning.
 6. Scenario 16, then update `docs/VALIDATION_MATRIX.md` and the README claim, with measured bytes only.
+
+## Prototype status
+
+Implemented:
+- **Order:** `wx` runs the command, writes `stdout.raw` and `stderr.raw`, then applies the existing gates, then (only for a mapped command) RTK. Tests prove the raw file is complete when RTK starts (the fake RTK compares its stdin size with `stdout.raw`).
+- **Calls:** only `rtk --version` (3 s) and `rtk pipe -f <filter>` (default 10 s). Never `rtk init`. RTK's own stderr goes to `<run dir>/rtk.stderr` and is not shown. A test fails on any other RTK call.
+- **Filter map** (`command_policy.rtk_filters`, matched like the other command lists by argv prefix): `cargo test` -> `cargo-test`, `pytest` -> `pytest`, `go test` -> `go-test`, `go build` -> `go-build`, `tsc` -> `tsc`, `vitest` -> `vitest`. `python -m pytest`, `npx vitest`, and `npm test` are not mapped.
+- **Denied filters:** `grep rg find fd git-diff git-status git-log` are refused in code, even if a config maps them.
+- **When it runs:** exit code 0, profile not protected, command not in `preserve_raw_or_lossless`, `compress_shell` not off, `rtk_mode` not `off` (today: `code`, `rapid-prototype`, `test`, `test-full`, `debug`, `cicd`), stdout non-empty text.
+- **Fallback (raw output shown, exit code kept):** `rtk-not-installed`, `rtk-version-failed`, `rtk-nonzero-exit`, `rtk-timeout`, `rtk-empty-output`, `rtk-not-smaller`, `evidence-guard`. The rejected RTK output stays in `rtk.rejected.stdout`. A fallback does not try the built-in reducer. Mapped commands are not on the built-in allowlist anyway.
+- **Evidence guard v1:** these raw stdout lines must appear (trimmed, as plain text) in the RTK output: lines that start with `error:`, `error[`, `warning:`, `warning[` (any case) or `panic:`, and lines that contain `Traceback`, `FAILED`, `CVE-`, `: error`, `: warning`, `Warning:`, or ` error TS`. Names like `errors.py::test_a` do not match. A false alarm only shows raw output.
+- **`session.jsonl` (additive, `schema_version` stays 2):** flat fields `compressor` (`rtk`, `builtin/exact-repeat-v1`, or `null` when the output is raw), `compressor_version`, `filter` (the RTK filter that was run or tried), `fallback_reason`. `output_policy` is `compress-rtk-v1` or `raw-rtk-fallback`. A fallback has `compressor: null`, so a run is never labelled RTK-compressed unless the RTK output was shown. The built-in reducer now fills `compressor` and `compressor_version` (`1`) too. This replaces the nested `compressor` object sketched above.
+- **Test hooks:** `AICONTEXT_RTK_BIN` (path or name, default `rtk`) and `AICONTEXT_RTK_TIMEOUT` (seconds, default 10). They are not policy: `wx` keeps them when it drops stale `AICONTEXT_*` variables.
+
+Observed with real RTK 0.42.4 (test run on this machine):
+- For a pytest-like fixture without a warning line, RTK printed one line (`Pytest: N passed`, no trailing newline) and the output was accepted.
+- With a `warning:` line in the raw output, RTK's pytest filter dropped it. The evidence guard rejected the output and `wx` showed raw. So for noisy runs that include warnings, the guard decides, and the saving is lost on purpose.
+- `rtk pipe` created no files in a scratch `HOME` (checked once, not a guarantee for other versions).
+
+Not done / open:
+- `python -m pytest`, `npx` forms, and `npm test` are not mapped. Adding keys needs a fixture each.
+- No `log` filter for install and build logs.
+- The guard patterns are v1 and need tuning on real runs of each tool. Warning formats that do not match a pattern are not protected. Example: `pytest` warning summaries that do not contain `Warning:`.
+- Only byte counts are recorded. No tokenizer, no savings claim.
+- `docs/VALIDATION_MATRIX.md` is not updated (one external tool only).
+- No Windows path handling. `timeout`, `stat -c`, and `awk` are GNU/Linux tools.
+- If RTK's own hook is installed, hooked commands bypass `wx`. Doctor warns (`policy.rtk_hook`). `wx` cannot detect it per command.

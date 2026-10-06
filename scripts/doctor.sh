@@ -380,6 +380,13 @@ _CAVE_STATE="$_CLAUDE_DIR/.caveman-active"
 _TC_CAVE_MODE=""
 [ -f "$_ACTIVE_ENV_FILE" ] && _TC_CAVE_MODE="$(sed -n 's/^export AICONTEXT_CAVEMAN_MODE="\(.*\)"$/\1/p' "$_ACTIVE_ENV_FILE" | head -n 1)"
 [ -n "$_TC_CAVE_MODE" ] || _TC_CAVE_MODE=off
+_TC_CAVE_MAX=""
+_TC_CAVE_REQ=""
+if [ -f "$_ACTIVE_ENV_FILE" ]; then
+  _TC_CAVE_MAX="$(sed -n 's/^export AICONTEXT_CAVEMAN_MAX="\(.*\)"$/\1/p' "$_ACTIVE_ENV_FILE" | head -n 1)"
+  _TC_CAVE_REQ="$(sed -n 's/^export AICONTEXT_CAVEMAN_REQUESTED="\(.*\)"$/\1/p' "$_ACTIVE_ENV_FILE" | head -n 1)"
+fi
+_CAVE_OPT_IN_HINT="Opt in for one activation with: AICONTEXT_CAVEMAN_REQUEST=lite workflow ${_PROFILE:-<mode>}"
 
 caveman_rank() {
   case "$1" in
@@ -393,7 +400,7 @@ caveman_rank() {
 # Same hard-blocked set as workflow.sh. Config may add profiles.
 caveman_hard_blocked() {
   case "$1" in
-    raw|security|db|release|migration|docs) return 0 ;;
+    raw|security|db|release|migration|docs|debug) return 0 ;;
   esac
   [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1 &&
     jq -e --arg m "$1" '(.caveman_policy.hard_blocked_profiles // []) | index($m) != null' "$_SETTINGS_FILE" >/dev/null 2>&1
@@ -419,7 +426,7 @@ if [ -e "$_CAVE_STATE" ]; then
         elif [ "$_cave_level" = ultra ] || [ "${_cave_level#wenyan}" != "$_cave_level" ]; then
           add Caveman warn caveman.unsupported_level "Caveman level '$_cave_level' is not supported by Token Controller." "$_cave_path" "Use lite or full, or turn Caveman off. $_cave_hint"
         elif [ "$_TC_CAVE_MODE" = off ]; then
-          add Caveman warn caveman.active_no_opt_in "Caveman is active (level $_cave_level), but Token Controller has no Caveman opt-in for mode '${_PROFILE:-none}'." "$_cave_path" "$_cave_hint"
+          add Caveman warn caveman.active_no_opt_in "Caveman is active (level $_cave_level), but Token Controller has no Caveman opt-in for mode '${_PROFILE:-none}'." "$_cave_path" "$_cave_hint $_CAVE_OPT_IN_HINT (not allowed in debug, docs, security, db, release, migration)."
         elif [ "$(caveman_rank "$_cave_level")" -gt "$(caveman_rank "$_TC_CAVE_MODE")" ]; then
           add Caveman warn caveman.above_policy "Caveman level '$_cave_level' is above the Token Controller level '$_TC_CAVE_MODE'." "$_cave_path" "$_cave_hint"
         else
@@ -428,6 +435,11 @@ if [ -e "$_CAVE_STATE" ]; then
         ;;
     esac
   fi
+fi
+
+# Token Controller's own Caveman state, read from the active mode file. Reported when that file has it.
+if [ -f "$_ACTIVE_ENV_FILE" ] && [ -n "$_TC_CAVE_MAX" ]; then
+  add Caveman ok caveman.policy "Token Controller Caveman policy: level $_TC_CAVE_MODE, requested ${_TC_CAVE_REQ:-off}, limit $_TC_CAVE_MAX (mode '${_PROFILE:-none}'). Off by default." "$(pl "$_ACTIVE_ENV_FILE" "")"
 fi
 
 # ---------- side effect note ----------

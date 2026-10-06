@@ -1,6 +1,6 @@
 # Caveman Return Policy
 
-Status: design. Only the config keys (`caveman_mode`, `caveman_max`, `caveman_shrink`, `caveman_policy`) and the state exports (`AICONTEXT_CAVEMAN_MODE`, `AICONTEXT_CAVEMAN_MAX`, `AICONTEXT_CAVEMAN_SHRINK`) exist. All default to `off`. Nothing calls Caveman, and no prompt guard or opt-in is implemented.
+Status: **policy state implemented** (see "Implemented policy state" at the end): config keys, the opt-in variable `AICONTEXT_CAVEMAN_REQUEST`, hard blocks, state exports, and doctor checks. Caveman is off by default. Nothing calls Caveman. Prompt guards, shrink/proxy, and any activation of the plugin are not implemented.
 
 ## What Caveman is (as far as verified)
 
@@ -25,7 +25,7 @@ Caveman is **off by default in every mode**. It turns on only when the user asks
 
 Deterministic, first match wins. The result is the effective level.
 
-1. Profile is hard-blocked → `off`. Hard-blocked: `raw`, `security`, `db`, `release`, `migration`, `docs`. This is enforced in code, not only in config.
+1. Profile is hard-blocked → `off`. Hard-blocked: `raw`, `security`, `db`, `release`, `migration`, `docs`, `debug`. This is enforced in code, not only in config.
 2. Mode is `off`, `micro`, or `snippet` → `off`. The skill costs more than it saves on small tasks.
 3. No user opt-in → `off`.
 4. Otherwise: the lower of the requested level and the mode's `caveman_max`.
@@ -109,7 +109,7 @@ Compatibility:
 - Keep `CAVEMAN_OUTPUT` and `AICONTEXT_CAVEMAN_OUTPUT`.
 - Add exports `AICONTEXT_CAVEMAN_MODE` (effective level) and `AICONTEXT_CAVEMAN_MAX`.
 - If `caveman_mode` and the legacy `caveman_output` disagree, `caveman_mode` wins.
-- Opt-in input: an env var read at mode switch, for example `AICONTEXT_CAVEMAN_REQUEST=lite workflow code`. The extension may add a toggle later. Name and shape are open.
+- Opt-in input: `AICONTEXT_CAVEMAN_REQUEST=off|lite|full`, read at mode switch (decided, see "Implemented policy state"). The extension may add a toggle later.
 - Output style is one value at a time. When Caveman is effective, the style is Caveman. Otherwise it is `ste-inspired`. Caveman drops articles. STE does not. Do not mix them.
 
 ## Mode mapping
@@ -121,7 +121,8 @@ Compatibility:
 | `raw`, `security`, `db`, `release`, `migration` | `off` (hard block) | Protected evidence |
 | `docs` | `off` (hard block) | Documentation |
 | `scope`, `architect`, `decisions`, `review` | `off` | Precise, human-facing prose and findings |
-| `debug`, `test` | `off` | First-failure analysis must be exact |
+| `debug` | `off` (hard block) | First-failure evidence and its analysis must be exact |
+| `test` | `off` | First-failure analysis must be exact |
 | `data-analysis`, `perf` | `off` | Numbers must be exact |
 | `agent` | `off` | Instruction governance |
 | `micro`, `snippet`, `off` | `off` | Skill cost is larger than the gain |
@@ -130,7 +131,7 @@ Compatibility:
 | `test-full` | `lite` | Long runs of repetitive status |
 | `rapid-prototype` | `full` | Highest allowed. High volume, fast iteration |
 
-Only four modes allow Caveman. Everything else needs a config change to allow it, and the hard-blocked set cannot be allowed by config.
+Only four modes allow Caveman. Everything else needs a config change to allow it, and the hard-blocked set (`raw`, `security`, `db`, `release`, `migration`, `docs`, `debug`, plus `micro`, `snippet`, `off`) cannot be allowed by config.
 
 ## Conflicts
 
@@ -194,3 +195,45 @@ Until then the README says only that Token Controller "manages context policy" f
 5. Agent instruction text and the optional prompt-guard hook example.
 6. Measurement run, then the validation matrix entry.
 7. Shrink/proxy: read upstream docs first. Then a separate design.
+
+## Implemented policy state
+
+Values: `off`, `lite`, `full`. `ultra` and `wenyan` are not supported anywhere: a request, a config level, or a cap with another value becomes `off` with a warning. Default is `off` in every mode.
+
+**Opt-in shape (decided).** `AICONTEXT_CAVEMAN_REQUEST=off|lite|full`, read when a mode is activated:
+
+```bash
+AICONTEXT_CAVEMAN_REQUEST=lite workflow code
+AICONTEXT_CAVEMAN_REQUEST=lite scripts/workflow-cli.sh code
+```
+
+- It applies to **that activation only**. It is not saved. The next activation without it uses the config level (default `off`). A user who exports the variable in their shell opts in on every activation.
+- It replaces the config level for that activation, including `off`. A non-`off` `caveman_mode` in config is a standing opt-in.
+- The effective level is the lower of the request and the mode's `caveman_max`. The request cannot raise a cap.
+- Blocked modes ignore it. A notice says why (`ignored. Mode 'security' does not allow Caveman`, or `lowered to 'lite'`). Activation still succeeds.
+- Exported state (all in `active_mode.env`): `AICONTEXT_CAVEMAN_REQUESTED` (validated request), `AICONTEXT_CAVEMAN_MODE` (effective), `AICONTEXT_CAVEMAN_MAX` (cap), `AICONTEXT_CAVEMAN_SHRINK`, and the derived `AICONTEXT_CAVEMAN_OUTPUT`. `status --json` shows `caveman_requested`, `caveman_mode`, `caveman_max`, `caveman_output`. `modes --json` shows the config policy (no request).
+
+**Hard-blocked** (code and config): `raw`, `security`, `db`, `release`, `migration`, `docs`, `debug`. No-Caveman by code too: `micro`, `snippet`, `off`. Config can add profiles (`caveman_policy.hard_blocked_profiles`) but cannot remove these. `debug` is the first-failure evidence mode. A failing `test`, `test-full`, or `cicd` run is covered by the template rule, which is policy text only.
+
+**Doctor** reads `${CLAUDE_CONFIG_DIR:-~/.claude}/.caveman-active`:
+- `error`: active in a hard-blocked profile.
+- `warn`: active level `ultra` or `wenyan*`; active with no Token Controller opt-in (the message shows the opt-in shape); active above the Token Controller level.
+- `ok`: active within policy, or inactive. A `caveman.policy` line shows level, request, and limit.
+- Doctor never edits the state file.
+
+**Template** (`templates/AGENTS_base.md`): Caveman is off by default, use it only if `AICONTEXT_CAVEMAN_MODE` is `lite` or `full`, never in the blocked work, never for first-failure evidence or instructions a person must follow. This is policy text and depends on agent compliance.
+
+Not implemented: prompt guards, activating or deactivating the plugin from Token Controller, shrink/proxy (`caveman_shrink` stays `off` and has no effect), any savings claim.
+
+## Upstream questions (not verified from official docs)
+
+Facts below come from skill files installed on this machine, not from official documentation.
+
+1. **State file.** Where is `.caveman-active` written (plugin hook?), when is it cleared, and what exactly does it hold (only the level, or more)? Does "stop caveman" remove it or write `off`? Doctor assumes a level name.
+2. **Level names.** The installed `caveman` skill says `/caveman ultra` and `/caveman wenyan` hand over to separate skills (`ultracave`, `megacave`). Are the state values `ultra` and `wenyan`, or something like `wenyan-lite`? Doctor treats `ultra` and any `wenyan*` as unsupported.
+3. **Hook behavior.** The skill refers to a hook that reports `Caveman mode: <mode>`. Does the plugin turn itself on at session start (default `full`)? That would bypass Token Controller's opt-in. Doctor can only warn.
+4. **`caveman-compress`.** It overwrites memory files such as `CLAUDE.md` with a compressed version and keeps a backup elsewhere. Would it damage the Token Controller managed block (`<!-- ai-workflow-controller:start/end -->`) or the policy text in `AGENTS.md`? Doctor does not check this.
+5. **`caveman-setup` and the "Caveman gateway".** It is described as a byte-preserving LLM proxy that measures requests and cost. Where does the data go? Is it a hosted service? This must be answered before any shrink/proxy design, and before Token Controller mentions it.
+6. **Shrink, proxy, stats.** Their commands and behavior are not documented in the quickstart. No design until upstream docs are read.
+7. **Auto-clarity.** Does Caveman switch itself off for security warnings or destructive steps by itself? Token Controller does not rely on it.
+8. **Measured savings.** There is no agreed number. A fixed prompt set with output-token counts is still needed.

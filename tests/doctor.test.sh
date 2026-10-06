@@ -104,13 +104,23 @@ rm -f "$_CAVE"
 [ -z "$(bash "$_DOCTOR" --json --project "$_PROJECT" | jq -r '.findings[] | select(.id | startswith("caveman."))')" ] || fail "no state file should give no caveman finding"
 [ "$(cave security full)" = "caveman.active_blocked_profile:error" ] || fail "caveman in security must be error: $(cave security full)"
 [ "$(cave docs lite)" = "caveman.active_blocked_profile:error" ] || fail "caveman in docs must be error"
+# Only the list in the code can block these: the config list is removed.
+jq 'del(.caveman_policy.hard_blocked_profiles)' "$_REPO_ROOT/config/workflow_settings.json" > "$_TEST_ROOT/no-block-list.json"
+for _BLOCKED in security docs raw db release migration debug; do
+  [ "$(AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/no-block-list.json" cave "$_BLOCKED" lite)" = "caveman.active_blocked_profile:error" ] || fail "caveman in $_BLOCKED must be error (code list)"
+done
 [ "$(cave code full)" = "caveman.active_no_opt_in:warn" ] || fail "caveman without opt-in must be warn"
+bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "caveman.active_no_opt_in") | .suggestion] | .[0] | contains("AICONTEXT_CAVEMAN_REQUEST=lite workflow code")' >/dev/null || fail "no-opt-in warning should show the opt-in shape"
 [ "$(cave code ultra)" = "caveman.unsupported_level:warn" ] || fail "ultra must be warn"
 [ "$(cave code wenyan-full)" = "caveman.unsupported_level:warn" ] || fail "wenyan must be warn"
 [ "$(cave code full lite)" = "caveman.above_policy:warn" ] || fail "level above policy must be warn"
 [ "$(cave code lite lite)" = "caveman.active_ok:ok" ] || fail "matching level should be ok"
 [ "$(cave code off)" = "caveman.inactive:ok" ] || fail "off level should be inactive"
 [ "$(cave code 'x;y')" = "caveman.level_unknown:warn" ] || fail "odd level should be warn"
+# The policy line shows level, request, and limit from the active mode file.
+printf 'export AICONTEXT_PROFILE="code"\nexport AICONTEXT_CAVEMAN_REQUESTED="full"\nexport AICONTEXT_CAVEMAN_MODE="lite"\nexport AICONTEXT_CAVEMAN_MAX="lite"\n' > "$AICONTEXT_CONFIG_DIR/active_mode.env"
+rm -f "$_CAVE"
+bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "caveman.policy")] | length == 1 and (.[0].message | contains("level lite") and contains("requested full") and contains("limit lite"))' >/dev/null || fail "caveman policy line is missing or wrong"
 bash "$_DOCTOR" --project "$_PROJECT" >/dev/null; [ "$?" -eq 0 ] || fail "caveman warn must not change exit code"
 cave security full >/dev/null; bash "$_DOCTOR" --json --project "$_PROJECT" >/dev/null; [ "$?" -eq 1 ] || fail "caveman error should exit 1"
 [ "$(cat "$_CAVE")" = "full" ] || fail "doctor changed the caveman state file"

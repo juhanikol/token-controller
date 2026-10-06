@@ -224,7 +224,7 @@ Schema (`schema_version` 1). Strings are `null` when not set. Booleans are `true
 
 Still open:
 * The extension does not call `status --json` yet. It still parses `active_mode.env` by regex.
-* No `modes --json`, `set --json`, or `report --json` (see `docs/EXTENSION_ALIGNMENT_DESIGN.md`).
+* No `set --json` or `report --json` (see `docs/EXTENSION_ALIGNMENT_DESIGN.md`). `modes --json` exists (see below).
 * `status --json` does not include `description`, `caveman_shrink`, or the other exported variables. Add fields only with a `schema_version` rule: new fields are additive, removed or renamed fields bump the version.
 
 ## Non-sourced entry point (2026-10-07)
@@ -245,3 +245,116 @@ Still open:
 * No `version`, `modes --json`, or `report --json` commands. Compatibility between extension and CLI versions is undecided.
 * The executable bit must survive checkout and packaging. Check it when the CLI is bundled or installed on Windows/WSL paths such as `/mnt/c`.
 * `status` (text) through the CLI shows the variables of the CLI's own process, which inherits the caller's exported variables. Use `status --json` for controller state.
+
+## `workflow modes --json` (2026-10-07)
+
+Fixed: tools can list modes from the settings file instead of keeping their own copy. Works as `workflow modes`, `workflow modes --json`, and `scripts/workflow-cli.sh modes --json`. Needs `jq`. Unknown option returns 2. Missing settings file returns 1.
+
+Schema (`schema_version` 1):
+
+```json
+{
+  "schema_version": 1,
+  "modes": [{
+    "name": "micro", "description": "Very small task. ...", "risk": "normal",
+    "compress_shell": "off", "compress_files": "off-for-target",
+    "rtk_mode": "off", "leanctx_mode": "off", "headroom_mode": "off",
+    "caveman_mode": "off", "caveman_max": "off", "caveman_output": false,
+    "output_style": "ste-inspired"
+  }],
+  "aliases": [{"alias": "plan", "target": "architect"}, {"alias": "ci", "target": "cicd"}]
+}
+```
+
+* Modes are in config order. `description` is `null` if a mode has none (none are missing today: 22 modes, 22 descriptions).
+* Defaults match activation: `risk` `normal`, `compress_*` `safe`, tool modes `off`.
+* `caveman_mode` is the **effective** level and `caveman_max` the cap, with the same rules as activation (hard-blocked profiles are `off`, levels other than `off`, `lite`, `full` become `off`). `caveman_output` is `caveman_mode != "off"`.
+* Aliases are now a top-level `aliases` object in `config/workflow_settings.json` (`plan` to `architect`, `ci` to `cicd`). `workflow.sh` resolves aliases from it. If a settings file has no `aliases` key, the two built-in aliases still work and are still listed.
+* `workflow modes` (text) prints name, risk, description, and the alias line.
+* Tests compare the list with the variables each mode exports, on the repository config and on a config that requests Caveman levels in blocked and capped modes. A mutation of the blocked list makes the test fail.
+
+Still open:
+* ~~The extension still keeps its own parse of the config and a fallback list.~~ Done, see "Extension uses the CLI JSON interface".
+* The `workflow help` mode list and the `Aliases:` lines are still hand-written. They can be generated from `modes --json`.
+* The Caveman effective-level rules exist twice (activation in bash, listing in jq). The parity test guards them. A shared jq function would remove the copy.
+* Mode order is config order (`raw` first, `off` last). The extension decides how to sort or group.
+* No `version` command and no schema compatibility rule yet.
+
+## Extension uses the CLI JSON interface (2026-10-07)
+
+Fixed in `extensions/vscode` (still not released; the tracked `.vsix` is 1.1.0):
+* **One adapter:** `src/cli.ts` is the only code that runs the CLI. It calls `bash <cliPath> <args...>` with `execFile` (no shell string). The CLI is `workflow-cli.sh` in the folder of the configured `workflow.sh`.
+* **CLI calls:** `status --json`, `modes --json`, `<mode>`. Nothing else.
+* **No regex parsing of `active_mode.env`.** The extension watches the file and calls `status --json` when it changes. It does not read the file.
+* **No hard-coded mode list.** The built-in fallback list and the config reader are deleted. If `modes --json` fails, the picker shows the error (Open Settings, Show Log) and does not fall back.
+* **Contract checks:** only `schema_version` 1 is accepted. Output is validated (`source`, `stale_shell`, ids, risk). Ids shown in the UI must be plain ids. A mode id sent back must be in the list the CLI just returned.
+* **Status bar:** profile, risk, `(shell)` for `shell_fallback`, a warning icon and background for `stale_shell`, a warning background for `critical` risk, an error state when the CLI is unavailable. The tooltip shows source and tool modes.
+* **Tests:** 12 adapter tests (plain mocha). Three run against the real `workflow-cli.sh` with an isolated config dir: `modes --json` matches the settings file, `setMode` writes the mode file and `status` follows it (and reports a stale shell), an unknown mode fails without changing the mode.
+
+Still open:
+* **`stale_shell` means the environment of VS Code (the extension host), not a terminal.** Already-open terminals can have their own old `AICONTEXT_*` variables. The extension cannot inspect them. The tooltip says so.
+* **Windows/WSL:** `runCli` needs Bash and returns an error on `win32`. There is no backend interface or `wsl.exe` path translation. No Windows CI job. A local Windows window with a WSL folder is not handled. Environment checks (`remoteName`, distro) from the design doc are not built.
+* **Report summary tooltip, doctor summary, tool availability** are not shown yet (`doctor --json` and `report --json` are not called; `report --json` does not exist).
+* **No `version` command.** Compatibility is only `schema_version`. A newer controller with a new schema shows "unavailable".
+* **`vscode-test` was not run** (needs a VS Code download). The status bar, picker, and watcher code in `extension.ts` has no automated test. Only the adapter does.
+* **Tracked `.vsix` is stale.** Rebuild and bump the version when you release.
+* **Missing `jq` or an old controller** shows "unavailable". There is no install help in the UI.
+
+## Extension configuration and trust hardening (2026-10-07)
+
+The earlier fix closed the main hole (workspace settings could set the script path). One gap was left: the user-level path can still point **inside** the open workspace, for example the default path when the workspace is the controller clone. In an untrusted workspace the workspace would then control the code that runs.
+
+Fixed in `extensions/vscode`:
+* **Workspace Trust check:** in an untrusted workspace the extension does not run a controller whose `workflow.sh` or `workflow-cli.sh` is inside any `file:` workspace folder. The check (`src/trust.ts`) tests the path as given and its real path, in both symlink directions, and handles prefix folders (`ws` vs `ws2`). The status bar shows `AI Context: restricted`. The picker shows a warning with **Manage Workspace Trust**. The extension refreshes when trust is granted or the folders change.
+* A controller outside the workspace still runs in an untrusted workspace.
+* The manifest description for `untrustedWorkspaces` now states this exact behavior.
+* Resolution is documented: user or machine setting only (`machine` scope), workspace and workspace-folder values ignored at run time with one warning, then `workflow-cli.sh` beside `workflow.sh`.
+* Tests (plain mocha): 7 path-logic cases, a manifest check (`machine` scope, restricted configuration, `limited` support), and a source scan that fails on `exec(`, `spawn`, `shell:` options, or `-c` strings. I checked that the scan fails when an `exec(` call is added.
+* README has a "Security model" section.
+
+Still open:
+* **The configured script is trusted code.** It and every file in its folder run with user rights. The extension does not verify content, owner, or permissions of the controller.
+* **A trusted workspace can contain the controller.** Trusting the workspace trusts that code.
+* **User settings are trusted.** Anything that can write them can change the script.
+* **The CLI inherits the extension host environment.** `AICONTEXT_SETTINGS_FILE` or `PATH` set there change what runs.
+* **Not tested in a real VS Code or WSL window:** the manifest `scope`, `inspect()` values for remote machine settings, `isTrusted`, `onDidGrantWorkspaceTrust`, and the status bar text. `vscode-test` was not run.
+* **Multi-root and virtual workspaces:** only `file:` folders are checked. Remote `vscode-vfs` folders cannot contain a local script, but this is not tested.
+* **Windows paths:** the path check is written for POSIX paths. A Windows backend needs its own check (case-insensitive paths, drive letters, `wsl.exe` path translation).
+
+## RTK post-capture prototype (2026-10-07)
+
+Fixed / added (details in `docs/integrations/RTK.md`, "Prototype status"):
+* `wx` can run `rtk pipe -f <filter>` after raw capture for six mapped commands. Raw files are complete first (tested). Only `--version` and `pipe -f` are ever called, never `rtk init` (tested).
+* Gates: protected profiles and commands, nonzero exit (so first and later failures), `compress_shell` off, `rtk_mode` off, and denied filters (`grep rg find fd git-*`) all keep RTK out. Tested with the fake RTK logging every call.
+* Fallbacks with recorded reasons: not installed, version failed, nonzero exit, timeout, empty, not smaller, evidence guard. Raw output and exit code are kept.
+* `session.jsonl` has `compressor`, `compressor_version`, `filter`, `fallback_reason`. A run is labelled RTK only when RTK output was shown.
+* Tests: fake RTK (`tests/fixtures/bin/rtk`) and noisy command fixtures in `tests/wx-wrapper.test.sh`; a real-RTK check runs when `rtk` is installed. Mutation checks (guard disabled, deny list removed, not-smaller check removed, nonzero gate removed) each make the tests fail.
+* Doctor already warns about an RTK hook or setup (`policy.rtk_hook`) and never runs `rtk init`.
+
+Still open (RTK):
+* **Guard tuning:** v1 patterns. Real RTK 0.42.4 drops `warning:` lines from pytest-like output, so the guard falls back in that case. Needs fixtures from real tool output.
+* **Coverage:** `python -m pytest`, `npx` forms, `npm test`, `dotnet test`, install/build logs (`log` filter) are not mapped.
+* **Hook bypass:** commands rewritten by an RTK hook skip `wx`. Doctor warns only.
+* **Measurement:** bytes only. `docs/VALIDATION_MATRIX.md` and any README savings claim wait for more data and a second tool.
+* **Env knobs** `AICONTEXT_RTK_BIN` and `AICONTEXT_RTK_TIMEOUT` are not in `workflow doctor` or the README.
+* **Tracking:** `rtk pipe` wrote no files in one scratch-`HOME` check. `rtk --version` was not checked for side effects.
+* **Windows:** GNU tools (`timeout`, `stat -c`, `awk`) assumed.
+
+## Caveman policy state (2026-10-07)
+
+Fixed (state only, Caveman is never run):
+* **Opt-in:** `AICONTEXT_CAVEMAN_REQUEST=off|lite|full`, per activation, not saved. Shape and rules in `docs/integrations/CAVEMAN.md` ("Implemented policy state"). `workflow.sh` and `workflow-cli.sh` both honor it.
+* **Values:** `off`, `lite`, `full`. `ultra` and `wenyan` (or any other value) become `off` with a warning. Default `off`.
+* **Cap:** effective level is the lower of the request (or config level) and the mode's `caveman_max`. Notices say when a request is ignored or lowered.
+* **Hard blocks in code and config:** `raw`, `security`, `db`, `release`, `migration`, `docs`, `debug` (new: `debug`), plus `micro`, `snippet`, `off`. A test removes the config list and checks that the code list alone blocks them, in activation and in `modes --json`.
+* **State:** `AICONTEXT_CAVEMAN_REQUESTED` is exported and in `active_mode.env`. `status --json` has `caveman_requested`.
+* **Doctor:** reads `.caveman-active`. Error in hard-blocked profiles (now includes `debug`), warn for no opt-in (the warning shows the opt-in shape), above-policy level, and `ultra`/`wenyan`. A `caveman.policy` line shows level, request, and limit. Doctor never edits the file.
+* **Template:** Caveman off by default, use only if `AICONTEXT_CAVEMAN_MODE` is `lite` or `full`, blocked work and first-failure evidence excluded.
+* **Tests:** default off in all 22 modes, request values, capping, blocked modes, unsupported values, per-activation scope, config opt-in, request overriding config, hard blocks without the config list, doctor cases.
+
+Still open:
+* **Not implemented:** prompt guards, shrink/proxy (`caveman_shrink` has no effect), activating or deactivating the plugin, a per-turn "first failure" rule (only `debug` is blocked in code; failing `test`/`cicd` runs rely on template text).
+* **Upstream questions** (state file format and lifetime, level names, session-start hook, `caveman-compress` vs the managed block, the Caveman gateway data flow, shrink/proxy/stats, auto-clarity): listed in `docs/integrations/CAVEMAN.md`.
+* **Exported `AICONTEXT_CAVEMAN_REQUEST` in a shell profile** opts in on every activation. Doctor does not check for it.
+* The Caveman level rules still exist twice (bash and jq). The parity test guards them. The blocked list exists in four places (`workflow.sh` twice, `doctor.sh`, config). Tests cover the code lists.
+* Extension: no Caveman toggle, and it does not show `caveman_requested`.

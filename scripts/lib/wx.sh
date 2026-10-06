@@ -30,21 +30,22 @@ _wx_apply_env_file() {
       _WX_NAME="${BASH_REMATCH[1]}"
       _WX_VALUE="${BASH_REMATCH[2]}"
       case "$_WX_NAME" in
-        AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE) ;;
+        AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE|AICONTEXT_RTK_BIN|AICONTEXT_RTK_TIMEOUT) ;;
         *) export "$_WX_NAME=$_WX_VALUE" ;;
       esac
     fi
   done < "$_WX_FILE"
 }
 
-# Drop every AICONTEXT_* policy variable. Path and override settings stay. Call it only in a subshell
+# Drop every AICONTEXT_* policy variable. Path and override settings stay (config paths, the shell-state
+# switch, and AICONTEXT_RTK_BIN / AICONTEXT_RTK_TIMEOUT, which are tool settings and not policy). Call it only in a subshell
 # or inside wx, never in the caller's own shell.
 _wx_unset_policy_state() {
   local _WX_NAME
 
   while IFS= read -r _WX_NAME; do
     case "$_WX_NAME" in
-      AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE) ;;
+      AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE|AICONTEXT_RTK_BIN|AICONTEXT_RTK_TIMEOUT) ;;
       *) unset "$_WX_NAME" ;;
     esac
   done < <(compgen -A variable AICONTEXT_)
@@ -114,6 +115,10 @@ workflow_run() (
   local _WX_VISIBLE_STDOUT_BYTES
   local _WX_VISIBLE_STDERR_BYTES
   local _WX_OUTPUT_POLICY
+  local _WX_COMPRESSOR=""
+  local _WX_COMPRESSOR_VERSION=""
+  local _WX_FILTER=""
+  local _WX_FALLBACK_REASON=""
   local _WX_POLICY_AVAILABLE=true
 
   _wx_load_policy_state "$_WX_ACTIVE_ENV_FILE"
@@ -174,6 +179,20 @@ workflow_run() (
     _WX_OUTPUT_POLICY='raw-policy-unavailable'
   fi
 
+  # RTK runs only now, after stdout.raw and stderr.raw are complete on disk. The RTK output is shown only if
+  # it is smaller and the evidence guard passes. Otherwise the raw output is shown and the reason is recorded.
+  if [ "$_WX_OUTPUT_POLICY" = 'compress-rtk-v1' ]; then
+    if [ -s "$_WX_STDOUT_FILE" ] && LC_ALL=C grep -Iq . "$_WX_STDOUT_FILE"; then
+      if _wx_try_rtk "$_WX_STDOUT_FILE" "$_WX_RUN_DIR" "$(_wx_rtk_filter_for_command "$_WX_SETTINGS_FILE" "$@")"; then
+        _WX_VISIBLE_STDOUT_FILE="$_WX_RUN_DIR/stdout.visible"
+      else
+        _WX_OUTPUT_POLICY='raw-rtk-fallback'
+      fi
+    else
+      _WX_OUTPUT_POLICY='raw-empty-or-binary-output'
+    fi
+  fi
+
   if [ "$_WX_OUTPUT_POLICY" = 'compress-exact-repeats-v1' ]; then
     if [ -s "$_WX_STDOUT_FILE" ] && LC_ALL=C grep -Iq . "$_WX_STDOUT_FILE"; then
       _WX_VISIBLE_STDOUT_FILE="$_WX_RUN_DIR/stdout.visible"
@@ -192,6 +211,11 @@ workflow_run() (
     fi
   fi
 
+  if [ "$_WX_OUTPUT_POLICY" = 'compress-exact-repeats-v1' ]; then
+    _WX_COMPRESSOR='builtin/exact-repeat-v1'
+    _WX_COMPRESSOR_VERSION='1'
+  fi
+
   _WX_VISIBLE_STDOUT_BYTES="$(stat -c '%s' "$_WX_VISIBLE_STDOUT_FILE")"
   _WX_VISIBLE_STDERR_BYTES="$(stat -c '%s' "$_WX_VISIBLE_STDERR_FILE")"
   _WX_COMMAND_JSON="$(jq -cn --args '$ARGS.positional' -- "$@")"
@@ -207,6 +231,10 @@ workflow_run() (
       --arg visible_stderr_path "$_WX_VISIBLE_STDERR_FILE" \
       --arg profile "${AICONTEXT_PROFILE:-unset}" \
       --arg output_policy "$_WX_OUTPUT_POLICY" \
+      --arg compressor "$_WX_COMPRESSOR" \
+      --arg compressor_version "$_WX_COMPRESSOR_VERSION" \
+      --arg filter "$_WX_FILTER" \
+      --arg fallback_reason "$_WX_FALLBACK_REASON" \
       --arg policy_source "$_WX_POLICY_SOURCE" \
       --arg stale_shell_profile "$_WX_STALE_SHELL_PROFILE" \
       --argjson stdout_bytes "$_WX_STDOUT_BYTES" \
@@ -222,6 +250,10 @@ workflow_run() (
         command: $command,
         profile: $profile,
         output_policy: $output_policy,
+        compressor: (if $compressor == "" then null else $compressor end),
+        compressor_version: (if $compressor_version == "" then null else $compressor_version end),
+        filter: (if $filter == "" then null else $filter end),
+        fallback_reason: (if $fallback_reason == "" then null else $fallback_reason end),
         policy_source: $policy_source,
         stale_shell_profile: (if $stale_shell_profile == "" then null else $stale_shell_profile end),
         stdout: {path: $stdout_path, bytes: $stdout_bytes},

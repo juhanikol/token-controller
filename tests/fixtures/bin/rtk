@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Fake RTK for tests. It logs every call to $FAKE_RTK_LOG and checks that the raw capture was complete.
+# FAKE_RTK_MODE: filter (default) | fail | empty | same | hang | drop-warning | noversion
+log="${FAKE_RTK_LOG:-/dev/null}"
+printf '%s\n' "$*" >> "$log"
+mode="${FAKE_RTK_MODE:-filter}"
+
+if [ "${1:-}" = "--version" ]; then
+  [ "$mode" = noversion ] && exit 1
+  echo "rtk 9.9.9"
+  exit 0
+fi
+
+if [ "${1:-}" = pipe ] && [ "${2:-}" = -f ]; then
+  tmp="$(mktemp)"
+  cat > "$tmp"
+  # At this moment the raw capture of the current run must be on disk and complete.
+  newest="$(ls -1dt .ai-context/raw/*/ 2>/dev/null | head -n 1)"
+  raw_bytes=missing
+  [ -n "$newest" ] && [ -f "${newest}stdout.raw" ] && raw_bytes="$(wc -c < "${newest}stdout.raw")"
+  printf 'stdin=%s raw=%s\n' "$(wc -c < "$tmp")" "$raw_bytes" >> "${FAKE_RTK_RAW_LOG:-/dev/null}"
+  echo "rtk fake notice" >&2
+  case "$mode" in
+    fail) rm -f "$tmp"; exit 1 ;;
+    empty) rm -f "$tmp"; exit 0 ;;
+    same) cat "$tmp" ;;
+    hang) sleep 30 ;;
+    drop-warning)
+      echo "[fake-rtk:$3]"
+      tail -n 1 "$tmp"
+      ;;
+    *)
+      echo "[fake-rtk:$3]"
+      grep -E '^(warning|error|panic)' "$tmp"
+      tail -n 1 "$tmp"
+      ;;
+  esac
+  rm -f "$tmp"
+  exit 0
+fi
+
+echo "fake rtk: unsupported call: $*" >&2
+exit 2

@@ -62,10 +62,17 @@ Modes:
   release      Release preparation.
   off          Disable all optimizers.
   status       Show current profile. Option: --json (reads the active mode file)
+  modes        List modes and aliases from the settings file. Option: --json
   doctor       Read-only check of settings, instruction files, and tools. Option: --json
                It can create an empty ~/.config/ai-workflow when run through workflow.sh.
   report       Summarize the current project's wx session.
   reset-session Archive the current wx session and start a new one.
+
+Environment:
+  AICONTEXT_CAVEMAN_REQUEST=off|lite|full
+               Opt in to terse agent output for one activation, for example:
+               AICONTEXT_CAVEMAN_REQUEST=lite workflow code
+               Caveman is off by default. Blocked modes ignore the request.
 
 Aliases:
   plan -> architect
@@ -93,7 +100,7 @@ USAGE
   # Hard-blocked profiles stay off even if the config allows a level.
   _aiw_caveman_blocked() {
     case "$1" in
-      raw|security|db|release|migration|docs|micro|snippet|off) return 0 ;;
+      raw|security|db|release|migration|docs|debug|micro|snippet|off) return 0 ;;
     esac
     jq -e --arg m "$1" '(.caveman_policy.hard_blocked_profiles // []) | index($m) != null' "$_SETTINGS_FILE" >/dev/null 2>&1
   }
@@ -110,6 +117,7 @@ USAGE
     echo "  AICONTEXT_LEANCTX_MODE=${AICONTEXT_LEANCTX_MODE:-unset}"
     echo "  AICONTEXT_RTK_MODE=${AICONTEXT_RTK_MODE:-unset}"
     echo "  AICONTEXT_CAVEMAN_OUTPUT=${AICONTEXT_CAVEMAN_OUTPUT:-unset}"
+    echo "  AICONTEXT_CAVEMAN_REQUESTED=${AICONTEXT_CAVEMAN_REQUESTED:-unset}"
     echo "  AICONTEXT_CAVEMAN_MODE=${AICONTEXT_CAVEMAN_MODE:-unset}"
     echo "  AICONTEXT_CAVEMAN_MAX=${AICONTEXT_CAVEMAN_MAX:-unset}"
     echo "  AICONTEXT_CAVEMAN_SHRINK=${AICONTEXT_CAVEMAN_SHRINK:-unset}"
@@ -168,6 +176,7 @@ USAGE
         --arg rtk_mode "${AICONTEXT_RTK_MODE:-}" \
         --arg leanctx_mode "${AICONTEXT_LEANCTX_MODE:-}" \
         --arg headroom_mode "${AICONTEXT_HEADROOM_MODE:-}" \
+        --arg caveman_requested "${AICONTEXT_CAVEMAN_REQUESTED:-}" \
         --arg caveman_mode "${AICONTEXT_CAVEMAN_MODE:-}" \
         --arg caveman_max "${AICONTEXT_CAVEMAN_MAX:-}" \
         --arg caveman_output "${AICONTEXT_CAVEMAN_OUTPUT:-}" \
@@ -187,6 +196,7 @@ USAGE
             rtk_mode: ($rtk_mode | s),
             leanctx_mode: ($leanctx_mode | s),
             headroom_mode: ($headroom_mode | s),
+            caveman_requested: ($caveman_requested | s),
             caveman_mode: ($caveman_mode | s),
             caveman_max: ($caveman_max | s),
             caveman_output: ($caveman_output | b),
@@ -199,10 +209,86 @@ USAGE
     )
   }
 
+  # Machine-readable mode list, read from the settings file. The extension and other tools use it
+  # so they do not keep their own copy of the modes. Fields: see docs/TECHNICAL_DEBT.md (modes --json).
+  # The Caveman level is the effective one (same rules as activation). tests/workflow-session.test.sh
+  # compares this list with the variables each mode exports, so the two cannot drift silently.
+  modes_json() {
+    need_jq || return 1
+    if [ ! -f "$_SETTINGS_FILE" ] || [ ! -r "$_SETTINGS_FILE" ]; then
+      echo "Error: settings file not found: $_SETTINGS_FILE" >&2
+      return 1
+    fi
+
+    jq '
+      def rank: if . == "off" then 0 elif . == "lite" then 1 elif . == "full" then 2 else null end;
+      def level($v): if ($v | rank) == null then "off" else $v end;
+      (.defaults // {}) as $d
+      | (.caveman_policy.hard_blocked_profiles // []) as $config_blocked
+      | ["raw", "security", "db", "release", "migration", "docs", "debug", "micro", "snippet", "off"] as $blocked
+      | {
+          schema_version: 1,
+          modes: [
+            .modes | to_entries[] | .key as $name | .value as $m
+            | level($m.caveman_mode // $d.caveman_mode // "off") as $requested
+            | (if (($blocked + $config_blocked) | index($name)) != null then "off"
+               else level($m.caveman_max // $d.caveman_max // "off") end) as $cap
+            | (if ($requested | rank) <= ($cap | rank) then $requested else $cap end) as $effective
+            | {
+                name: $name,
+                description: ($m.description // null),
+                risk: ($m.risk // "normal"),
+                compress_shell: ($m.compress_shell // "safe"),
+                compress_files: ($m.compress_files // "safe"),
+                rtk_mode: ($m.rtk_mode // "off"),
+                leanctx_mode: ($m.leanctx_mode // "off"),
+                headroom_mode: ($m.headroom_mode // "off"),
+                caveman_mode: $effective,
+                caveman_max: $cap,
+                caveman_output: ($effective != "off"),
+                output_style: ($d.default_output_style // "ste-inspired")
+              }
+          ],
+          aliases: [
+            (if has("aliases") then .aliases else {"plan": "architect", "ci": "cicd"} end)
+            | to_entries[] | {alias: .key, target: .value}
+          ]
+        }' "$_SETTINGS_FILE"
+  }
+
+  modes_text() {
+    local _MODES_JSON
+    _MODES_JSON="$(modes_json)" || return 1
+    echo "Modes:"
+    jq -r '.modes[] | [.name, .risk, (.description // "")] | @tsv' <<< "$_MODES_JSON" |
+      awk -F'\t' '{ printf "  %-16s %-9s %s\n", $1, $2, $3 }'
+    local _ALIAS_LINE
+    _ALIAS_LINE="$(jq -r '[.aliases[] | "\(.alias) -> \(.target)"] | join(", ")' <<< "$_MODES_JSON")"
+    [ -n "$_ALIAS_LINE" ] && echo "Aliases: $_ALIAS_LINE"
+    return 0
+  }
+
   case "$_MODE" in
     -h|--help|help)
       usage
       return 0
+      ;;
+    modes)
+      [ "$#" -gt 0 ] && shift
+      case "${1:-}" in
+        --json)
+          modes_json
+          return $?
+          ;;
+        ""|--text)
+          modes_text
+          return $?
+          ;;
+        *)
+          echo "Error: unknown modes option: $1. Use: workflow modes [--json]" >&2
+          return 2
+          ;;
+      esac
       ;;
     status|"")
       [ "$#" -gt 0 ] && shift
@@ -504,12 +590,6 @@ USAGE
       )
       return $?
       ;;
-    plan)
-      _MODE="architect"
-      ;;
-    ci)
-      _MODE="cicd"
-      ;;
   esac
 
   # Mode ids are lowercase words with hyphens. Reject anything else before it reaches a jq program.
@@ -527,6 +607,16 @@ USAGE
   fi
 
   need_jq || return 1
+
+  # Aliases come from config ("aliases"). Without that key, the two built-in aliases still work.
+  local _ALIAS_TARGET
+  _ALIAS_TARGET="$(jq -r --arg m "$_MODE" 'if has("aliases") then (.aliases[$m] // "") else ({"plan": "architect", "ci": "cicd"}[$m] // "") end' "$_SETTINGS_FILE" 2>/dev/null)"
+  if [ -n "$_ALIAS_TARGET" ]; then
+    case "$_ALIAS_TARGET" in
+      -*|*[!a-z0-9-]*) ;;
+      *) _MODE="$_ALIAS_TARGET" ;;
+    esac
+  fi
 
   if ! jq -e ".modes[\"$_MODE\"]" "$_SETTINGS_FILE" >/dev/null 2>&1; then
     echo "Error: profile '$_MODE' not found in $_SETTINGS_FILE" >&2
@@ -547,14 +637,21 @@ USAGE
 
   # Caveman state only. Valid levels are off, lite, full. Anything else (ultra, wenyan) becomes off.
   local _CAVEMAN_REQUESTED
+  local _CAVEMAN_REQUEST_FROM=caveman_mode
   local _CAVEMAN_CAP
   local _CAVEMAN_SHRINK
   local _CAVEMAN_EFFECTIVE
   _CAVEMAN_REQUESTED="$(jq -r ".modes[\"$_MODE\"].caveman_mode // .defaults.caveman_mode // \"off\"" "$_SETTINGS_FILE")"
+  # Explicit opt-in for this activation: AICONTEXT_CAVEMAN_REQUEST=off|lite|full workflow <mode>.
+  # It replaces the config level. It is not saved: the next activation without it uses the config level again.
+  if [ -n "${AICONTEXT_CAVEMAN_REQUEST:-}" ]; then
+    _CAVEMAN_REQUESTED="$AICONTEXT_CAVEMAN_REQUEST"
+    _CAVEMAN_REQUEST_FROM=AICONTEXT_CAVEMAN_REQUEST
+  fi
   _CAVEMAN_CAP="$(jq -r ".modes[\"$_MODE\"].caveman_max // .defaults.caveman_max // \"off\"" "$_SETTINGS_FILE")"
   _CAVEMAN_SHRINK="$(jq -r ".modes[\"$_MODE\"].caveman_shrink // .defaults.caveman_shrink // \"off\"" "$_SETTINGS_FILE")"
   if ! _aiw_caveman_rank "$_CAVEMAN_REQUESTED" >/dev/null; then
-    printf 'Warning: caveman_mode "%s" is not supported. Using off.\n' "$_CAVEMAN_REQUESTED" >&2
+    printf 'Warning: %s "%s" is not supported. Use off, lite, or full. Using off.\n' "$_CAVEMAN_REQUEST_FROM" "$_CAVEMAN_REQUESTED" >&2
     _CAVEMAN_REQUESTED=off
   fi
   if ! _aiw_caveman_rank "$_CAVEMAN_CAP" >/dev/null; then
@@ -578,6 +675,14 @@ USAGE
   else
     _CAVEMAN_EFFECTIVE="$_CAVEMAN_CAP"
   fi
+  if [ "$_CAVEMAN_REQUEST_FROM" = AICONTEXT_CAVEMAN_REQUEST ] && [ "$_CAVEMAN_REQUESTED" != off ] && [ "$_CAVEMAN_EFFECTIVE" != "$_CAVEMAN_REQUESTED" ]; then
+    if [ "$_CAVEMAN_EFFECTIVE" = off ]; then
+      printf "Notice: Caveman request '%s' ignored. Mode '%s' does not allow Caveman.\n" "$_CAVEMAN_REQUESTED" "$_MODE" >&2
+    else
+      printf "Notice: Caveman request '%s' lowered to '%s'. That is the limit for mode '%s'.\n" "$_CAVEMAN_REQUESTED" "$_CAVEMAN_EFFECTIVE" "$_MODE" >&2
+    fi
+  fi
+  export AICONTEXT_CAVEMAN_REQUESTED="$_CAVEMAN_REQUESTED"
   export AICONTEXT_CAVEMAN_MODE="$_CAVEMAN_EFFECTIVE"
   export AICONTEXT_CAVEMAN_MAX="$_CAVEMAN_CAP"
   export AICONTEXT_CAVEMAN_SHRINK="$_CAVEMAN_SHRINK"
@@ -621,6 +726,7 @@ export AICONTEXT_HEADROOM_MODE="$AICONTEXT_HEADROOM_MODE"
 export AICONTEXT_LEANCTX_MODE="$AICONTEXT_LEANCTX_MODE"
 export AICONTEXT_RTK_MODE="$AICONTEXT_RTK_MODE"
 export AICONTEXT_CAVEMAN_OUTPUT="$AICONTEXT_CAVEMAN_OUTPUT"
+export AICONTEXT_CAVEMAN_REQUESTED="$AICONTEXT_CAVEMAN_REQUESTED"
 export AICONTEXT_CAVEMAN_MODE="$AICONTEXT_CAVEMAN_MODE"
 export AICONTEXT_CAVEMAN_MAX="$AICONTEXT_CAVEMAN_MAX"
 export AICONTEXT_CAVEMAN_SHRINK="$AICONTEXT_CAVEMAN_SHRINK"

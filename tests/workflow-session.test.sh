@@ -215,4 +215,139 @@ ln -s "$_WX_CLI" "$_WX_TEST_ROOT/linked-cli"
 [ "$?" -ne 0 ] || fail 'sourcing workflow-cli.sh should fail'
 assert_file_contains "$_WX_TEST_ROOT/cli-source.err" 'Do not source it'
 
+# modes --json: the mode list comes from the settings file.
+_WX_SETTINGS="$_WX_REPOSITORY_ROOT/config/workflow_settings.json"
+"$_WX_CLI" modes --json >"$_WX_TEST_ROOT/modes.json" || fail 'modes --json failed'
+jq -e . "$_WX_TEST_ROOT/modes.json" >/dev/null || fail 'modes --json is not valid JSON'
+jq -e --slurpfile cfg "$_WX_SETTINGS" '
+  .schema_version == 1
+  and (.modes | length) == ($cfg[0].modes | keys | length)
+  and (.modes | length) >= 22
+  and ([.modes[].name] | sort) == ($cfg[0].modes | keys | sort)
+' "$_WX_TEST_ROOT/modes.json" >/dev/null || fail 'modes --json does not match the settings file'
+for _WX_MODE in micro docs release security db code debug; do
+  jq -e --arg m "$_WX_MODE" '[.modes[].name] | index($m) != null' "$_WX_TEST_ROOT/modes.json" >/dev/null || fail "modes --json is missing $_WX_MODE"
+done
+jq -e '
+  all(.modes[]; (.description | type) == "string" and (.description | length) > 0)
+  and all(.modes[]; .name | test("^[a-z0-9][a-z0-9-]*$"))
+  and all(.modes[]; .risk | IN("normal", "high", "critical"))
+  and all(.modes[]; (.caveman_output | type) == "boolean" and (.compress_shell | type) == "string" and (.rtk_mode | type) == "string")
+' "$_WX_TEST_ROOT/modes.json" >/dev/null || fail 'modes --json has a missing or invalid field'
+jq -e '
+  (.modes[] | select(.name == "micro") | .rtk_mode == "off" and .leanctx_mode == "off" and .caveman_mode == "off")
+  and (.modes[] | select(.name == "security") | .risk == "critical")
+  and ([.aliases[] | "\(.alias)>\(.target)"] | sort) == ["ci>cicd", "plan>architect"]
+  and all(.aliases[]; .target as $t | [$modes[]] | index($t) != null)
+' --argjson modes "$(jq -c '[.modes[].name]' "$_WX_TEST_ROOT/modes.json")" "$_WX_TEST_ROOT/modes.json" >/dev/null || fail 'modes --json aliases or key modes are invalid'
+
+# Each listed mode matches what activating it exports (the list cannot drift from activation).
+_WX_PARITY_SETTINGS="$_WX_TEST_ROOT/parity-settings.json"
+jq '.modes.code.caveman_mode = "full" | .modes.security.caveman_mode = "full" | .modes["rapid-prototype"].caveman_mode = "lite" | .modes.debug.caveman_mode = "ultra"
+  | .modes.security.caveman_max = "full" | .modes.docs.caveman_mode = "full" | .modes.docs.caveman_max = "full"
+  | .modes.micro.caveman_mode = "lite" | .modes.micro.caveman_max = "lite"' "$_WX_SETTINGS" > "$_WX_PARITY_SETTINGS"
+for _WX_SETTINGS_CASE in "$_WX_SETTINGS" "$_WX_PARITY_SETTINGS"; do
+  AICONTEXT_SETTINGS_FILE="$_WX_SETTINGS_CASE" "$_WX_CLI" modes --json >"$_WX_TEST_ROOT/modes-case.json" 2>/dev/null || fail 'modes --json failed for a settings case'
+  for _WX_MODE in $(jq -r '.modes[].name' "$_WX_TEST_ROOT/modes-case.json"); do
+    _WX_ACTUAL="$(
+      export AICONTEXT_SETTINGS_FILE="$_WX_SETTINGS_CASE"
+      source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" "$_WX_MODE" >/dev/null 2>&1 || exit 1
+      jq -cn --arg risk "$AICONTEXT_RISK" --arg shell "$AICONTEXT_COMPRESS_SHELL" --arg files "$AICONTEXT_COMPRESS_FILES" \
+        --arg rtk "$AICONTEXT_RTK_MODE" --arg leanctx "$AICONTEXT_LEANCTX_MODE" --arg headroom "$AICONTEXT_HEADROOM_MODE" \
+        --arg cmode "$AICONTEXT_CAVEMAN_MODE" --arg cmax "$AICONTEXT_CAVEMAN_MAX" --arg cout "$AICONTEXT_CAVEMAN_OUTPUT" --arg style "$AICONTEXT_OUTPUT_STYLE" \
+        '{risk: $risk, compress_shell: $shell, compress_files: $files, rtk_mode: $rtk, leanctx_mode: $leanctx, headroom_mode: $headroom,
+          caveman_mode: $cmode, caveman_max: $cmax, caveman_output: ($cout == "true"), output_style: $style}'
+    )" || fail "activating $_WX_MODE failed"
+    _WX_LISTED="$(jq -c --arg m "$_WX_MODE" '.modes[] | select(.name == $m) | del(.name, .description)' "$_WX_TEST_ROOT/modes-case.json")"
+    [ "$_WX_ACTUAL" = "$_WX_LISTED" ] || fail "modes --json differs from activation for $_WX_MODE: $_WX_LISTED vs $_WX_ACTUAL"
+  done
+done
+# The parity settings request Caveman levels. Hard-blocked and capped modes stay off or lower.
+AICONTEXT_SETTINGS_FILE="$_WX_PARITY_SETTINGS" "$_WX_CLI" modes --json 2>/dev/null | jq -e '
+  (.modes[] | select(.name == "code") | .caveman_mode == "lite")
+  and (.modes[] | select(.name == "security") | .caveman_mode == "off")
+  and (.modes[] | select(.name == "debug") | .caveman_mode == "off")
+  and (.modes[] | select(.name == "docs") | .caveman_mode == "off")
+  and (.modes[] | select(.name == "micro") | .caveman_mode == "off")
+  and (.modes[] | select(.name == "rapid-prototype") | .caveman_mode == "lite" and .caveman_output == true)
+' >/dev/null || fail 'Caveman levels in modes --json are not capped'
+
+# Aliases still work (from config, and the built-in fallback when the config has no aliases key).
+"$_WX_CLI" plan >/dev/null || fail 'alias plan failed'
+"$_WX_CLI" status --json | jq -e '.profile == "architect"' >/dev/null || fail 'alias plan did not activate architect'
+"$_WX_CLI" ci >/dev/null || fail 'alias ci failed'
+"$_WX_CLI" status --json | jq -e '.profile == "cicd"' >/dev/null || fail 'alias ci did not activate cicd'
+jq 'del(.aliases)' "$_WX_SETTINGS" > "$_WX_TEST_ROOT/no-aliases.json"
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/no-aliases.json" "$_WX_CLI" plan >/dev/null || fail 'built-in alias plan failed without an aliases key'
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/no-aliases.json" "$_WX_CLI" modes --json | jq -e '[.aliases[].alias] | sort == ["ci", "plan"]' >/dev/null || fail 'built-in aliases are not listed'
+jq '.aliases.fast = "code"' "$_WX_SETTINGS" > "$_WX_TEST_ROOT/custom-alias.json"
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/custom-alias.json" "$_WX_CLI" modes --json | jq -e '[.aliases[] | select(.alias == "fast" and .target == "code")] | length == 1' >/dev/null || fail 'a config alias is not listed'
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/custom-alias.json" "$_WX_CLI" fast >/dev/null || fail 'a config alias does not activate'
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/custom-alias.json" "$_WX_CLI" status --json | jq -e '.profile == "code"' >/dev/null || fail 'a config alias activated the wrong mode'
+
+# Text form, shell-sourced form, and errors.
+"$_WX_CLI" modes >"$_WX_TEST_ROOT/modes.txt" || fail 'modes (text) failed'
+assert_file_contains "$_WX_TEST_ROOT/modes.txt" 'micro'
+assert_file_contains "$_WX_TEST_ROOT/modes.txt" 'Aliases: plan -> architect, ci -> cicd'
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" modes --json | jq -e '.modes | length >= 22' >/dev/null || fail 'sourced modes --json failed'
+"$_WX_CLI" modes --bogus >/dev/null 2>&1
+[ "$?" -eq 2 ] || fail 'modes --bogus should return 2'
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/missing.json" "$_WX_CLI" modes --json >/dev/null 2>&1
+[ "$?" -ne 0 ] || fail 'modes --json should fail without a settings file'
+
+# Caveman policy state. Caveman is off by default. AICONTEXT_CAVEMAN_REQUEST=off|lite|full opts in for one activation.
+# Nothing here runs Caveman. Only the exported state is checked.
+unset AICONTEXT_CAVEMAN_REQUEST
+caveman_state() { # mode [request]. Prints: requested/mode/max/output. Notices go to $_WX_TEST_ROOT/caveman.err
+  (
+    if [ -n "${2:-}" ]; then export AICONTEXT_CAVEMAN_REQUEST="$2"; fi
+    source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" "$1" >/dev/null 2>"$_WX_TEST_ROOT/caveman.err" || exit 1
+    printf '%s/%s/%s/%s' "$AICONTEXT_CAVEMAN_REQUESTED" "$AICONTEXT_CAVEMAN_MODE" "$AICONTEXT_CAVEMAN_MAX" "$AICONTEXT_CAVEMAN_OUTPUT"
+  )
+}
+# Default: off in every mode, with no request.
+for _WX_MODE in $("$_WX_CLI" modes --json | jq -r '.modes[].name'); do
+  [ "$(caveman_state "$_WX_MODE" | cut -d/ -f1,2,4)" = "off/off/false" ] || fail "Caveman is not off by default in $_WX_MODE"
+done
+# Opt-in: the level is capped by the mode.
+[ "$(caveman_state code lite)" = "lite/lite/lite/true" ] || fail "request lite in code: $(caveman_state code lite)"
+[ "$(caveman_state code full)" = "full/lite/lite/true" ] || fail "request full in code should be capped to lite"
+assert_file_contains "$_WX_TEST_ROOT/caveman.err" "lowered to 'lite'"
+[ "$(caveman_state rapid-prototype full)" = "full/full/full/true" ] || fail "request full in rapid-prototype"
+[ "$(caveman_state cicd lite)" = "lite/lite/lite/true" ] || fail "request lite in cicd"
+[ "$(caveman_state code off)" = "off/off/lite/false" ] || fail "request off in code"
+# Hard-blocked and no-Caveman modes ignore the request, with a notice.
+for _WX_MODE in docs security db release migration debug raw micro snippet off test; do
+  [ "$(caveman_state "$_WX_MODE" full | cut -d/ -f2,3,4)" = "off/off/false" ] || fail "request full in $_WX_MODE was not blocked: $(caveman_state "$_WX_MODE" full)"
+  assert_file_contains "$_WX_TEST_ROOT/caveman.err" "ignored. Mode '$_WX_MODE' does not allow Caveman"
+done
+# Unsupported values become off with a warning. Activation still works.
+for _WX_VALUE in ultra wenyan FULL yes 1 'lite;touch X'; do
+  [ "$(caveman_state code "$_WX_VALUE" | cut -d/ -f1,2,4)" = "off/off/false" ] || fail "unsupported request '$_WX_VALUE' was not turned off"
+  assert_file_contains "$_WX_TEST_ROOT/caveman.err" 'is not supported. Use off, lite, or full'
+done
+[ ! -e X ] || fail 'a request value was executed'
+# The request is per activation: the next activation without it goes back to off. The mode file shows it.
+AICONTEXT_CAVEMAN_REQUEST=lite "$_WX_CLI" code >/dev/null 2>&1 || fail 'workflow-cli.sh with a request failed'
+grep -Fq 'export AICONTEXT_CAVEMAN_MODE="lite"' "$AICONTEXT_CONFIG_DIR/active_mode.env" || fail 'the effective level is not in the mode file'
+grep -Fq 'export AICONTEXT_CAVEMAN_REQUESTED="lite"' "$AICONTEXT_CONFIG_DIR/active_mode.env" || fail 'the request is not in the mode file'
+"$_WX_CLI" status --json | jq -e '.caveman_mode == "lite" and .caveman_requested == "lite" and .caveman_output == true' >/dev/null || fail 'status --json does not show the request'
+"$_WX_CLI" code >/dev/null 2>&1
+"$_WX_CLI" status --json | jq -e '.caveman_mode == "off" and .caveman_requested == "off" and .caveman_output == false' >/dev/null || fail 'the request was kept for the next activation'
+# The request overrides a config level, and a config level is an opt-in too.
+jq '.modes.code.caveman_mode = "lite"' "$_WX_SETTINGS" > "$_WX_TEST_ROOT/cave-config.json"
+[ "$(AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/cave-config.json" caveman_state code | cut -d/ -f1,2)" = "lite/lite" ] || fail 'a config caveman_mode is not used'
+[ "$(AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/cave-config.json" caveman_state code off | cut -d/ -f1,2)" = "off/off" ] || fail 'request off does not override the config level'
+# A config that tries to allow a hard-blocked mode does not work.
+# The config list is removed here, so only the list in the code can block these modes.
+jq 'del(.caveman_policy.hard_blocked_profiles) | .modes.debug.caveman_mode = "lite" | .modes.debug.caveman_max = "full" | .modes.security.caveman_max = "full" | .modes.docs.caveman_max = "full" | .modes.db.caveman_max = "full" | .modes.release.caveman_max = "full" | .modes.migration.caveman_max = "full"
+  | .modes.security.caveman_mode = "lite" | .modes.docs.caveman_mode = "lite" | .modes.db.caveman_mode = "lite" | .modes.release.caveman_mode = "lite" | .modes.migration.caveman_mode = "lite"' "$_WX_SETTINGS" > "$_WX_TEST_ROOT/cave-blocked.json"
+for _WX_MODE in debug security docs db release migration; do
+  [ "$(AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/cave-blocked.json" caveman_state "$_WX_MODE" full | cut -d/ -f2,3,4)" = "off/off/false" ] || fail "config allowed Caveman in $_WX_MODE"
+done
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/cave-blocked.json" "$_WX_CLI" modes --json | jq -e '[.modes[] | select(.name | IN("debug", "docs", "security", "db", "release", "migration")) | .caveman_mode] | all(. == "off")' >/dev/null || fail 'modes --json allows Caveman in a blocked mode when the config list is missing'
+jq -e '.caveman_policy.hard_blocked_profiles | (index("debug") != null and index("docs") != null and index("security") != null and index("db") != null and index("release") != null and index("migration") != null)' "$_WX_SETTINGS" >/dev/null || fail 'config hard_blocked_profiles is incomplete'
+"$_WX_CLI" modes --json | jq -e '[.modes[] | select(.name | IN("debug", "docs", "security", "db", "release", "migration")) | .caveman_max] | all(. == "off")' >/dev/null || fail 'modes --json shows a blocked mode with a Caveman limit'
+"$_WX_CLI" code >/dev/null 2>&1
+
 printf '%s\n' 'PASS: workflow report and reset-session'

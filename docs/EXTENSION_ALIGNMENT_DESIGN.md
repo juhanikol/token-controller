@@ -56,7 +56,7 @@ Non-sourced entry point: `scripts/workflow-cli.sh` (**implemented**). It runs `w
 | Command | Purpose | Status |
 |---|---|---|
 | `version --json` | `{cli_version, protocol}`. The extension refuses a CLI outside its supported `protocol` range | new |
-| `modes --json` | `[{id, description, risk, aliases}]`, built from `workflow_settings.json` | new. Needs `description` per mode in config |
+| `modes --json` | Modes with `name`, `description`, `risk`, tool modes, effective Caveman level, `output_style`, plus `aliases` | **implemented** (`workflow modes --json`). Field names differ from this sketch (`name`, not `id`). Schema: `docs/TECHNICAL_DEBT.md` |
 | `status --json` | Profile, risk, tool modes, `source`, `stale_shell` from the env file (not the caller's shell). `profile: null` if none | **implemented** as `workflow status --json` with flat field names (`rtk_mode`, not `tools.rtk`). Schema: `docs/TECHNICAL_DEBT.md`. Not yet behind a non-sourced entry point |
 | `set <mode> --json` | Switch without sourcing. Returns the new status. Errors: `{error:{code,message}}` | new. Reuses the existing activation code |
 | `doctor --json --project <dir>` | Tools, warnings, environment | exists |
@@ -106,7 +106,11 @@ Presentation stays in the extension: an id-to-codicon map with a default icon. A
 - `tokenController.scriptPath` stays for compatibility, with `machine` scope.
 - Add `tokenController.cliPath` (optional, `machine` scope). If only `scriptPath` is set, use `workflow-cli.sh` in the same directory.
 - Add `capabilities.untrustedWorkspaces` with `supported: "limited"` and both settings in `restrictedConfigurations`.
-- In an untrusted workspace, show the profile only if a trusted CLI path is configured. Do not run the CLI from a workspace-level setting.
+- In an untrusted workspace, do not run a controller that is inside the workspace (implemented in `src/trust.ts`; status bar shows `restricted`). A controller outside the workspace still runs. Never use a workspace-level path (the setting is `machine` scope and workspace values are ignored at run time).
+
+## Implementation status
+
+Done (2026-10-07): `src/cli.ts` adapter (process backend only), `status --json`, `modes --json`, and mode switch through `workflow-cli.sh`; status bar with risk, source, and stale-shell warning; picker from `modes --json` with no fallback list. File layout differs from the sketch above: one `cli.ts` instead of `backend/`, `env/`, `state/`, `ui/`. Not done: environment check, doctor and report in the tooltip, `version`, WSL backend. See `docs/TECHNICAL_DEBT.md`.
 
 ## Minimum first implementation
 
