@@ -49,7 +49,7 @@ The "stale shell" warning only covers the environment of VS Code. Terminals that
 
 ## Install
 
-1. Get `token-controller-ui-<version>.vsix` from `extensions/vscode/`, or build it there with `npx vsce package`.
+1. Build it: `cd extensions/vscode && npm ci && npx vsce package`. This writes `token-controller-ui-<version>.vsix` there. No built VSIX is kept in git. Older ones are under the git tags (for example `v1.1.0`).
 2. In VS Code connected to WSL, open Extensions → **…** → **Install from VSIX…** and select the file.
 3. Reload the window.
 
@@ -86,6 +86,18 @@ The extension runs a shell script (the Token Controller CLI) with your user righ
 - A user-level setting is trusted. Anything that can write your user settings can change the script.
 - The CLI inherits the environment of the VS Code extension host.
 - Workspace Trust and `inspect()` behavior were tested with unit tests of the path logic only. They were not tested in a real VS Code or WSL window.
+
+## Manual smoke test
+
+Do this in a WSL window with `jq` installed, and note any step that fails in `docs/TECHNICAL_DEBT.md` (D-28).
+
+1. **Install:** `npx vsce package`, then Extensions → **…** → **Install from VSIX…**, then reload. The extension is listed under "WSL: <distro>", not only locally.
+2. **Status bar:** it shows `AI Context: <mode> · <risk>`. The mode equals `scripts/workflow-cli.sh status --json | jq -r .profile`.
+3. **Picker:** click the item. The names equal `scripts/workflow-cli.sh modes --json | jq -r '.modes[].name'`. Risk and description are shown, and the current mode is marked.
+4. **Switch:** pick `micro`. `grep AICONTEXT_PROFILE ~/.config/ai-workflow/active_mode.env` shows `micro`, and the status bar shows `micro · normal`.
+5. **Stale shell:** close all windows for this distro, then run `AICONTEXT_PROFILE=code code .` while the mode is `micro`. The status bar shows a warning icon and background, and the tooltip names `code`.
+6. **Untrusted workspace:** open the controller's own clone in Restricted Mode. The status bar shows `restricted`, and clicking it offers **Manage Workspace Trust**. In another folder in Restricted Mode, status and switching still work.
+7. **Missing path:** set `tokenController.scriptPath` in user settings to `~/nope/workflow.sh`. The status bar shows `unavailable` with the reason, and the picker shows an error with **Open Settings**. The same setting in a workspace `.vscode/settings.json` is ignored with one warning.
 
 ## Limitations
 

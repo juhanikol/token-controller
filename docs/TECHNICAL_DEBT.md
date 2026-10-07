@@ -40,7 +40,7 @@ How to keep it:
 | D-26 | Not implemented | Medium | Extension | The extension does not show the report summary (the CLI side, `report --json`, now exists), the doctor summary, or tool availability. No Caveman toggle. `caveman_requested` is not shown. | Open | `workflow report --json` (this file) |
 | D-27 | Not implemented | Medium | Windows | No Windows or WSL backend, no environment check (`remoteName`, distro), no Windows CI. The CLI uses GNU tools (`timeout`, `stat -c`, `awk`) and Bash. | Open | Extension alignment design |
 | D-28 | Debt | Medium | Extension | Not tested in a real VS Code or WSL window. `vscode-test` was not run. The status bar, picker, and watcher code has no automated test. Manifest scope, `inspect()`, and `isTrusted` behavior are untested. | Open | Extension configuration and trust hardening |
-| D-29 | Debt | Low | Extension | The tracked `.vsix` is 1.1.0 and does not contain the fixes. Version and CHANGELOG are "Unreleased". | Open | Extension uses the CLI JSON interface |
+| D-29 | Decision | Low | Extension | Release of extension 2.0.0 is deferred on purpose. Version, changelog, and packaging are prepared, and the built VSIX is no longer tracked. It is not published, not tagged, and not smoke-tested (D-28). There is no release process, and CI does not upload the VSIX. | Deferred | Extension package metadata (this file) |
 | D-30 | Risk | Medium | Extension | The configured script is trusted code with no check of content or owner. A trusted workspace may contain the controller. The CLI inherits the host environment. Multi-root and virtual workspaces are only partly covered. | Risk accepted | Extension configuration and trust hardening |
 | D-31 | Debt | Low | Extension | Missing `jq` or an old controller shows "unavailable" with no install help. `stale_shell` describes the VS Code environment, not a terminal. | Open | Extension uses the CLI JSON interface |
 | D-32 | Not implemented | Low | Research | Research candidates are not evaluated: ccusage, Aider repo map, token-optimizer, token-savior. | Open | Plan, "External tools" |
@@ -540,3 +540,18 @@ Closes no debt ID. It adds a safety net for D-07, D-10, D-13, D-14, and D-25 (th
 Checked locally before the first run on GitHub: all four commands pass in a CI-like environment (`env -i` with an empty `HOME`, none of RTK, LeanCTX, Headroom, Caveman, ccusage on the `PATH`, `mawk` as `awk`, and system `jq` 1.7 as on the runner image). The tests also passed with `gawk` and `jq` 1.8.2, and with a real RTK present.
 
 Still open: D-35, and `git diff --check` is not part of CI (it is a local step).
+
+## Extension package metadata (2026-10-07)
+
+Checked: `package.json` said 1.1.0 and the tracked `.vsix` was 1.1.0 (git tag `v1.1.0`). Neither matched the current extension: the CLI adapter, `status`/`modes` JSON, the trust model, and the `restricted` state were added after 1.1.0.
+
+Done (nothing published, no tag created):
+* **Version 2.0.0** in `package.json` and `package-lock.json` (the lock root version was stale at 0.0.1). A major bump, because the extension now needs a controller with `workflow-cli.sh` and schema 1 JSON, and an older controller shows "unavailable". The number is easy to change before a release.
+* **CHANGELOG** has an `[Unreleased]` section with "Planned version: 2.0.0", a Breaking list, and a Packaging note. The heading stays `[Unreleased]` until a release.
+* **VSIX not tracked:** the 1.1.0 file was removed from the git index (`git rm --cached`, `*.vsix` is already in `.gitignore`). Reasons: it is a generated binary, every version would add one more to history, and a stale 1.1.0 file next to the source misleads. It stays in history and under `v1.1.0`. The extension README now says to build it (`npx vsce package`).
+* The local 1.1.0 file in `extensions/vscode/` was left on disk (ignored by git).
+
+Still open or deferred:
+* **D-29 (deferred):** publishing, tagging, a release process, and a CI artifact upload. Do the manual smoke test (README) first.
+* A user who relied on the tracked VSIX for a quick install now has to build it, or use the `v1.1.0` file. GitHub release assets are not set up.
+* `vsce package` warns about nothing today. No icon or Marketplace metadata (categories, keywords, gallery banner) has been reviewed.
