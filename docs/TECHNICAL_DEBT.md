@@ -19,9 +19,9 @@ How to keep it:
 | D-04 | Decision | Medium | Config | MemStack is legacy. `MEMSTACK_ACTIVE` and `memory_layer` are kept until the tool shape is clear. | Decision needed | Plan, "LeanCTX/Headroom" |
 | D-05 | Not implemented | Medium | Output style | `AICONTEXT_OUTPUT_STYLE` (`ste-inspired`) is exported but nothing uses it. The template does not mention it. | Open | Foundation debt status |
 | D-06 | Decision | Medium | Validation | `docs/VALIDATION_MATRIX.md` has no entry for the RTK prototype. The benchmark has no RTK scenario, so no measured RTK reduction exists. Required after a second tool is integrated. | Decision needed | RTK post-capture prototype |
-| D-07 | Debt | Medium | RTK | Evidence guard v1 needs tuning. Real RTK 0.42.4 drops `warning:` lines from pytest-like output, so the guard falls back to raw. Coverage is six filters (no `python -m pytest`, `npx`, `npm test`, `dotnet test`, `log`). | Open | RTK post-capture prototype |
-| D-08 | Risk | Medium | RTK | An RTK global hook rewrites commands and skips `wx` capture. Doctor only warns. Other hosts (Copilot, Cursor) are not checked. | Open | RTK post-capture prototype |
-| D-09 | Risk | Low | RTK | Side effects of `rtk --version` and `rtk pipe` (tracking, telemetry) were checked once, in one scratch `HOME`. | Open | RTK PLAN |
+| D-07 | Debt | Medium | RTK | Evidence guard is a heuristic. It was widened (`warn:`, `fatal:`, upper-case `WARN`/`ERROR`/`FATAL`) after tests showed gaps, but it is still tuned with a fake RTK and one real-RTK check, not with real runs of each tool. Real RTK 0.42.4 drops `warning:` lines from pytest-like output, so the guard falls back to raw. Coverage is six filters (no `python -m pytest`, `npx`, `npm test`, `dotnet test`, `log`). | Open | RTK hardening (this file) |
+| D-08 | Risk | Medium | RTK | An RTK global hook rewrites commands and skips `wx` capture. Doctor now warns about the hook or instructions that `rtk init` writes for Claude, Copilot, Gemini, Cursor, Codex, OpenCode, Pi, Hermes, `.windsurfrules`, and `.clinerules`. Hooks still bypass `wx`, per-command detection is impossible, and Kilo Code, Antigravity, and other project layouts were not probed. | Open | RTK hardening (this file) |
+| D-09 | Risk | Low | RTK | Side effects of `rtk --version` and `rtk pipe` (tracking, telemetry) were checked once, in one scratch `HOME`. `rtk init` was seen to write `~/.config/rtk/filters.toml` and `~/.local/share/rtk/.hook_warn_last`. Project-local `.rtk/filters.toml` may override built-in filters (one probe saw no effect on `rtk pipe -f`). | Open | RTK hardening (this file) |
 | D-10 | Not implemented | Medium | Caveman | Prompt guards are not implemented. Caveman rules for first-failure evidence are policy text. Only `debug` is blocked in code, so failing `test` and `cicd` runs rely on the template. | Open | Caveman policy state |
 | D-11 | Not implemented | Medium | Caveman | Shrink and proxy are not implemented (`caveman_shrink` has no effect). Upstream questions are open: state file format, session-start hook, `caveman-compress` vs the managed block, gateway data flow. | Open | `docs/integrations/CAVEMAN.md` |
 | D-12 | Risk | Low | Caveman | `AICONTEXT_CAVEMAN_REQUEST` exported in a shell profile opts in on every activation. Doctor does not check it. | Open | Caveman policy state |
@@ -446,3 +446,16 @@ Still open from the same review:
 * **D-33 (F2):** the protection flags are exported and read by nothing.
 * **D-03:** `memory_layer` and `codebase_index` are still on for `security`, `db`, and `migration`. They are state only today.
 * **Scenario table:** the `migration` row says "Use a global map and full active files". It does not say "raw or lossless", although the mode is `critical`. The wording was left as it is.
+
+## RTK hardening (2026-10-07)
+
+Confirmed (no change needed):
+* Token Controller never runs `rtk init`. A static scan of the scripts and the fake-RTK call log in the `wx` test both check it. The filter map is still the six filters (`cargo-test`, `pytest`, `go-test`, `go-build`, `tsc`, `vitest`). `grep`, `rg`, `find`, `fd`, and `git-*` are refused in code even if a config maps them.
+
+Fixed or improved:
+* **Doctor (D-08, improved, still open):** detection now covers the global files that `rtk init` writes for Claude, Copilot, Gemini, Cursor, Codex, OpenCode, Pi, and Hermes, and the project files `.windsurfrules` and `.clinerules`. The layout comes from running `rtk init` in scratch HOME directories (research only, RTK 0.42.4). Project-local `.rtk/filters.toml` is an `info`.
+* **Install script text:** the printed `rtk init` lines are commented out with a warning that they skip `wx` capture.
+* **Evidence guard (D-07, improved, still open):** `warn:`, `fatal:`, and upper-case `WARN`/`WARNING`/`ERROR`/`FATAL` lines are now evidence. Tests with those formats failed with the old guard. A look-alike line (`errors.py::test_a PASSED`) is still not evidence.
+* **Tests:** RTK not found by name or without the execute bit, a command without a filter is not labelled and RTK is not called, a pass-through is not labelled, nine evidence formats dropped or kept by RTK, RTK stderr never in the visible output after success or any of four fallbacks, 15 doctor artifacts and no false warnings.
+
+Still open (RTK): D-07, D-08, D-09 as revised in the table. Real-tool fixtures for each of the six filters are still missing, and `docs/VALIDATION_MATRIX.md` has no RTK entry (D-06).

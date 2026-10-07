@@ -93,6 +93,53 @@ printf 'export AICONTEXT_PROFILE="code"\nexport AICONTEXT_RTK_MODE="off"\n' > "$
 PATH="$_TEST_ROOT/bin:$PATH" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[].id] | (index("policy.rtk_hook") != null and index("policy.rtk_hook_mismatch") != null)' >/dev/null || fail "rtk off should report hook and mismatch"
 rm -f "$HOME/.claude/settings.json"
 
+# 4c2. RTK artifacts of other agents. The layout was checked by running "rtk init" in scratch HOME directories
+# (RTK 0.42.4), never in a real one. Each artifact alone must give a policy.rtk_hook warning.
+printf 'export AICONTEXT_PROFILE="code"\nexport AICONTEXT_RTK_MODE="success-only"\n' > "$AICONTEXT_CONFIG_DIR/active_mode.env"
+rtk_artifact() { # path, content. Creates the file, runs doctor, removes the file. Prints the finding severities for policy.rtk_hook.
+  mkdir -p "$(dirname "$1")"
+  printf '%s\n' "$2" > "$1"
+  bash "$_DOCTOR" --json --project "$_PROJECT" | jq -r --arg p "$1" '[.findings[] | select(.id == "policy.rtk_hook") | select(any(.paths[]; .path == $p)) | .severity] | join(",")'
+  rm -f "$1"
+}
+_ARTIFACTS=(
+  "$HOME/.claude/settings.json|{\"hooks\":{\"PreToolUse\":[{\"hooks\":[{\"command\":\"rtk hook claude\"}]}]}}"
+  "$HOME/.claude/RTK.md|# RTK"
+  "$HOME/.copilot/hooks/rtk-rewrite.json|{\"hooks\":{\"PreToolUse\":[{\"command\":\"rtk hook copilot\"}]}}"
+  "$HOME/.copilot/copilot-instructions.md|Prefix commands with rtk"
+  "$HOME/.gemini/hooks/rtk-hook-gemini.sh|#!/bin/sh"
+  "$HOME/.gemini/settings.json|{\"hooks\":\"rtk hook gemini\"}"
+  "$HOME/.gemini/GEMINI.md|@RTK.md"
+  "$HOME/.cursor/hooks.json|{\"command\":\"rtk hook cursor\"}"
+  "$HOME/.codex/RTK.md|# RTK"
+  "$HOME/.codex/AGENTS.md|@RTK.md"
+  "$XDG_CONFIG_HOME/opencode/plugins/rtk.ts|export default {}"
+  "$HOME/.pi/agent/extensions/rtk.ts|export default {}"
+  "$HOME/.hermes/config.yaml|plugins: [rtk-rewrite]"
+  "$_PROJECT/.windsurfrules|Use rtk for shell commands"
+  "$_PROJECT/.clinerules|Use rtk for shell commands"
+)
+for _ENTRY in "${_ARTIFACTS[@]}"; do
+  _APATH="${_ENTRY%%|*}"
+  [ "$(rtk_artifact "$_APATH" "${_ENTRY#*|}")" = "warn" ] || fail "RTK artifact not reported as a warn: $_APATH"
+done
+# A directory with an RTK plugin (Hermes) is found as a folder.
+mkdir -p "$HOME/.hermes/plugins/rtk-rewrite"
+bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "policy.rtk_hook") | .paths[].path] | any(endswith("/.hermes/plugins/rtk-rewrite"))' >/dev/null || fail "RTK plugin folder not reported"
+rm -rf "$HOME/.hermes"
+# The same files without RTK in them are not reported.
+for _ENTRY in "$HOME/.cursor/hooks.json|{\"command\":\"smartkey run\"}" "$HOME/.gemini/GEMINI.md|Use smart tools" "$_PROJECT/.windsurfrules|prefer starting small"; do
+  _APATH="${_ENTRY%%|*}"
+  [ -z "$(rtk_artifact "$_APATH" "${_ENTRY#*|}")" ] || fail "false RTK warning for a file without RTK: $_APATH"
+done
+bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[].id] | index("policy.rtk_hook") == null' >/dev/null || fail "RTK warning without any RTK artifact"
+# Project-local filters are an info, not a hook warning. Doctor does not run rtk trust.
+mkdir -p "$_PROJECT/.rtk"
+printf 'schema_version = 1\n' > "$_PROJECT/.rtk/filters.toml"
+bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "policy.rtk_project_filters") | .severity] == ["info"] and ([.findings[].id] | index("policy.rtk_hook") == null)' >/dev/null || fail "project RTK filters should be one info and no hook warning"
+rm -rf "$_PROJECT/.rtk"
+printf 'export AICONTEXT_PROFILE="code"\n' > "$AICONTEXT_CONFIG_DIR/active_mode.env"
+
 # 4d. Caveman state.
 _CAVE="$HOME/.claude/.caveman-active"
 cave() { # profile level [tc_caveman_mode]

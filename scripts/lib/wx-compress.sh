@@ -90,8 +90,9 @@ _wx_rtk_filter_for_command() {
 }
 
 # Evidence guard v1. Lines in the raw stdout that look like evidence must still be in the RTK output.
-# Evidence lines: start with error: / error[ / warning: / warning[ / panic:, or contain Traceback, FAILED,
-# CVE-, ": error", ": warning", "Warning:", " error TS". The match is on the trimmed line as plain text.
+# Evidence lines: start with error: / error[ / warning: / warning[ / warn: / fatal: / panic:, or start with an
+# upper-case WARN / WARNING / ERROR / FATAL token, or contain Traceback, FAILED, CVE-, ": error", ": warning",
+# "Warning:", " error TS". The match is on the trimmed line as plain text.
 # A false alarm only shows raw output. A dropped warning would hide evidence.
 # Returns 0 when every evidence line is present, 1 when one is missing.
 _wx_evidence_guard() {
@@ -107,7 +108,8 @@ _wx_evidence_guard() {
       if (line == "") { next }
       lower = tolower(line)
       evidence = 0
-      if (lower ~ /^(error|warning)[:\[]/) { evidence = 1 }
+      if (lower ~ /^(error|warning|warn|fatal)[:\[]/) { evidence = 1 }
+      else if (line ~ /^(WARN|WARNING|ERROR|FATAL)([^A-Za-z]|$)/) { evidence = 1 }
       else if (line ~ /^panic:/) { evidence = 1 }
       else if (index(line, "Traceback") || index(line, "FAILED") || index(line, "CVE-")) { evidence = 1 }
       else if (index(lower, ": error") || index(lower, ": warning") || index(line, "Warning:") || index(line, " error TS")) { evidence = 1 }

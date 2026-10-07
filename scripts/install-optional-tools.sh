@@ -22,8 +22,12 @@ RTK:
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
   source ~/.bashrc
   rtk --version
-  rtk init -g --copilot
-  rtk init --show
+
+  # NOT RECOMMENDED with wx. "rtk init" installs hooks or instructions that make agents run commands
+  # through RTK directly, so wx raw capture is skipped for those commands.
+  # Token Controller never runs it. "workflow doctor" warns if a hook exists.
+  # rtk init -g --copilot
+  # rtk init --show
 
 Headroom:
   python3 -m venv ~/.venvs/headroom

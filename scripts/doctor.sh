@@ -321,13 +321,28 @@ fi
 # so this is reported in every mode. Text match only. Doctor never runs "rtk init" or edits RTK config.
 _RTK_WORD='(^|[^[:alnum:]_])rtk([^[:alnum:]_]|$)'
 _rtk_hook_paths=()
-for _f in "$_PROJECT/.claude/settings.json" "$_CLAUDE_DIR/settings.json"; do
+# Where "rtk init" puts things (checked by running it in scratch HOME directories, RTK 0.42.4):
+#   Claude:   ~/.claude/settings.json (hook "rtk hook claude"), RTK.md, CLAUDE.md with @RTK.md
+#   Copilot:  ~/.copilot/hooks/rtk-rewrite.json, ~/.copilot/copilot-instructions.md
+#   Gemini:   ~/.gemini/hooks/rtk-hook-gemini.sh, settings.json, GEMINI.md
+#   Cursor:   ~/.cursor/hooks.json        Codex: ~/.codex/RTK.md and AGENTS.md (instructions, no hook)
+#   OpenCode: ~/.config/opencode/plugins/rtk.ts   Pi: ~/.pi/agent/extensions/rtk.ts
+#   Hermes:   ~/.hermes/plugins/rtk-rewrite/, config.yaml
+#   Project:  .windsurfrules, .clinerules, CLAUDE.md, .rtk/filters.toml (project scoped agents)
+# Files that may contain the word rtk (hook entries or instructions):
+for _f in "$_PROJECT/.claude/settings.json" "$_CLAUDE_DIR/settings.json" \
+  "$HOME/.cursor/hooks.json" "$HOME/.gemini/settings.json" "$HOME/.gemini/GEMINI.md" \
+  "$HOME/.copilot/copilot-instructions.md" "$HOME/.codex/AGENTS.md" "$HOME/.hermes/config.yaml" \
+  "$_PROJECT/.windsurfrules" "$_PROJECT/.clinerules"; do
   if [ -f "$_f" ]; then
     _rl="$(grep -niE "$_RTK_WORD" "$_f" 2>/dev/null | head -n 1 | cut -d: -f1)"
     [ -n "$_rl" ] && _rtk_hook_paths+=("$(pl "$_f" "$_rl")")
   fi
 done
-for _f in "$_CLAUDE_DIR/RTK.md" "$_CLAUDE_DIR"/hooks/*rtk*; do
+# Files and folders that exist only because of RTK:
+for _f in "$_CLAUDE_DIR/RTK.md" "$_CLAUDE_DIR"/hooks/*rtk* "$HOME/.codex/RTK.md" \
+  "$HOME"/.copilot/hooks/*rtk* "$HOME"/.gemini/hooks/*rtk* "$_XDG_CONFIG_HOME"/opencode/plugins/*rtk* \
+  "$HOME"/.pi/agent/extensions/*rtk* "$HOME"/.hermes/plugins/*rtk*; do
   [ -e "$_f" ] && _rtk_hook_paths+=("$(pl "$_f" "")")
 done
 for _f in "$_CLAUDE_DIR/CLAUDE.md" "$_PROJECT/CLAUDE.md"; do
@@ -336,6 +351,10 @@ for _f in "$_CLAUDE_DIR/CLAUDE.md" "$_PROJECT/CLAUDE.md"; do
     [ -n "$_rl" ] && _rtk_hook_paths+=("$(pl "$_f" "$_rl")")
   fi
 done
+# Project-local RTK filters. RTK documents that they override built-in filters, but only after "rtk trust".
+if [ -f "$_PROJECT/.rtk/filters.toml" ]; then
+  add Policy info policy.rtk_project_filters "Project-local RTK filters exist. RTK applies them only after rtk trust. wx runs named built-in filters (rtk pipe -f)." "$(pl "$_PROJECT/.rtk/filters.toml" "")" "Do not run rtk trust in a project you do not trust."
+fi
 if [ "${#_rtk_hook_paths[@]}" -gt 0 ]; then
   _rtk_paths_text="$(printf '%s\n' "${_rtk_hook_paths[@]}")"
   add Policy warn policy.rtk_hook "RTK hook or setup found. Commands it rewrites run through RTK and skip wx raw capture." "$_rtk_paths_text" "Choose one route per command. Doctor does not run rtk init or edit RTK config."

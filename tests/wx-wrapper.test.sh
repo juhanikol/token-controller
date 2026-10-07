@@ -290,11 +290,73 @@ printf 'errors.py::test_a PASSED\nwarnings summary is below\ntest_error_handling
 printf 'summary\n' > "$_WX_TEST_ROOT/g3.out"
 _wx_evidence_guard "$_WX_TEST_ROOT/g3.raw" "$_WX_TEST_ROOT/g3.out" || fail 'guard is too broad: it flagged names that only contain error or warning'
 
+# 3b. RTK unavailable in other ways: not on PATH by name, and a file without the execute bit.
+AICONTEXT_RTK_BIN=rtk-is-not-on-the-path-xyz rtk_fallback missing-name filter rtk-not-installed
+printf '#!/usr/bin/env bash\necho "rtk 9.9.9"\n' > "$_WX_TEST_ROOT/notexec-rtk"
+chmod -x "$_WX_TEST_ROOT/notexec-rtk"
+AICONTEXT_RTK_BIN="$_WX_TEST_ROOT/notexec-rtk" rtk_fallback notexec filter rtk-not-installed
+
+# 3c. RTK available, but no filter for the command: the run is not labelled as RTK, and RTK is not called.
+for _WX_UNMAPPED in 'cargo build' 'go vet' 'cargo check'; do
+  # shellcheck disable=SC2086
+  rtk_run "nofilter" $_WX_UNMAPPED
+  [ "$_WX_RUN_EXIT" -eq 0 ] || fail "$_WX_UNMAPPED exited $_WX_RUN_EXIT"
+  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for a command without a filter: $_WX_UNMAPPED"
+  rtk_last | jq -e '.compressor == null and .compressor_version == null and .filter == null and .fallback_reason == null and .output_policy == "raw-command-not-eligible" and .visible.stdout_bytes == .raw.stdout_bytes' >/dev/null || fail "unmapped command was labelled: $_WX_UNMAPPED: $(rtk_last)"
+  # shellcheck disable=SC2086
+  "$_WX_FIXTURES/${_WX_UNMAPPED%% *}" ${_WX_UNMAPPED#* } > "$_WX_TEST_ROOT/direct.nofilter.out"
+  cmp -s "$_WX_TEST_ROOT/rtk-nofilter.stdout" "$_WX_TEST_ROOT/direct.nofilter.out" || fail "output of an unmapped command was changed: $_WX_UNMAPPED"
+done
+# A mapped command where RTK passes the text through unchanged is not labelled either (not smaller).
+FAKE_RTK_MODE=same rtk_run passthrough pytest
+rtk_last | jq -e '.compressor == null and .output_policy == "raw-rtk-fallback" and .fallback_reason == "rtk-not-smaller"' >/dev/null || fail 'a pass-through RTK run was labelled as compressed'
+
+# 3d. Evidence in other formats. RTK drops the line -> raw output. RTK keeps the line -> RTK output.
+for _WX_EVIDENCE in 'x.py:3: DeprecationWarning: old api' 'WARN  deprecated api' 'ERROR  something failed softly' 'src/a.ts(3,5): error TS2322: bad' 'Traceback (most recent call last):' 'tests/x.py::t FAILED' 'CVE-2099-1 found in dep' 'fatal: not a repository' 'warn: slow test'; do
+  FIXTURE_NO_WARNING=1 FIXTURE_EVIDENCE="$_WX_EVIDENCE" FAKE_RTK_MODE=drop-warning rtk_run evidence pytest
+  rtk_last | jq -e '.output_policy == "raw-rtk-fallback" and .fallback_reason == "evidence-guard" and .compressor == null' >/dev/null || fail "dropped evidence was not caught: $_WX_EVIDENCE"
+  assert_file_contains "$_WX_TEST_ROOT/rtk-evidence.stdout" "$_WX_EVIDENCE"
+  if grep -Fq 'fake-rtk' "$_WX_TEST_ROOT/rtk-evidence.stdout"; then fail "RTK output leaked after a guard fallback: $_WX_EVIDENCE"; fi
+  FIXTURE_NO_WARNING=1 FIXTURE_EVIDENCE="$_WX_EVIDENCE" FAKE_RTK_MODE=keep FAKE_RTK_KEEP="$_WX_EVIDENCE" rtk_run evidence-kept pytest
+  rtk_last | jq -e '.output_policy == "compress-rtk-v1" and .compressor == "rtk" and .fallback_reason == null' >/dev/null || fail "kept evidence was rejected: $_WX_EVIDENCE"
+  assert_file_contains "$_WX_TEST_ROOT/rtk-evidence-kept.stdout" "$_WX_EVIDENCE"
+done
+# Lines that only look similar are not evidence, so RTK may drop them.
+FIXTURE_NO_WARNING=1 FIXTURE_EVIDENCE='errors.py::test_a PASSED' FAKE_RTK_MODE=filter rtk_run lookalike pytest
+rtk_last | jq -e '.output_policy == "compress-rtk-v1"' >/dev/null || fail 'the guard flagged a line that only starts with the word error'
+
+# 3e. RTK stderr is captured, but never mixed into the visible command output.
+FIXTURE_STDERR=1 rtk_run stderr-ok pytest
+[ "$(wc -l < "$_WX_TEST_ROOT/rtk-stderr-ok.stderr")" -eq 2 ] || fail "wx stderr should be the command stderr plus the raw-log pointer: $(cat "$_WX_TEST_ROOT/rtk-stderr-ok.stderr")"
+[ "$(sed -n 1p "$_WX_TEST_ROOT/rtk-stderr-ok.stderr")" = 'fixture stderr line' ] || fail 'command stderr is not first and verbatim'
+sed -n 2p "$_WX_TEST_ROOT/rtk-stderr-ok.stderr" | grep -q '^\[wx\] raw logs: ' || fail 'second stderr line is not the raw-log pointer'
+if grep -Fq 'rtk fake notice' "$_WX_TEST_ROOT/rtk-stderr-ok.stdout" "$_WX_TEST_ROOT/rtk-stderr-ok.stderr"; then fail 'RTK stderr was mixed into the visible output'; fi
+_WX_RUN_DIR_OK="$(dirname "$(rtk_last | jq -r '.stdout.path')")"
+[ "$(cat "$_WX_RUN_DIR_OK/stderr.raw")" = 'fixture stderr line' ] || fail 'stderr.raw holds more than the command stderr'
+[ "$(cat "$_WX_RUN_DIR_OK/rtk.stderr")" = 'rtk fake notice' ] || fail 'the RTK notice was not captured in rtk.stderr'
+for _WX_RTK_MODE in fail drop-warning same empty; do
+  FIXTURE_STDERR=1 FAKE_RTK_MODE="$_WX_RTK_MODE" rtk_run stderr-fallback pytest
+  [ "$(wc -l < "$_WX_TEST_ROOT/rtk-stderr-fallback.stderr")" -eq 2 ] || fail "wx stderr after an RTK fallback ($_WX_RTK_MODE) has extra lines: $(cat "$_WX_TEST_ROOT/rtk-stderr-fallback.stderr")"
+  if grep -Fq 'rtk fake notice' "$_WX_TEST_ROOT/rtk-stderr-fallback.stdout" "$_WX_TEST_ROOT/rtk-stderr-fallback.stderr"; then fail "RTK stderr leaked after a fallback ($_WX_RTK_MODE)"; fi
+  cmp -s "$_WX_TEST_ROOT/rtk-stderr-fallback.stdout" "$_WX_TEST_ROOT/direct.pytest.out" || fail "stdout changed after an RTK fallback ($_WX_RTK_MODE)"
+done
+
 # 5. Token Controller never runs "rtk init" (or anything except --version and pipe -f <mapped filter>).
 if grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | grep -q .; then
   fail "unexpected RTK call: $(grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | head -3)"
 fi
 grep -q 'init' "$_WX_RTK_ALL_LOG" && fail 'rtk init was called'
+# Static scan: no script runs "rtk init". The only matches outside comments and messages are in the text that
+# install-optional-tools.sh prints, and those lines are commented out there.
+_WX_INIT_LINES="$(grep -rn 'rtk[[:space:]]\{1,\}init' "$_WX_REPOSITORY_ROOT/scripts" | grep -v 'install-optional-tools.sh' || true)"
+if [ -n "$_WX_INIT_LINES" ]; then
+  _WX_BAD_INIT="$(printf '%s\n' "$_WX_INIT_LINES" | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*#|never runs|does not run|Never "rtk init"|Doctor never' || true)"
+  [ -z "$_WX_BAD_INIT" ] || fail "a script mentions rtk init outside a comment or a 'does not run' message: $_WX_BAD_INIT"
+fi
+_WX_INSTALL_INIT="$(grep -n 'rtk[[:space:]]\{1,\}init' "$_WX_REPOSITORY_ROOT/scripts/install-optional-tools.sh" || true)"
+if [ -n "$_WX_INSTALL_INIT" ]; then
+  printf '%s\n' "$_WX_INSTALL_INIT" | grep -Ev '^[0-9]+:[[:space:]]*#' | grep -q . && fail 'install-optional-tools.sh has an uncommented rtk init line'
+fi
 unset FAKE_RTK_LOG FAKE_RTK_RAW_LOG FAKE_RTK_MODE
 
 # 6. Real RTK, when installed. Raw evidence must be intact whatever RTK does. Output depends on the RTK version.
