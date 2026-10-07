@@ -85,7 +85,7 @@ GNU-specific shell code (`stat -c`, `date +%3N`) can stay in the CLI backend.
 |---|---|
 | `README.md` | Too long. Repository layout omits `tests/`, `extensions/`, and newer docs |
 | `scripts/check-tools.sh` | No Caveman check (behavior change, not text) |
-| `scripts/install-optional-tools.sh` | No Caveman. MemStack status unclear |
+| `scripts/show-optional-tools.sh` | No Caveman. MemStack status unclear |
 | `config/workflow_settings.json` | No `micro`, `caveman_output`, `default_output_style`, or tool-fallback fields. `rtk_mode` values are policy labels, not RTK options |
 | `extensions/vscode/src/extension.ts` | Hard-coded partial mode list. Linux-only `exec` with string-built shell command |
 

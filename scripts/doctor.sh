@@ -532,7 +532,7 @@ for _tool in rtk lean-ctx headroom caveman ccusage; do
     add Tools ok "tool.$_tool" "$_tool: Claude Code skill or plugin found. No command on PATH." "$(pl "$_tfound" "")"
   else
     _TOOLS+=("$_tool|false|none||")
-    add Tools info "tool.$_tool" "$_tool not found."
+    add Tools info "tool.$_tool" "$_tool not found." " You may not need it. ccusage is currently deprecated."
   fi
 done
 

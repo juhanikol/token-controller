@@ -101,7 +101,7 @@ Do not install optional tools. Validate markdown structure only by reading it an
 ```text
 Prepare this repository for optional token-tool validation.
 
-Important: do not run install commands yet. First inspect scripts/install-optional-tools.sh and scripts/check-tools.sh.
+Important: do not run install commands yet. First inspect scripts/show-optional-tools.sh and scripts/check-tools.sh.
 
 Check:
 1. Does the installer automatically install only safe base WSL dependencies?
@@ -112,7 +112,7 @@ Check:
 6. Are install commands consistent with README.md?
 
 Then propose any patch needed. After patching, run:
-- bash -n scripts/install-optional-tools.sh
+- bash -n scripts/show-optional-tools.sh
 - bash -n scripts/check-tools.sh
 - bash scripts/check-tools.sh
 

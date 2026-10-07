@@ -313,7 +313,7 @@ Copy this block for each experiment.
   - stderr: none
   - first error: none
   - last relevant lines: active-cache fallback and exact hint counts retained
-  - file paths: `scripts/check-tools.sh` and `scripts/install-optional-tools.sh`
+  - file paths: `scripts/check-tools.sh` and `scripts/show-optional-tools.sh`
   - line numbers: checker target file fully inspected after editing
   - versions/environment: installed tool paths and versions retained in normal output
   - requested hints: LeanCTX and Claude messages each occurred exactly once
@@ -332,10 +332,10 @@ Copy this block for each experiment.
 - Tools installed: Bash 5.2.21, jq 1.8.2, LeanCTX 3.9.19
 - Tools missing: ShellCheck
 - Commands:
-  - full read of `scripts/install-optional-tools.sh`
+  - full read of `scripts/show-optional-tools.sh`
   - official-source verification for LeanCTX, Claude Code, and Caveman lifecycle claims
-  - `lean-ctx -c "bash -n scripts/install-optional-tools.sh"`
-  - raw fallback `bash -n scripts/install-optional-tools.sh`
+  - `lean-ctx -c "bash -n scripts/show-optional-tools.sh"`
+  - raw fallback `bash -n scripts/show-optional-tools.sh`
   - verify each new command and warning is inside the printed `TOOLS` heredoc
   - verify the Claude Code npm command occurs exactly once
   - `git diff --check`
@@ -350,7 +350,7 @@ Copy this block for each experiment.
   - stderr: complete LeanCTX allowlist refusal retained before fallback
   - first error: `[BLOCKED — DO NOT RETRY] 'bash' is not in the shell allowlist.`
   - last relevant lines: printed-block boundaries and exact command counts retained
-  - file paths: `scripts/install-optional-tools.sh`
+  - file paths: `scripts/show-optional-tools.sh`
   - line numbers: all new commands verified inside the printed `TOOLS` heredoc
   - versions/environment: Bash, jq, and LeanCTX versions recorded above
   - safety: optional install commands remain printed for review rather than executed

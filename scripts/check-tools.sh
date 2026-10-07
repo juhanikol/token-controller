@@ -36,7 +36,7 @@ check_caveman() {
   if [ -n "$found" ]; then
     printf 'OK      %-12s %s (plugin/skill state; no caveman command on PATH)\n' caveman "$found"
   else
-    printf 'MISSING caveman. Optional. Off by default in every mode. See scripts/install-optional-tools.sh\n'
+    printf 'MISSING caveman. Optional. Off by default in every mode. See scripts/show-optional-tools.sh\n'
   fi
 }
 
@@ -57,9 +57,9 @@ check git git 'To install: sudo apt install -y git'
 check curl curl 'To install: sudo apt install -y curl'
 check python3 python3 'To install: sudo apt install -y python3'
 check pip3 pip3 'To install: sudo apt install -y python3-pip'
-check node node 'To install: install Node.js 18+ with nvm (see scripts/install-optional-tools.sh)'
-check npm npm 'To install: install Node.js 18+ with nvm (see scripts/install-optional-tools.sh)'
-check rtk rtk 'To install: review the RTK commands in scripts/install-optional-tools.sh'
+check node node 'To install: install Node.js 18+ with nvm (see scripts/show-optional-tools.sh)'
+check npm npm 'To install: install Node.js 18+ with nvm (see scripts/show-optional-tools.sh)'
+check rtk rtk 'To install: review the RTK commands in scripts/show-optional-tools.sh'
 check headroom headroom 'To install: create ~/.venvs/headroom, then run pip install "headroom-ai[all]"'
 check lean-ctx lean-ctx 'To install core: cargo install lean-ctx'
 check ccusage ccusage 'Optional usage reports. To install: npm install -g ccusage (Token Controller does not install it)'

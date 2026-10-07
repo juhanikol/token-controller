@@ -1,4 +1,69 @@
-# AI Context Workflow Controller
+# Token Controller
+
+**Stop burning context on noise. Pick the work mode, let the controller guide the tools, and keep the important evidence safe.**
+
+Are your AI-coding tokens disappearing faster than expected?
+
+Maybe you are exploring a large codebase. Maybe your agent just dumped a wall of test output into the context. Maybe you already have a good `<span>AGENTS.md</span>` or `<span>SKILLS.md</span>`, but the context still fills up with logs, file listings, repeated success output, and tool chatter.
+
+You may have tried token-saving tools before. They help, but each one has its own setup, commands, hooks, flags, and risks. Then another promising tool appears next week, and now you have one more thing to configure and remember.
+
+**Token Controller exists to remove that cognitive load.**
+
+## **VS Code control**
+
+The Status Bar dropdown provides another way to select a profile.
+
+![select context](assets/20260824_212040_image.png)
+
+It also gives you one simple workflow in CLI for choosing the task you are doing:
+
+```bash
+workflow code
+workflow debug
+workflow architect
+workflow review
+```
+
+The controller then publishes that mode to your shell, your project instructions, the VS Code status bar, and the supported context tools.
+
+Token Controller does not try to replace your tools. It orchestrates them.
+
+* **RTK** reduces noisy terminal output after raw output has been captured.
+* **LeanCTX** helps with controlled codebase exploration, file reads, search, and tree views.
+* **Caveman** can reduce assistant response verbosity when explicitly allowed.
+* **wx** is the safety layer that keeps raw command output, stderr, and exit codes available.
+
+These are all community praised and respected solutions! Thousands have already tested these! So you know that the tools used are already proven and you might have even used them. Token-controller just orchestrates them so you do not need to worry about them.
+
+The goal is simple: **save context where it is safe**, and keep full evidence where correctness matters.
+
+Failures stay raw. Security, database, migration, and release work stay conservative. If an optional tool is missing, Token Controller falls back to safe behavior instead of breaking your workflow.
+
+For daily use, remember only this:
+
+```bash
+workflow init
+workflow code
+```
+
+Install once. Initialize each project once. Then select the work mode from the terminal or the VS Code status bar.
+
+# Recommended easy-install approach
+
+For now, support WSL only. No Windows yet :( 
+
+#### Best path for release
+
+1. Download or clone Token Controller into WSL.
+2. Run one install script.
+3. Install the VSIX into VS Code WSL.
+4. Open a project.
+5. Run workflow init.
+6. Select mode from status bar.
+
+
+## Token controller - as AI Context Workflow Controller
 
 **Choose how agents should handle context, while keeping high-risk evidence visible.**
 
@@ -17,11 +82,10 @@ The `wx` wrapper is the safety and measurement layer: it captures raw output, pr
 
 The implementation has three distinct layers:
 
-
 | Layer                  | Current status                                                                                                                                                                                                                                         |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Policy layer           | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy.                                                                                               |
-| Mechanical layer       | The explicit`wx` wrapper captures raw evidence and collapses exact consecutive repetitions only for eligible successful stdout. Failures and protected profiles or commands remain raw.                                                                |
+| Mechanical layer       | The explicit`wx` wrapper captures raw evidence and collapses exact consecutive repetitions only for eligible successful stdout. Failures and protected profiles or commands remain raw.                                                              |
 | Measured savings layer | Per-run metadata records raw and visible byte counts; the benchmark also captures total emitted bytes including wrapper diagnostics. Fixture validation demonstrates byte reduction, but no tokenizer-backed token-saving result has been established. |
 
 ## Why this matters (even with million-token context windows)
@@ -204,7 +268,9 @@ alias workflow='source ~/projects/token-controller/scripts/workflow.sh'
 # 4.c.  Save the file and refresh your terminal session:
 source ~/.bashrc
 
-# 5. (Optional) Remove installed Python virtual environments if resetting optional tools
+# 5. (
+
+Optional) Remove installed Python virtual environments if resetting optional tools
 rm -rf ~/.venvs/headroom ~/.venvs/memstack
 ```
 
@@ -222,9 +288,8 @@ docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:24.04 bash
 
 Use this table when you are unsure which mode to choose. It describes the policy requested from an agent or connected tool, not behavior the controller independently enforces.
 
-
-| Scenario                            | Command                    | Requested policy                                 | Evidence requested complete                                 |
-| ----------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
+| Scenario                            | Command                      | Requested policy                                 | Evidence requested complete                                 |
+| ----------------------------------- | ---------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
 | Requirements and scope              | `workflow scope`           | Summarize carefully                              | User intent, constraints, acceptance criteria               |
 | Architecture and structure          | `workflow architect`       | Map the codebase, then read selected files fully | Interfaces, module boundaries, design reasoning             |
 | Models, schemas, and decisions      | `workflow decisions`       | Preserve contracts and types                     | Schemas, invariants, API contracts                          |
@@ -232,7 +297,7 @@ Use this table when you are unsure which mode to choose. It describes the policy
 | Rapid prototype                     | `workflow rapid-prototype` | Compress successful build noise aggressively     | Backend API errors, migration warnings, raw failure logs    |
 | Small snippet review                | `workflow snippet`         | Use little or no compression                     | The complete snippet, method, or file                       |
 | Very small task (one function/file) | `workflow micro`           | No context tools, no compression                 | The complete target file or snippet                         |
-| Agent-rule work                     | `workflow agent`           | Keep agent instructions stable                   | `AGENTS.md` and dynamic task-state files                    |
+| Agent-rule work                     | `workflow agent`           | Keep agent instructions stable                   | `AGENTS.md` and dynamic task-state files                  |
 | Data analysis                       | `workflow data-analysis`   | Preserve numeric evidence                        | Numbers, units, statistics, plots, data sources             |
 | Bug fixing                          | `workflow debug`           | Keep the first failure raw                       | Error, stderr, exit code, stack origin, paths, line numbers |
 | Unit and integration tests          | `workflow test`            | Compress passing noise only                      | Failing tests, assertions, stack traces                     |
@@ -310,7 +375,7 @@ bash ~/tools/token-controller/scripts/check-tools.sh
 The optional installer installs base prerequisites and then prints tool-specific commands for review:
 
 ```bash
-bash ~/tools/token-controller/scripts/install-optional-tools.sh
+bash ~/tools/token-controller/scripts/show-optional-tools.sh
 ```
 
 If you choose to install the Python tools using those printed commands, their virtual environments are:
@@ -406,20 +471,19 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 
 ## Useful commands
 
-
-| Command                                     | Purpose                                                                                                                                                            |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `workflow init`                             | Create or safely extend the current project's`AGENTS.md`                                                                                                           |
-| `workflow setup`                            | Configure optional global editor instructions                                                                                                                      |
-| `workflow <mode>`                           | Select a context mode                                                                                                                                              |
-| `workflow status`                           | Show the active mode and policy (`--json` for tools)                                                                                                               |
-| `workflow doctor`                           | Read-only check of settings, instruction files, and tools (`--json` available)                                                                                     |
-| `wx <command>`                              | Capture, preserve, optionally compress, and measure output                                                                                                         |
+| Command                                       | Purpose                                                                                                                                                                |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflow init`                             | Create or safely extend the current project's`AGENTS.md`                                                                                                             |
+| `workflow setup`                            | Configure optional global editor instructions                                                                                                                          |
+| `workflow <mode>`                           | Select a context mode                                                                                                                                                  |
+| `workflow status`                           | Show the active mode and policy (`--json` for tools)                                                                                                                 |
+| `workflow doctor`                           | Read-only check of settings, instruction files, and tools (`--json` available)                                                                                       |
+| `wx <command>`                              | Capture, preserve, optionally compress, and measure output                                                                                                             |
 | `workflow report`                           | Summarize command, byte, reduction, and failure counts (`--json` for tools, `--project <dir>`)                                                                     |
-| `workflow reset-session`                    | Archive session metadata without deleting raw logs                                                                                                                 |
-| `workflow off`                              | Select the off policy                                                                                                                                              |
-| `workflow help`                             | List available commands and modes                                                                                                                                  |
-| `workflow modes`                            | List modes and aliases from the settings file (`--json` for tools)                                                                                                 |
+| `workflow reset-session`                    | Archive session metadata without deleting raw logs                                                                                                                     |
+| `workflow off`                              | Select the off policy                                                                                                                                                  |
+| `workflow help`                             | List available commands and modes                                                                                                                                      |
+| `workflow modes`                            | List modes and aliases from the settings file (`--json` for tools)                                                                                                   |
 | `workflow version`                          | Show the CLI version and the JSON schema numbers (`--json` for tools; also `--version`)                                                                            |
 | `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes`active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
 
@@ -460,7 +524,7 @@ token-controller/
 │   ├── workflow-cli.sh            # run, not sourced: entry point for tools and the extension
 │   ├── doctor.sh                  # read-only checks (workflow doctor)
 │   ├── check-tools.sh
-│   ├── install-optional-tools.sh  # prints optional install commands only
+│   ├── show-optional-tools.sh  # prints optional install commands only
 │   └── lib/
 │       ├── wx.sh
 │       ├── wx-compress.sh

@@ -829,15 +829,15 @@ if grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest|
 fi
 grep -q 'init' "$_WX_RTK_ALL_LOG" && fail 'rtk init was called'
 # Static scan: no script runs "rtk init". The only matches outside comments and messages are in the text that
-# install-optional-tools.sh prints, and those lines are commented out there.
-_WX_INIT_LINES="$(grep -rn 'rtk[[:space:]]\{1,\}init' "$_WX_REPOSITORY_ROOT/scripts" | grep -v 'install-optional-tools.sh' || true)"
+# show-optional-tools.sh prints, and those lines are commented out there.
+_WX_INIT_LINES="$(grep -rn 'rtk[[:space:]]\{1,\}init' "$_WX_REPOSITORY_ROOT/scripts" | grep -v 'show-optional-tools.sh' || true)"
 if [ -n "$_WX_INIT_LINES" ]; then
   _WX_BAD_INIT="$(printf '%s\n' "$_WX_INIT_LINES" | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*#|never runs|does not run|Never "rtk init"|Doctor never' || true)"
   [ -z "$_WX_BAD_INIT" ] || fail "a script mentions rtk init outside a comment or a 'does not run' message: $_WX_BAD_INIT"
 fi
-_WX_INSTALL_INIT="$(grep -n 'rtk[[:space:]]\{1,\}init' "$_WX_REPOSITORY_ROOT/scripts/install-optional-tools.sh" || true)"
+_WX_INSTALL_INIT="$(grep -n 'rtk[[:space:]]\{1,\}init' "$_WX_REPOSITORY_ROOT/scripts/show-optional-tools.sh" || true)"
 if [ -n "$_WX_INSTALL_INIT" ]; then
-  printf '%s\n' "$_WX_INSTALL_INIT" | grep -Ev '^[0-9]+:[[:space:]]*#' | grep -q . && fail 'install-optional-tools.sh has an uncommented rtk init line'
+  printf '%s\n' "$_WX_INSTALL_INIT" | grep -Ev '^[0-9]+:[[:space:]]*#' | grep -q . && fail 'show-optional-tools.sh has an uncommented rtk init line'
 fi
 unset FAKE_RTK_LOG FAKE_RTK_RAW_LOG FAKE_RTK_MODE
 
