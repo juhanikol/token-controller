@@ -696,3 +696,18 @@ Copy this block for each experiment.
 - Evidence preserved: yes in all rows (exit code, raw files, stderr as recorded, guard lines, and markers for warnings and failures). For accepted RTK output the guard check passes by construction.
 - Interpretation: byte counts on 14 rows (9 recorded runs), one RTK version. Not token counts, not a general saving. Runs with warning lines got no reduction. The five informational runs in D-38 are not in this benchmark.
 - Pass/fail: PASS
+
+### Experiment: RTK fixture matrix, all 18 pipe filters (bytes)
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (working tree)
+- Command: `bash benchmarks/run-rtk-benchmark.sh`. 59 fixtures in `tests/fixtures/rtk/MATRIX` (group A cargo-test, pytest, go-test, go-build, tsc, vitest; B mypy, ruff-check, ruff-format, prettier; C grep, rg, find, fd, git-log, git-status, git-diff; D log), plus 22 protected-profile rows (first success fixture of every filter in `security`, `pytest` in the other four protected profiles)
+- Tools: fake RTK (pipeline check) and real RTK 0.42.4 through a spy script. Recorded with real tools: go, pytest, tsc, vitest, git, grep, find. Hand-written: cargo-test, mypy, ruff-check, ruff-format, prettier, rg, fd, log (see `tests/fixtures/rtk/PROVENANCE.txt`)
+- Result: PASS, with 12 pinned known losses. Raw capture, exit codes, and stderr held in all 81 rows per section. Protected profiles: raw output, no RTK call. Every outcome matched the pin in the matrix.
+- Real RTK, `code` profile, 59 rows: 24 RTK outputs shown, 10 raw after `rtk-not-smaller`, 5 after `evidence-guard`, 1 after `rtk-empty-output` (`git diff --stat`), 14 failing runs raw (RTK not called), 5 empty stdout (RTK not called).
+- Bytes (stdout plus stderr): the 24 shown RTK outputs 28675 to 5914. Of those, 12 keep every marked evidence text (13794 to 2822) and 12 do not. All 40 runs that reached RTK: 68216 to 45455.
+- Known losses (shown RTK output, evidence guard accepted it, marked text missing): `pytest --collect-only`, `go test -bench`, plain `go test`, `tsc --listFiles`, `--extendedDiagnostics`, `--showConfig`, `ruff format` (changed count), `prettier --write` (changed file names), `find` and `fd` on 30 directories (RTK prints "+10 more dirs", 40 files not shown), `git log` and `git log --oneline` (RTK drops commits).
+- Not lost in this matrix: all `grep`/`rg` runs fell back (RTK output was larger), `git diff` kept every changed line (it drops context and headers), `git status` kept every path, `log` kept the ERROR and WARN lines, and Traceback runs fell back through the guard.
+- Evidence preserved: raw files, stderr, and exit codes: yes in every row. Marked evidence text in shown output: no in the 12 rows above.
+- Interpretation: byte counts on 59 fixtures, one RTK version, 8 filters with hand-written input. Not token counts, not a general saving. Small outputs often grow under RTK and fall back to raw.
+- Pass/fail: PASS (the 12 losses are pinned in the matrix, so a change of RTK output fails the run; see D-38)

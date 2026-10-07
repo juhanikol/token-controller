@@ -1,0 +1,68 @@
+# RTK fixture matrix. One row per fixture folder. Read by tests/wx-wrapper.test.sh and benchmarks/run-rtk-benchmark.sh.
+# fixture      group   kind   fake   real   real_evidence
+#   group: A built-in tools already validated, B code diagnostics, C search/list/history, D generic log
+#   kind: success | evidence (warning or evidence-like output) | nonzero | empty | informational (not a plain run)
+#   fake: outcome with tests/fixtures/bin/rtk.  real: outcome pinned for RTK 0.42.4.
+#   outcome: accepted (RTK output shown) | guard (evidence-guard fallback) | smaller (rtk-not-smaller fallback)
+#            rtk-empty (rtk-empty-output fallback) | nonzero (failing run, RTK not called) | empty (no stdout, RTK not called)
+#   real_evidence: yes | no (known loss: RTK output was shown and the markers file has text that is missing) | n/a (no markers)
+#   Markers: the text in <fixture>/markers (one string per line) is evidence that must stay visible in the stdout.
+cargo-test/fail A nonzero nonzero nonzero n/a
+cargo-test/pass-nocapture A evidence guard guard yes
+cargo-test/pass-noisy A success accepted accepted yes
+pytest/collect-only A informational accepted accepted no
+pytest/fail A nonzero nonzero nonzero yes
+pytest/pass-noisy A success accepted accepted yes
+pytest/pass-warnings A evidence guard guard yes
+go-test/bench A informational accepted accepted no
+go-test/build-error A nonzero nonzero nonzero n/a
+go-test/fail A nonzero nonzero nonzero n/a
+go-test/pass-json A informational guard guard n/a
+go-test/pass-noisy A evidence guard guard yes
+go-test/pass-quiet A success smaller accepted no
+go-build/fail A nonzero nonzero nonzero n/a
+go-build/quiet A success empty empty n/a
+go-build/verbose A success empty empty n/a
+tsc/fail A nonzero nonzero nonzero n/a
+tsc/pass-listfiles A informational accepted accepted no
+tsc/pass-noisy A informational accepted accepted no
+tsc/pass-quiet A success empty empty n/a
+tsc/showconfig A informational accepted accepted no
+vitest/fail A nonzero nonzero nonzero n/a
+vitest/pass-default A success accepted accepted yes
+vitest/pass-verbose A success accepted accepted yes
+vitest/pass-warn A evidence accepted accepted yes
+mypy/fail B nonzero nonzero nonzero yes
+mypy/pass-notes B evidence accepted accepted yes
+mypy/pass-quiet B success smaller accepted n/a
+ruff-check/exit-zero B evidence accepted smaller yes
+ruff-check/fail B nonzero nonzero nonzero yes
+ruff-check/pass-quiet B success smaller smaller yes
+ruff-format/check-fail B nonzero nonzero nonzero yes
+ruff-format/pass B success smaller accepted no
+prettier/check-fail B nonzero nonzero nonzero yes
+prettier/check-pass B success accepted accepted n/a
+prettier/write B success accepted accepted no
+grep/evidence C evidence guard smaller yes
+grep/many C success accepted smaller yes
+grep/nomatch C nonzero nonzero nonzero n/a
+grep/todo C success accepted smaller yes
+rg/evidence C evidence guard smaller yes
+rg/many C success accepted smaller yes
+rg/nomatch C nonzero nonzero nonzero n/a
+rg/todo C success accepted smaller yes
+find/many C evidence accepted accepted no
+find/none C empty empty empty n/a
+find/sources C success accepted smaller yes
+fd/many C evidence accepted accepted no
+fd/none C empty empty empty n/a
+fd/sources C success accepted smaller yes
+git-log/history C evidence accepted accepted no
+git-log/oneline C success accepted accepted no
+git-status/clean C success smaller accepted yes
+git-status/dirty C success accepted accepted yes
+git-status/not-a-repo C nonzero nonzero nonzero n/a
+git-diff/changes C evidence accepted accepted yes
+git-diff/stat C success accepted rtk-empty yes
+log/repeated D success accepted accepted yes
+log/traceback D evidence guard guard yes

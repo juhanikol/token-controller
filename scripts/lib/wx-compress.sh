@@ -42,14 +42,6 @@ _wx_rtk_enabled() {
   return 0
 }
 
-# Filters that must not be used yet: their output is evidence (search results, diffs, status).
-_wx_rtk_filter_denied() {
-  case "$1" in
-    grep|rg|find|fd|git-diff|git-status|git-log) return 0 ;;
-  esac
-  return 1
-}
-
 # RTK classes. RTK is a post-capture terminal-output filter. wx runs the original command once, saves the raw
 # output, and only for a "pipe" entry runs: rtk pipe -f <filter> on the captured stdout.
 # One entry per command prefix in command_policy.rtk_commands: {"match": "cargo test", "class": "pipe", "filter": "cargo-test"}.
@@ -58,7 +50,7 @@ _wx_rtk_filter_denied() {
 #   never            never use RTK for this command
 #   rerun            would run the command again through RTK. Rejected: no code path exists, and it is never used.
 # Resolution is strict. The longest matching prefix wins (the first one on a tie). An unknown, empty, or misspelled
-# class, "rerun", a pipe class that is not enabled, and a pipe entry with a missing, malformed, or denied filter
+# class, "rerun", a pipe class that is not enabled, and a pipe entry with a missing or malformed filter
 # all resolve to "never". A command with no entry has no class (return 1) and its output stays raw.
 # Prints: <class> <unit separator> <filter>. The filter is empty unless the class is pipe.
 _wx_rtk_lookup() {
@@ -113,7 +105,7 @@ _wx_rtk_lookup() {
       case "$_WX_BEST_FILTER" in
         ''|*[!a-z0-9-]*) printf 'never%s\n' "$_WX_US"; return 0 ;;
       esac
-      if [ "$_WX_BEST_PIPE" = true ] && ! _wx_rtk_filter_denied "$_WX_BEST_FILTER"; then
+      if [ "$_WX_BEST_PIPE" = true ]; then
         printf 'pipe%s%s\n' "$_WX_US" "$_WX_BEST_FILTER"
       else
         printf 'never%s\n' "$_WX_US"
@@ -334,4 +326,4 @@ _wx_compress_exact_repeats() {
   ' "$_WX_INPUT_FILE" > "$_WX_OUTPUT_FILE"
 }
 
-export -f _wx_command_matches_policy _wx_rtk_enabled _wx_rtk_filter_denied _wx_rtk_lookup _wx_rtk_class_for_command _wx_rtk_filter_for_command _wx_evidence_guard _wx_try_rtk _wx_select_output_policy _wx_compress_exact_repeats
+export -f _wx_command_matches_policy _wx_rtk_enabled _wx_rtk_lookup _wx_rtk_class_for_command _wx_rtk_filter_for_command _wx_evidence_guard _wx_try_rtk _wx_select_output_policy _wx_compress_exact_repeats

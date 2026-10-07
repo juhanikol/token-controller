@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+File "src/parser.py", line 7
+ValueError: empty input
+ERROR unhandled exception in handler

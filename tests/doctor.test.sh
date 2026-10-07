@@ -228,14 +228,26 @@ rtk_cfg() { # jq filter ("." for none). Prints "id:severity" for every RTK confi
   AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -r '[.findings[] | select(.id | startswith("rtk.config")) | "\(.id):\(.severity)"] | sort | join(",")'
 }
 [ "$(rtk_cfg .)" = "rtk.config:ok" ] || fail "the repository RTK config should be ok: $(rtk_cfg .)"
-AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "rtk.config") | .message] | .[0] | contains("6 pipe") and contains("5 recognized-only") and contains("7 never") and contains("Rerun is not used")' >/dev/null || fail "RTK config summary is wrong"
+AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "rtk.config") | .message] | .[0] | contains("20 pipe") and contains("46 recognized-only") and contains("0 never") and contains("Rerun is not used")' >/dev/null || fail "RTK config summary is wrong"
 [ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "x", "class": "turbo", "filter": "x"}]')" = "rtk.config_invalid_class:warn" ] || fail "an unknown class must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "x", "class": "PIPE", "filter": "x"}]')" = "rtk.config_invalid_class:warn" ] || fail "a class with a different case must be a warn"
-[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "ls", "class": "rerun"}]')" = "rtk.config_rerun:warn" ] || fail "a rerun entry must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "zzz", "class": "rerun"}]')" = "rtk.config_rerun:warn" ] || fail "a rerun entry must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_class_enabled.rerun = true')" = "rtk.config_rerun:warn" ] || fail "rerun enabled must be a warn"
-[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "y", "class": "pipe", "filter": "grep"}]')" = "rtk.config_bad_filter:warn" ] || fail "a denied filter must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "y", "class": "pipe", "filter": "Grep"}]')" = "rtk.config_bad_filter:warn" ] || fail "an uppercase filter must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "y", "class": "pipe", "filter": "Bad Filter"}]')" = "rtk.config_bad_filter:warn" ] || fail "a malformed filter must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "y", "class": "pipe"}]')" = "rtk.config_bad_filter:warn" ] || fail "a pipe entry without a filter must be a warn"
+# Table audit: match values, duplicates, longest-prefix overlap, smart-read commands, and the two switches.
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"class": "never"}]')" = "rtk.config_bad_match:warn" ] || fail "an entry without match must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "", "class": "never"}]')" = "rtk.config_bad_match:warn" ] || fail "an empty match must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "  ", "class": "never"}]')" = "rtk.config_bad_match:warn" ] || fail "a blank match must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": 7, "class": "never"}]')" = "rtk.config_bad_match:warn" ] || fail "a match that is not a string must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "ls", "class": "never"}]')" = "rtk.config_duplicate_match:warn" ] || fail "a duplicate match must be a warn: $(rtk_cfg '.command_policy.rtk_commands += [{"match": "ls", "class": "never"}]')"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "cargo", "class": "never"}]')" = "rtk.config:ok" ] || fail "a longest-prefix overlap (cargo and cargo test) must be allowed"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "docker compose", "class": "never"}, {"match": "kubectl", "class": "recognized-only", "filter": null}]')" = "rtk.config:ok" ] || fail "overlaps, and a null filter on a non-pipe row, must be allowed"
+for _SMART in cat head tail 'rtk read' 'rtk smart'; do
+  [ "$(rtk_cfg "(.command_policy.rtk_commands[] | select(.match == \"$_SMART\") | .class) = \"never\"")" = "rtk.config_smart_read:warn" ] || fail "'$_SMART' not recognized-only must be a warn"
+done
+[ "$(rtk_cfg '.command_policy.rtk_commands[0].filter = ""')" = "rtk.config_bad_filter:warn" ] || fail "an empty filter on a pipe row must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_filters = {"pytest": "pytest"}')" = "rtk.config_legacy:warn" ] || fail "the old rtk_filters key must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_class_enabled.pipe = false')" = "rtk.config:ok,rtk.config_pipe_disabled:info" ] || fail "a disabled pipe class must be an info: $(rtk_cfg '.command_policy.rtk_class_enabled.pipe = false')"
 [ "$(rtk_cfg 'del(.command_policy.rtk_commands)')" = "rtk.config_no_commands:info" ] || fail "no rtk_commands must be an info"

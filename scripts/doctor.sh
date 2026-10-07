@@ -371,14 +371,16 @@ fi
 if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
   _rtk_cfg="$(jq -r '
     def valid: ["pipe", "rerun", "recognized-only", "never"];
-    def denied: ["grep", "rg", "find", "fd", "git-diff", "git-status", "git-log"];
     (.command_policy // {}) as $c
     | ((($c.rtk_commands // []) | if type == "array" then . else [] end) | map(select(type == "object"))) as $e
     | [
         "count\t\($e | length)\t\([$e[] | select(.class == "pipe")] | length)\t\([$e[] | select(.class == "recognized-only")] | length)\t\([$e[] | select(.class == "never")] | length)",
         ($e[] | select((.class | type) != "string" or ((.class as $k | valid | index($k)) == null)) | "invalid_class\t\(.match // "?")\t\(.class // "?" | tostring)"),
         ($e[] | select(.class == "rerun") | "rerun_entry\t\(.match // "?")"),
-        ($e[] | select(.class == "pipe") | select((.filter | type) != "string" or ((.filter | test("^[a-z0-9-]+$")) | not) or ((.filter as $f | denied | index($f)) != null)) | "bad_filter\t\(.match // "?")\t\(.filter // "?" | tostring)"),
+        ($e[] | select((.match | type) != "string" or (.match | test("^\\s*$"))) | "bad_match\t\(.class // "?" | tostring)"),
+        ([$e[] | .match | select(type == "string")] | group_by(.)[] | select(length > 1) | "duplicate_match\t\(.[0])"),
+        ($e[] | select(.match | type == "string") | select(.match as $m | ["cat", "head", "tail", "rtk read", "rtk smart"] | index($m) != null) | select(.class != "recognized-only") | "smart_read\t\(.match)\t\(.class // "?" | tostring)"),
+        ($e[] | select(.class == "pipe") | select((.filter | type) != "string" or ((.filter | test("^[a-z0-9-]+$")) | not)) | "bad_filter\t\(.match // "?")\t\(.filter // "?" | tostring)"),
         (if $c.rtk_class_enabled.rerun == true then "rerun_enabled" else empty end),
         (if $c.rtk_class_enabled.pipe == true then empty else "pipe_disabled" end),
         (if $c.rtk_filters != null then "legacy_filters" else empty end),
@@ -393,6 +395,9 @@ if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
   _rtk_invalid=""
   _rtk_rerun=""
   _rtk_badf=""
+  _rtk_badm=""
+  _rtk_dup=""
+  _rtk_smart=""
   while IFS=$'\t' read -r _k _a _b _c _d; do
     case "$_k" in
       count)
@@ -410,6 +415,9 @@ if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
       invalid_class) _rtk_invalid="${_rtk_invalid:+$_rtk_invalid, }'$_a' (class $_b)" ;;
       rerun_entry) _rtk_rerun="${_rtk_rerun:+$_rtk_rerun, }'$_a'" ;;
       rerun_enabled) _rtk_rerun="${_rtk_rerun:+$_rtk_rerun, }rtk_class_enabled.rerun" ;;
+      bad_match) _rtk_badm="${_rtk_badm:+$_rtk_badm, }an entry with class $_a" ;;
+      duplicate_match) _rtk_dup="${_rtk_dup:+$_rtk_dup, }'$_a'" ;;
+      smart_read) _rtk_smart="${_rtk_smart:+$_rtk_smart, }'$_a' (class $_b)" ;;
       bad_filter) _rtk_badf="${_rtk_badf:+$_rtk_badf, }'$_a' (filter $_b)" ;;
       legacy_filters)
         _rtk_problems=1
@@ -433,7 +441,19 @@ if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
   fi
   if [ -n "$_rtk_badf" ]; then
     _rtk_problems=1
-    add "RTK config" warn rtk.config_bad_filter "A pipe entry has a missing, malformed, or denied filter: $_rtk_badf. It resolves to never." "$(pl "$_SETTINGS_FILE" "")" "Denied filters: grep, rg, find, fd, git-diff, git-status, git-log."
+    add "RTK config" warn rtk.config_bad_filter "A pipe entry has a missing or malformed filter: $_rtk_badf. It resolves to never." "$(pl "$_SETTINGS_FILE" "")" "A filter name is lower-case letters, digits, and dashes, for example git-status."
+  fi
+  if [ -n "$_rtk_badm" ]; then
+    _rtk_problems=1
+    add "RTK config" warn rtk.config_bad_match "A command entry has no usable match (a non-empty string is needed): $_rtk_badm. It never matches a command." "$(pl "$_SETTINGS_FILE" "")"
+  fi
+  if [ -n "$_rtk_dup" ]; then
+    _rtk_problems=1
+    add "RTK config" warn rtk.config_duplicate_match "The same match is listed twice: $_rtk_dup. Only the first entry is used." "$(pl "$_SETTINGS_FILE" "")" "Remove the duplicates. A longer prefix, such as cargo and cargo test, is fine."
+  fi
+  if [ -n "$_rtk_smart" ]; then
+    _rtk_problems=1
+    add "RTK config" warn rtk.config_smart_read "Smart file reading is deferred, but these entries are not recognized-only: $_rtk_smart." "$(pl "$_SETTINGS_FILE" "")" "Use class recognized-only for cat, head, tail, rtk read, and rtk smart."
   fi
   if [ "$_rtk_problems" -eq 0 ] && [ "$_rtk_total" -gt 0 ]; then
     add "RTK config" ok rtk.config "RTK $_rtk_counts. Rerun is not used." "$(pl "$_SETTINGS_FILE" "")"

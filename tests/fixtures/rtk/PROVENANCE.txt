@@ -1,4 +1,5 @@
-Recorded outputs for the six enabled RTK pipe filters. Each case folder has stdout, stderr, exit, and cmd.
+Fixtures for all 18 RTK pipe filters (groups and expected outcomes: MATRIX). Each case folder has stdout, stderr, exit, and cmd, and optionally markers
+(text that must stay visible). The first six filters (group A) are described below. Each case folder has stdout, stderr, exit, and cmd.
 Replayed by tests/fixtures/replay-case.sh (FIXTURE_CASE=<filter>/<case>) through the fixture commands in tests/fixtures/bin.
 
 Recorded from real runs on 2026-10-07 (paths scrubbed to /home/user/proj):
@@ -17,3 +18,12 @@ Real stdout and stderr are kept apart as the tools wrote them. Notes:
   go build writes only to stderr, so its stdout is always empty.
   vitest writes console warnings and errors to stderr.
   tsc prints nothing on a quiet success and prints errors on stdout.
+
+Groups B to D (2026-10-07):
+  RECORDED with real tools: git-status, git-log, git-diff, grep, find. tests/fixtures/record-live-fixtures.sh builds a small project
+    (fixed dates, TZ=UTC) and records them. git 2.55.0, ugrep 7.8.4 as grep, bfs 4.1.1 as find.
+  HAND-WRITTEN, not recorded (the tool is not installed here): mypy, ruff-check, ruff-format, prettier, rg, fd, log. The text follows the
+    documented output format of each tool. rg/many and fd/many reuse the grep and find recordings. Real RTK results on them show how RTK
+    treats that text, not how the tool behaves. A prettier "[warn]" line goes to stderr, as in prettier 3.
+  Commands that are not installed, and grep, find, and git, replay through tests/fixtures/shim-command.sh (see link-shims.sh). The shim
+    replays only the exact recorded command line and runs the real command for anything else.

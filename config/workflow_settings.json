@@ -358,18 +358,75 @@
     ],
     "rtk_class_enabled": {
       "pipe": true,
-      "rerun": false
+      "rerun": false,
+      "recognized-only": false,
+      "never": false
     },
     "rtk_commands": [
+      {
+        "match": "git status",
+        "class": "pipe",
+        "filter": "git-status"
+      },
+      {
+        "match": "git log",
+        "class": "pipe",
+        "filter": "git-log"
+      },
+      {
+        "match": "git diff",
+        "class": "pipe",
+        "filter": "git-diff"
+      },
       {
         "match": "cargo test",
         "class": "pipe",
         "filter": "cargo-test"
       },
       {
+        "match": "vitest",
+        "class": "pipe",
+        "filter": "vitest"
+      },
+      {
+        "match": "tsc",
+        "class": "pipe",
+        "filter": "tsc"
+      },
+      {
+        "match": "prettier",
+        "class": "pipe",
+        "filter": "prettier"
+      },
+      {
         "match": "pytest",
         "class": "pipe",
         "filter": "pytest"
+      },
+      {
+        "match": "python -m pytest",
+        "class": "pipe",
+        "filter": "pytest"
+      },
+      {
+        "match": "python3 -m pytest",
+        "class": "pipe",
+        "filter": "pytest"
+      },
+      {
+        "match": "ruff check",
+        "class": "pipe",
+        "filter": "ruff-check"
+      },
+      {
+        "match": "ruff format",
+        "class": "pipe",
+        "filter": "ruff-format"
+      },
+      {
+        "match": "mypy",
+        "class": "pipe",
+        "filter": "mypy"
       },
       {
         "match": "go test",
@@ -382,14 +439,235 @@
         "filter": "go-build"
       },
       {
-        "match": "tsc",
+        "match": "grep",
         "class": "pipe",
-        "filter": "tsc"
+        "filter": "grep"
       },
       {
-        "match": "vitest",
+        "match": "rg",
         "class": "pipe",
-        "filter": "vitest"
+        "filter": "rg"
+      },
+      {
+        "match": "find",
+        "class": "pipe",
+        "filter": "find"
+      },
+      {
+        "match": "fd",
+        "class": "pipe",
+        "filter": "fd"
+      },
+      {
+        "match": "log",
+        "class": "pipe",
+        "filter": "log"
+      },
+      {
+        "match": "git show",
+        "class": "recognized-only",
+        "rtk": "git"
+      },
+      {
+        "match": "git stash list",
+        "class": "recognized-only",
+        "rtk": "git"
+      },
+      {
+        "match": "gh pr view",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gh pr checks",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gh run list",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gh issue view",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gt log",
+        "class": "recognized-only",
+        "rtk": "gt"
+      },
+      {
+        "match": "gt status",
+        "class": "recognized-only",
+        "rtk": "gt"
+      },
+      {
+        "match": "cargo nextest",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "cargo build",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "cargo check",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "cargo clippy",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "jest",
+        "class": "recognized-only",
+        "rtk": "jest"
+      },
+      {
+        "match": "eslint",
+        "class": "recognized-only",
+        "rtk": "lint"
+      },
+      {
+        "match": "pnpm list",
+        "class": "recognized-only",
+        "rtk": "pnpm"
+      },
+      {
+        "match": "pnpm outdated",
+        "class": "recognized-only",
+        "rtk": "pnpm"
+      },
+      {
+        "match": "next build",
+        "class": "recognized-only",
+        "rtk": "next"
+      },
+      {
+        "match": "prisma migrate",
+        "class": "recognized-only",
+        "rtk": "prisma"
+      },
+      {
+        "match": "playwright test",
+        "class": "recognized-only",
+        "rtk": "playwright"
+      },
+      {
+        "match": "pip install",
+        "class": "recognized-only",
+        "rtk": "pip"
+      },
+      {
+        "match": "golangci-lint run",
+        "class": "recognized-only",
+        "rtk": "golangci-lint"
+      },
+      {
+        "match": "rspec",
+        "class": "recognized-only",
+        "rtk": "rspec"
+      },
+      {
+        "match": "rubocop",
+        "class": "recognized-only",
+        "rtk": "rubocop"
+      },
+      {
+        "match": "rake",
+        "class": "recognized-only",
+        "rtk": "rake"
+      },
+      {
+        "match": "dotnet build",
+        "class": "recognized-only",
+        "rtk": "dotnet"
+      },
+      {
+        "match": "dotnet test",
+        "class": "recognized-only",
+        "rtk": "dotnet"
+      },
+      {
+        "match": "dotnet format",
+        "class": "recognized-only",
+        "rtk": "dotnet"
+      },
+      {
+        "match": "docker ps",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "docker images",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "docker logs",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "docker compose up",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "kubectl get pods",
+        "class": "recognized-only",
+        "rtk": "kubectl"
+      },
+      {
+        "match": "kubectl logs",
+        "class": "recognized-only",
+        "rtk": "kubectl"
+      },
+      {
+        "match": "ls",
+        "class": "recognized-only",
+        "rtk": "ls"
+      },
+      {
+        "match": "tree",
+        "class": "recognized-only",
+        "rtk": "tree"
+      },
+      {
+        "match": "ast-grep",
+        "class": "recognized-only",
+        "rtk": null,
+        "note": "Listed in RTK's coverage document. Not in the rtk --help of 0.42.4."
+      },
+      {
+        "match": "diff",
+        "class": "recognized-only",
+        "rtk": "diff"
+      },
+      {
+        "match": "wc",
+        "class": "recognized-only",
+        "rtk": "wc"
+      },
+      {
+        "match": "aws",
+        "class": "recognized-only",
+        "rtk": "aws"
+      },
+      {
+        "match": "psql",
+        "class": "recognized-only",
+        "rtk": "psql"
+      },
+      {
+        "match": "curl",
+        "class": "recognized-only",
+        "rtk": "curl"
       },
       {
         "match": "cat",
@@ -412,47 +690,14 @@
       {
         "match": "rtk read",
         "class": "recognized-only",
+        "rtk": "read",
         "note": "Smart file reading is deferred."
       },
       {
         "match": "rtk smart",
         "class": "recognized-only",
+        "rtk": "smart",
         "note": "Summaries replace content. Deferred."
-      },
-      {
-        "match": "grep",
-        "class": "never",
-        "note": "Search output is evidence. RTK has a pipe filter, but the evidence guard is not proven for it."
-      },
-      {
-        "match": "rg",
-        "class": "never",
-        "note": "Search output is evidence."
-      },
-      {
-        "match": "find",
-        "class": "never",
-        "note": "File lists are evidence."
-      },
-      {
-        "match": "fd",
-        "class": "never",
-        "note": "File lists are evidence."
-      },
-      {
-        "match": "git status",
-        "class": "never",
-        "note": "Repository state is evidence."
-      },
-      {
-        "match": "git diff",
-        "class": "never",
-        "note": "Diffs are evidence."
-      },
-      {
-        "match": "git log",
-        "class": "never",
-        "note": "History is evidence."
       }
     ]
   }

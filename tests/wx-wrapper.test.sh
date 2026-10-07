@@ -224,24 +224,17 @@ rtk_run debug-pass pytest
 rtk_last | jq -e '.output_policy == "compress-rtk-v1" and .compressor == "rtk"' >/dev/null || fail 'passing debug run did not use RTK'
 source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null
 
-# Commands without a mapped filter, and the excluded filters, never reach RTK.
+# Commands without a pipe entry never reach RTK, even when RTK documents them (recognized-only).
 git init -q . 2>/dev/null
 rtk_run unmapped-npm npm install
 [ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for an unmapped command'
 rtk_last | jq -e '.output_policy == "compress-exact-repeats-v1" and .compressor == "builtin/exact-repeat-v1" and .compressor_version == "1" and .filter == null' >/dev/null || fail 'unmapped command should use the built-in reducer and be labelled that way'
-for _WX_EXCLUDED in 'grep -c PASSED direct-file' 'find . -maxdepth 0' 'git status' 'git diff'; do
+for _WX_EXCLUDED in 'ls' 'wc direct-file' 'diff direct-file direct-file'; do
   cp "$_WX_TEST_ROOT/direct.pytest.out" direct-file
   # shellcheck disable=SC2086
   rtk_run excluded $_WX_EXCLUDED
   [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for: $_WX_EXCLUDED"
-  rtk_last | jq -e '.compressor == null and .filter == null' >/dev/null || fail "excluded command was labelled: $_WX_EXCLUDED"
-done
-# A config that maps an excluded filter does not enable it.
-jq '.command_policy.rtk_commands = [{"match": "grep", "class": "pipe", "filter": "grep"}, {"match": "git status", "class": "pipe", "filter": "git-status"}, {"match": "find", "class": "pipe", "filter": "find"}]' "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/denied-settings.json"
-for _WX_EXCLUDED in 'grep -c PASSED direct-file' 'git status' 'find . -maxdepth 0'; do
-  # shellcheck disable=SC2086
-  AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/denied-settings.json" rtk_run denied $_WX_EXCLUDED
-  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for a denied filter: $_WX_EXCLUDED"
+  rtk_last | jq -e '.compressor == null and .filter == null and .rtk_class == "recognized-only"' >/dev/null || fail "recognized-only command was labelled: $_WX_EXCLUDED"
 done
 
 # 3. Fallbacks: raw output is shown, exit code kept, the reason is recorded, compressor is null.
@@ -402,15 +395,15 @@ for _WX_RTKCMD in 'read direct-file' 'smart direct-file'; do
   [ "$(cat "$FAKE_RTK_LOG")" = "$_WX_RTKCMD" ] || fail "wx called RTK itself for: rtk $_WX_RTKCMD ($(cat "$FAKE_RTK_LOG"))"
   rtk_last | jq -e '.rtk_class == "recognized-only" and .compressor == null and .filter == null' >/dev/null || fail "rtk $_WX_RTKCMD is not recognized-only: $(rtk_last)"
 done
-# never: explicit entries.
+# never: the shipped table has no never entries. An explicit never entry still blocks a command that has a pipe entry elsewhere.
 for _WX_CMD in 'grep -c PASSED direct-file' 'git status'; do
   # shellcheck disable=SC2086
-  rtk_run never $_WX_CMD
+  class_run never '.command_policy.rtk_commands = [{"match": "grep", "class": "never"}, {"match": "git status", "class": "never"}]' $_WX_CMD
   [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for a never command: $_WX_CMD"
   class_expect never raw-command-not-eligible
 done
 # No entry: no class, raw output.
-rtk_run noentry ls
+rtk_run noentry echo noentry
 [ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for a command with no entry'
 class_expect null raw-command-not-eligible
 # Unknown, empty, or misspelled classes, a class that is not a string, and rerun all resolve to never.
@@ -434,7 +427,7 @@ class_expect null raw-command-not-eligible
 class_run legacy '.command_policy.rtk_filters = {"pytest": "pytest"} | del(.command_policy.rtk_commands)' pytest
 [ "$(rtk_calls)" -eq 0 ] || fail 'the old rtk_filters key was still used'
 # rerun is rejected even when it is enabled in the config. There is no code for it.
-class_run rerun '.command_policy.rtk_class_enabled.rerun = true | .command_policy.rtk_commands += [{"match": "ls", "class": "rerun", "rtk": "ls"}, {"match": "pytest", "class": "rerun"}]' ls
+class_run rerun '.command_policy.rtk_class_enabled.rerun = true | .command_policy.rtk_commands = [{"match": "ls", "class": "rerun", "rtk": "ls"}, {"match": "pytest", "class": "rerun"}]' ls
 [ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for a rerun entry'
 class_expect never raw-command-not-eligible
 class_run rerun2 '.command_policy.rtk_class_enabled.rerun = true | .command_policy.rtk_commands = [{"match": "pytest", "class": "rerun"}]' pytest
@@ -449,8 +442,8 @@ class_run pipemissing 'del(.command_policy.rtk_class_enabled)' pytest
 class_expect never raw-command-not-eligible
 class_run pipestring '.command_policy.rtk_class_enabled.pipe = "true"' pytest
 [ "$(rtk_calls)" -eq 0 ] || fail 'a string "true" enabled the pipe class'
-# A pipe entry needs a plain filter name that is not denied.
-for _WX_FILTER in '' 'Py Test' 'pytest; touch PIPE_INJECTED' '$(touch PIPE_INJECTED)' 'grep' 'git-diff' 'rg'; do
+# A pipe entry needs a plain filter name.
+for _WX_FILTER in '' 'Py Test' 'pytest; touch PIPE_INJECTED' '$(touch PIPE_INJECTED)' 'Grep' 'git_diff' 'rg '; do
   jq --arg f "$_WX_FILTER" '.command_policy.rtk_commands = [{"match": "pytest", "class": "pipe", "filter": $f}]' "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/class-filter.json"
   AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/class-filter.json" rtk_run class-filter pytest
   [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called with the filter '$_WX_FILTER'"
@@ -475,6 +468,71 @@ for _WX_PROFILE in raw security db migration release; do
   [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called in the $_WX_PROFILE profile with every class enabled"
   rtk_last | jq -e '.output_policy == "raw-protected-profile" and .compressor == null and .filter == null' >/dev/null || fail "$_WX_PROFILE record is invalid with every class enabled: $(rtk_last)"
   cmp -s "$_WX_TEST_ROOT/rtk-class-protected.stdout" "$_WX_TEST_ROOT/direct.pytest.out" || fail "$_WX_PROFILE output changed with every class enabled"
+done
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+
+# 3g2. The shipped table. Every RTK documented command has an entry, and only pipe entries can reach RTK.
+_WX_CFG="$_WX_REPOSITORY_ROOT/config/workflow_settings.json"
+jq -e '.command_policy.rtk_class_enabled == {"pipe": true, "rerun": false, "recognized-only": false, "never": false}' "$_WX_CFG" >/dev/null || fail 'rtk_class_enabled in the shipped config is wrong'
+jq -e '.command_policy.rtk_commands | type == "array" and length > 0 and all(type == "object" and (.match | type == "string" and length > 0) and (.class | type == "string"))' "$_WX_CFG" >/dev/null || fail 'rtk_commands is not a list of objects with match and class'
+jq -e '[.command_policy.rtk_commands[].class] | all(. == "pipe" or . == "recognized-only" or . == "never")' "$_WX_CFG" >/dev/null || fail 'the shipped table has an unknown class, or a rerun entry'
+jq -e '[.command_policy.rtk_commands[].match] | length == (unique | length)' "$_WX_CFG" >/dev/null || fail 'the shipped table has a duplicate match'
+jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe") | .filter] | all(type == "string" and test("^[a-z0-9-]+$"))' "$_WX_CFG" >/dev/null || fail 'a pipe entry has an invalid filter name'
+jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe") | .filter] | unique == ["cargo-test","fd","find","git-diff","git-log","git-status","go-build","go-test","grep","log","mypy","prettier","pytest","rg","ruff-check","ruff-format","tsc","vitest"]' "$_WX_CFG" >/dev/null || fail 'the pipe filters are not the 18 filters of RTK 0.42.4'
+jq -e '[.command_policy.rtk_commands[] | select(.class != "pipe") | select(has("filter") and .filter != null)] | length == 0' "$_WX_CFG" >/dev/null || fail 'a non-pipe entry has a filter'
+# Expected counts. Change them on purpose when an entry is added or removed.
+jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe")] | length == 20' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 20 pipe entries'
+jq -e '[.command_policy.rtk_commands[] | select(.class == "recognized-only")] | length == 46' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 46 recognized-only entries'
+jq -e '[.command_policy.rtk_commands[] | select(.class == "never" or .class == "rerun")] | length == 0' "$_WX_CFG" >/dev/null || fail 'the shipped table has a never or rerun entry'
+jq -e '.command_policy.rtk_commands | length == 66' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 66 entries'
+# Smart file reading is recognized-only.
+jq -e '[.command_policy.rtk_commands[] | select(.match | IN("cat", "head", "tail", "rtk read", "rtk smart")) | .class] | length == 5 and all(. == "recognized-only")' "$_WX_CFG" >/dev/null || fail 'a smart-read command is not recognized-only'
+# The documented commands that must be in the table.
+for _WX_DOC in 'git show' 'git stash list' 'gh pr view' 'gh pr checks' 'gh run list' 'gh issue view' 'gt log' 'gt status' 'cargo nextest' 'cargo build' 'cargo check' 'cargo clippy' 'jest' 'eslint' 'pnpm list' 'pnpm outdated' 'next build' 'prisma migrate' 'playwright test' 'pip install' 'golangci-lint run' 'rspec' 'rubocop' 'rake' 'dotnet build' 'dotnet test' 'dotnet format' 'docker ps' 'docker images' 'docker logs' 'docker compose up' 'kubectl get pods' 'kubectl logs' 'ls' 'tree' 'ast-grep' 'diff' 'wc' 'aws' 'psql' 'curl' 'cat' 'head' 'tail' 'rtk read' 'rtk smart'; do
+  jq -e --arg m "$_WX_DOC" '[.command_policy.rtk_commands[] | select(.match == $m and .class == "recognized-only")] | length == 1' "$_WX_CFG" >/dev/null || fail "'$_WX_DOC' is not a recognized-only entry in the shipped table"
+done
+# Resolve every entry the way wx does.
+_WX_PIPE_N=0
+_WX_REC_N=0
+while IFS=$'\t' read -r _WX_M _WX_C _WX_FILT; do
+  read -r -a _WX_ARGV <<< "$_WX_M"
+  _WX_GOT="$(_wx_rtk_lookup "$_WX_CFG" "${_WX_ARGV[@]}" extra-arg)" || fail "no class for '$_WX_M'"
+  case "$_WX_C" in
+    pipe)
+      [ "$_WX_GOT" = "pipe"$'\x1f'"$_WX_FILT" ] || fail "'$_WX_M' did not resolve to pipe/$_WX_FILT"
+      [ "$(_wx_rtk_filter_for_command "$_WX_CFG" "${_WX_ARGV[@]}")" = "$_WX_FILT" ] || fail "no filter for '$_WX_M'"
+      _WX_PIPE_N=$((_WX_PIPE_N + 1))
+      ;;
+    recognized-only)
+      [ "$_WX_GOT" = "recognized-only"$'\x1f' ] || fail "'$_WX_M' did not resolve to recognized-only"
+      ! _wx_rtk_filter_for_command "$_WX_CFG" "${_WX_ARGV[@]}" >/dev/null || fail "'$_WX_M' (recognized-only) gave a filter"
+      _WX_REC_N=$((_WX_REC_N + 1))
+      ;;
+  esac
+done < <(jq -r '.command_policy.rtk_commands[] | [.match, .class, (.filter // "")] | @tsv' "$_WX_CFG")
+[ "$_WX_PIPE_N" -gt 0 ] && [ "$_WX_REC_N" -gt 0 ] || fail 'the shipped table was not resolved'
+# The same table with the pipe class off: nothing resolves to pipe.
+_WX_OFF="$(jq '.command_policy.rtk_class_enabled.pipe = false' "$_WX_CFG")"
+printf '%s\n' "$_WX_OFF" > "$_WX_TEST_ROOT/table-off.json"
+while IFS= read -r _WX_M; do
+  read -r -a _WX_ARGV <<< "$_WX_M"
+  ! _wx_rtk_filter_for_command "$_WX_TEST_ROOT/table-off.json" "${_WX_ARGV[@]}" >/dev/null || fail "'$_WX_M' used a filter with the pipe class off"
+done < <(jq -r '.command_policy.rtk_commands[] | select(.class == "pipe") | .match' "$_WX_CFG")
+# Enabling recognized-only or never in the switch table does not make them use RTK.
+printf '%s\n' "$(jq '.command_policy.rtk_class_enabled = {"pipe": true, "rerun": true, "recognized-only": true, "never": true}' "$_WX_CFG")" > "$_WX_TEST_ROOT/table-all.json"
+for _WX_M in 'ls' 'cat file' 'rtk smart file' 'cargo build' 'docker ps'; do
+  read -r -a _WX_ARGV <<< "$_WX_M"
+  ! _wx_rtk_filter_for_command "$_WX_TEST_ROOT/table-all.json" "${_WX_ARGV[@]}" >/dev/null || fail "'$_WX_M' used a filter with every class enabled"
+done
+# Protected profiles bypass RTK for every pipe entry of the shipped table.
+for _WX_PROFILE in raw security db migration release; do
+  source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" "$_WX_PROFILE" >/dev/null 2>&1
+  while IFS= read -r _WX_M; do
+    read -r -a _WX_ARGV <<< "$_WX_M"
+    rtk_run protected-table "${_WX_ARGV[@]}"
+    [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for '$_WX_M' in the $_WX_PROFILE profile"
+    rtk_last | jq -e '.output_policy == "raw-protected-profile" and .compressor == null and .filter == null' >/dev/null || fail "'$_WX_M' in $_WX_PROFILE is not raw-protected-profile: $(rtk_last)"
+  done < <(jq -r '.command_policy.rtk_commands[] | select(.class == "pipe") | .match' "$_WX_CFG")
 done
 source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
 
@@ -514,43 +572,58 @@ printf '%s\n' "$_WX_RTK_USES" | grep -q -e '--version' || fail 'the version call
 printf '%s\n' "$_WX_RTK_USES" | grep -q 'pipe -f' || fail 'the pipe call is missing from the RTK uses'
 if grep -n '_WX_RESOLVED\|_WX_BIN' "$_WX_REPOSITORY_ROOT/scripts/lib/wx.sh" "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" | grep -q .; then fail 'RTK is run outside wx-compress.sh'; fi
 
-# 3j. Recorded outputs of the six enabled filters, replayed through wx (tests/fixtures/rtk, see PROVENANCE.txt).
+# 3j. The RTK fixture matrix: recorded or hand-written outputs of all 18 pipe filters, replayed through wx
+# (tests/fixtures/rtk, see PROVENANCE.txt). The matrix file lists every fixture with its expected outcome.
 # The fake RTK keeps lines that start with warning/error/panic and the last line. The real-RTK block follows.
 _WX_RTK_FIX="$_WX_REPOSITORY_ROOT/tests/fixtures/rtk"
 source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
-_WX_FIXTURE_TABLE='cargo-test/pass-noisy accepted
-cargo-test/pass-nocapture guard
-cargo-test/fail nonzero
-go-test/pass-noisy guard
-go-test/pass-quiet smaller
-go-test/pass-json guard
-go-test/bench accepted
-go-test/fail nonzero
-go-test/build-error nonzero
-go-build/verbose empty
-go-build/quiet empty
-go-build/fail nonzero
-pytest/pass-noisy accepted
-pytest/pass-warnings guard
-pytest/collect-only accepted
-pytest/fail nonzero
-tsc/pass-noisy accepted
-tsc/pass-listfiles accepted
-tsc/showconfig accepted
-tsc/pass-quiet empty
-tsc/fail nonzero
-vitest/pass-default accepted
-vitest/pass-verbose accepted
-vitest/pass-warn accepted
-vitest/fail nonzero'
-# Every fixture folder is in the table, and every filter has at least a success, a warning-like or failing case.
+_WX_MATRIX="$(grep -v '^#' "$_WX_RTK_FIX/MATRIX" | grep .)"
+_WX_FIXTURE_TABLE="$(printf '%s\n' "$_WX_MATRIX" | awk '{ print $1, $4 }')"
+# Commands that are not installed here, and the ones that must not be replaced for every call, run through shims.
+_WX_SHIMS="$_WX_TEST_ROOT/shims"
+bash "$_WX_FIXTURES/../link-shims.sh" "$_WX_SHIMS"
+_WX_ALL_FILTERS='cargo-test pytest go-test go-build tsc vitest mypy ruff-check ruff-format prettier grep rg find fd git-log git-status git-diff log'
+# Every fixture folder is in the matrix, and every row is complete.
 _WX_FOUND="$(cd "$_WX_RTK_FIX" && ls -d */*/ | sed 's#/$##' | sort)"
-_WX_LISTED="$(printf '%s\n' "$_WX_FIXTURE_TABLE" | cut -d' ' -f1 | sort)"
-[ "$_WX_FOUND" = "$_WX_LISTED" ] || fail "fixture folders and the test table differ: $(diff <(printf '%s\n' "$_WX_FOUND") <(printf '%s\n' "$_WX_LISTED") | head -4)"
-for _WX_F in cargo-test go-test go-build pytest tsc vitest; do
-  printf '%s\n' "$_WX_FOUND" | grep -q "^$_WX_F/" || fail "no fixture for $_WX_F"
-  jq -e --arg f "$_WX_F" '[.command_policy.rtk_commands[] | select(.class == "pipe" and .filter == $f)] | length == 1' "$AICONTEXT_SETTINGS_FILE" >/dev/null || fail "$_WX_F is not an enabled pipe filter in the config"
+_WX_LISTED="$(printf '%s\n' "$_WX_MATRIX" | cut -d' ' -f1 | sort)"
+[ "$_WX_FOUND" = "$_WX_LISTED" ] || fail "fixture folders and the matrix differ: $(diff <(printf '%s\n' "$_WX_FOUND") <(printf '%s\n' "$_WX_LISTED") | head -4)"
+[ "$(printf '%s\n' "$_WX_MATRIX" | cut -d' ' -f1 | sort -u | wc -l)" -eq "$(printf '%s\n' "$_WX_MATRIX" | wc -l)" ] || fail 'a fixture is listed twice in the matrix'
+while read -r _WX_MC _WX_MG _WX_MK _WX_MFAKE _WX_MREAL _WX_MEV _WX_MEXTRA; do
+  [ -z "${_WX_MEXTRA:-}" ] && [ -n "$_WX_MEV" ] || fail "matrix row is not 6 columns: $_WX_MC"
+  case "$_WX_MG" in A|B|C|D) ;; *) fail "$_WX_MC: unknown group $_WX_MG" ;; esac
+  case "$_WX_MK" in success|evidence|nonzero|empty|informational) ;; *) fail "$_WX_MC: unknown kind $_WX_MK" ;; esac
+  case "$_WX_MFAKE" in accepted|guard|smaller|nonzero|empty) ;; *) fail "$_WX_MC: unknown fake outcome $_WX_MFAKE" ;; esac
+  case "$_WX_MREAL" in accepted|guard|smaller|rtk-empty|nonzero|empty) ;; *) fail "$_WX_MC: unknown real outcome $_WX_MREAL" ;; esac
+  case "$_WX_MEV" in yes|no|n/a) ;; *) fail "$_WX_MC: unknown real_evidence $_WX_MEV" ;; esac
+  for _WX_MFILE in cmd exit stdout; do [ -f "$_WX_RTK_FIX/$_WX_MC/$_WX_MFILE" ] || fail "$_WX_MC: missing $_WX_MFILE"; done
+  # The kind and the recorded exit code agree, and every marker is in the raw stdout.
+  if [ "$(cat "$_WX_RTK_FIX/$_WX_MC/exit")" -ne 0 ]; then [ "$_WX_MK" = nonzero ] || fail "$_WX_MC: failing run is not kind nonzero"; fi
+  [ "$_WX_MK" != nonzero ] || [ "$(cat "$_WX_RTK_FIX/$_WX_MC/exit")" -ne 0 ] || fail "$_WX_MC: kind nonzero but exit 0"
+  [ "$_WX_MK" != empty ] || [ ! -s "$_WX_RTK_FIX/$_WX_MC/stdout" ] || fail "$_WX_MC: kind empty but stdout has content"
+  if [ -f "$_WX_RTK_FIX/$_WX_MC/markers" ]; then
+    while IFS= read -r _WX_MARK; do
+      grep -Fq -- "$_WX_MARK" "$_WX_RTK_FIX/$_WX_MC/stdout" || fail "$_WX_MC: marker '$_WX_MARK' is not in the recorded stdout"
+    done < "$_WX_RTK_FIX/$_WX_MC/markers"
+    [ "$_WX_MEV" != n/a ] || fail "$_WX_MC: has markers, so real_evidence cannot be n/a"
+  else
+    [ "$_WX_MEV" = n/a ] || fail "$_WX_MC: no markers file, so real_evidence must be n/a"
+  fi
+  # Known loss only where the real RTK output is shown.
+  [ "$_WX_MEV" != no ] || [ "$_WX_MREAL" = accepted ] || fail "$_WX_MC: real_evidence no needs a shown RTK output"
+done <<< "$_WX_MATRIX"
+# Every pipe filter in the config is in the matrix, in exactly one group, with a success case and an evidence or failing case.
+[ "$(jq -r '[.command_policy.rtk_commands[] | select(.class == "pipe") | .filter] | unique | join(" ")' "$AICONTEXT_SETTINGS_FILE")" = "$(printf '%s\n' $_WX_ALL_FILTERS | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')" ] || fail 'the matrix filter list and the config pipe filters differ'
+for _WX_F in $_WX_ALL_FILTERS; do
+  printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f) print $2 }' | sort -u | wc -l | grep -qx 1 || fail "$_WX_F is not in exactly one group"
+  printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f && $3 == "success") n++ } END { exit !n }' || fail "no success fixture for $_WX_F"
+  printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f && ($3 == "evidence" || $3 == "nonzero")) n++ } END { exit !n }' || fail "no evidence or failing fixture for $_WX_F"
+  jq -e --arg f "$_WX_F" '[.command_policy.rtk_commands[] | select(.class == "pipe" and .filter == $f)] | length >= 1' "$AICONTEXT_SETTINGS_FILE" >/dev/null || fail "$_WX_F is not an enabled pipe filter in the config"
 done
+# The recorded command resolves to its own filter through the config.
+while read -r _WX_MC _WX_REST; do
+  read -r -a _WX_ARGV < "$_WX_RTK_FIX/$_WX_MC/cmd"
+  [ "$(_wx_rtk_filter_for_command "$AICONTEXT_SETTINGS_FILE" "${_WX_ARGV[@]}")" = "${_WX_MC%%/*}" ] || fail "$_WX_MC: the recorded command does not resolve to filter ${_WX_MC%%/*}"
+done <<< "$_WX_MATRIX"
 
 fixture_case() { # filter case outcome. Replays the recorded command through wx with the fake RTK and checks everything.
   local _WX_FF="$1" _WX_FC="$2" _WX_FW="$3"
@@ -562,7 +635,7 @@ fixture_case() { # filter case outcome. Replays the recorded command through wx 
   _WX_FNAME="fx-$_WX_FF-$_WX_FC"
   _WX_FRUNLOG="$_WX_TEST_ROOT/$_WX_FNAME.runlog"
   : > "$_WX_FRUNLOG"
-  FIXTURE_CASE="$_WX_FF/$_WX_FC" FIXTURE_RUN_LOG="$_WX_FRUNLOG" rtk_run "$_WX_FNAME" "${_WX_FARGV[@]}"
+  PATH="$_WX_SHIMS:$PATH" FIXTURE_CASE="$_WX_FF/$_WX_FC" FIXTURE_RUN_LOG="$_WX_FRUNLOG" rtk_run "$_WX_FNAME" "${_WX_FARGV[@]}"
   _WX_FWXERR="$_WX_TEST_ROOT/rtk-$_WX_FNAME.stderr"
   _WX_FCALLS="$_WX_TEST_ROOT/rtk-$_WX_FNAME.log"
   _WX_FSTDERR="$_WX_FD/stderr"
@@ -631,33 +704,39 @@ done <<< "$_WX_FIXTURE_TABLE"
 # The warning in vitest stays visible: it is on stderr, so RTK never sees it.
 assert_file_contains "$_WX_TEST_ROOT/rtk-fx-vitest-pass-warn.stderr" 'Warning: cache is cold, results may be slow'
 
+# Protected profiles: the first success fixture of every filter, in every protected profile. Raw output, no RTK call.
+for _WX_F in $_WX_ALL_FILTERS; do
+  _WX_PC="$(printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f && $3 == "success" && $4 != "nonzero" && $4 != "empty") { print $1; exit } }')"
+  [ -n "$_WX_PC" ] || _WX_PC="$(printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f && $3 == "success") { print $1; exit } }')"
+  read -r -a _WX_ARGV < "$_WX_RTK_FIX/$_WX_PC/cmd"
+  for _WX_PROFILE in raw security db migration release; do
+    source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" "$_WX_PROFILE" >/dev/null 2>&1
+    PATH="$_WX_SHIMS:$PATH" FIXTURE_CASE="$_WX_PC" rtk_run protected-matrix "${_WX_ARGV[@]}"
+    [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for $_WX_PC in the $_WX_PROFILE profile"
+    rtk_last | jq -e '.output_policy == "raw-protected-profile" and .compressor == null and .filter == null and .rtk_class == "pipe" and .visible.stdout_bytes == .raw.stdout_bytes' >/dev/null || fail "$_WX_PC in $_WX_PROFILE is not raw-protected-profile: $(rtk_last)"
+    cmp -s "$_WX_TEST_ROOT/rtk-protected-matrix.stdout" "$_WX_RTK_FIX/$_WX_PC/stdout" || fail "$_WX_PC output changed in the $_WX_PROFILE profile"
+  done
+done
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+
 # 3k. Real RTK on the same recordings. A missing RTK is a SKIP. A spy script logs every call and runs the real RTK.
+# The outcome and the evidence result of every row are pinned in the matrix for RTK 0.42.4. Another version only prints NOTE lines.
 _WX_REAL_RTK_FX="$(PATH="${PATH#"$_WX_FIXTURES:"}" command -v rtk 2>/dev/null || true)"
 if [ -n "$_WX_REAL_RTK_FX" ] && [ "$_WX_REAL_RTK_FX" != "$_WX_FIXTURES/rtk" ]; then
   _WX_SPY="$_WX_TEST_ROOT/spy-rtk"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$SPY_LOG"\nexec "%s" "$@"\n' "$_WX_REAL_RTK_FX" > "$_WX_SPY"
   chmod +x "$_WX_SPY"
   _WX_REAL_VERSION="$("$_WX_REAL_RTK_FX" --version 2>/dev/null | head -n 1)"
-  # Pinned outcomes for RTK 0.42.4. Cases where real RTK gives a wrong or lossy summary are warned about, not pinned.
-  _WX_PINNED='cargo-test/pass-noisy accepted
-cargo-test/pass-nocapture guard
-go-test/pass-noisy guard
-go-test/pass-json guard
-pytest/pass-noisy accepted
-pytest/pass-warnings guard
-tsc/pass-noisy accepted
-vitest/pass-default accepted
-vitest/pass-verbose accepted
-vitest/pass-warn accepted'
   _WX_REAL_COUNT=0
-  real_case() { # case, outcome from the fake table (accepted, guard, smaller, empty)
-    local _WX_RC="$1" _WX_RW="$2" _WX_RF="${1%%/*}" _WX_RD _WX_RLOG _WX_RREC _WX_RRUN _WX_REXIT _WX_RPIN _WX_RRES
+  _WX_REAL_LOSS=0
+  real_case() { # fixture, pinned outcome, pinned evidence (yes, no, n/a)
+    local _WX_RC="$1" _WX_RW="$2" _WX_REV="$3" _WX_RF="${1%%/*}" _WX_RD _WX_RLOG _WX_RREC _WX_RRUN _WX_REXIT _WX_RRES _WX_RGOT _WX_RMARK
     local -a _WX_RARGV
     _WX_RD="$_WX_RTK_FIX/$_WX_RC"
     read -r -a _WX_RARGV < "$_WX_RD/cmd"
     _WX_RLOG="$_WX_TEST_ROOT/real-${_WX_RC//\//-}.spy"
     : > "$_WX_RLOG"
-    SPY_LOG="$_WX_RLOG" AICONTEXT_RTK_BIN="$_WX_SPY" FIXTURE_CASE="$_WX_RC" FIXTURE_RUN_LOG="$_WX_TEST_ROOT/real-run.log" \
+    PATH="$_WX_SHIMS:$PATH" SPY_LOG="$_WX_RLOG" AICONTEXT_RTK_BIN="$_WX_SPY" FIXTURE_CASE="$_WX_RC" FIXTURE_RUN_LOG="$_WX_TEST_ROOT/real-run.log" \
       wx "${_WX_RARGV[@]}" >"$_WX_TEST_ROOT/real-out" 2>"$_WX_TEST_ROOT/real-err"
     _WX_REXIT=$?
     _WX_RREC="$(jq -c -s '.[-1]' .ai-context/session.jsonl)"
@@ -669,7 +748,7 @@ vitest/pass-warn accepted'
     jq -e '.rtk_class == "pipe"' <<< "$_WX_RREC" >/dev/null || fail "real RTK $_WX_RC: wrong class"
     if [ "$_WX_RW" = empty ]; then
       [ ! -s "$_WX_RLOG" ] || fail "real RTK $_WX_RC: RTK was called for empty stdout: $(cat "$_WX_RLOG")"
-      printf 'NOTE: real RTK %s: no stdout, RTK not called\n' "$_WX_RC"
+      _WX_RRES=empty
     else
       [ "$(cat "$_WX_RLOG")" = "$(printf -- '--version\npipe -f %s' "$_WX_RF")" ] || fail "real RTK $_WX_RC: unexpected RTK calls: $(cat "$_WX_RLOG")"
       # Either the real RTK output is shown (smaller, guard passes), or raw is shown with a valid reason.
@@ -681,38 +760,46 @@ vitest/pass-warn accepted'
         jq -e '.output_policy == "raw-rtk-fallback" and .compressor == null and (.fallback_reason | IN("evidence-guard", "rtk-not-smaller", "rtk-empty-output", "rtk-nonzero-exit", "rtk-timeout")) and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_RREC" >/dev/null || fail "real RTK $_WX_RC: fallback record is inconsistent: $_WX_RREC"
         cmp -s "$_WX_TEST_ROOT/real-out" "$_WX_RD/stdout" || fail "real RTK $_WX_RC: raw output was not shown after a fallback"
         _WX_RRES="$(jq -r '.fallback_reason' <<< "$_WX_RREC")"
-        [ "$_WX_RRES" = evidence-guard ] && _WX_RRES=guard
+        case "$_WX_RRES" in evidence-guard) _WX_RRES=guard ;; rtk-not-smaller) _WX_RRES=smaller ;; rtk-empty-output) _WX_RRES=rtk-empty ;; esac
       fi
-      _WX_RPIN="$(printf '%s\n' "$_WX_PINNED" | awk -v c="$_WX_RC" '$1 == c { print $2 }')"
-      case "$_WX_REAL_VERSION" in
-        *0.42.4*)
-          if [ -n "$_WX_RPIN" ]; then
-            [ "$_WX_RRES" = "$_WX_RPIN" ] || fail "real RTK $_WX_RC: expected $_WX_RPIN, got $_WX_RRES"
-          elif [ "$_WX_RRES" = accepted ]; then
-            printf 'WARN: real RTK %s accepted %s: %s raw bytes became %s bytes: "%s"\n' "$_WX_REAL_VERSION" "$_WX_RC" "$(jq -r '.raw.stdout_bytes' <<< "$_WX_RREC")" "$(jq -r '.visible.stdout_bytes' <<< "$_WX_RREC")" "$(head -n 1 "$_WX_TEST_ROOT/real-out" | cut -c1-60)"
-          fi
-          ;;
-        *) printf 'NOTE: real RTK %s on %s: %s (outcomes are pinned for 0.42.4 only)\n' "$_WX_REAL_VERSION" "$_WX_RC" "$_WX_RRES" ;;
-      esac
+    fi
+    # Evidence: every marker is in the visible stdout. A shown RTK output may lose it (known loss).
+    _WX_RGOT=n/a
+    if [ -f "$_WX_RD/markers" ]; then
+      _WX_RGOT=yes
+      while IFS= read -r _WX_RMARK; do
+        grep -Fq -- "$_WX_RMARK" "$_WX_TEST_ROOT/real-out" || _WX_RGOT=no
+      done < "$_WX_RD/markers"
+      # Raw output is always complete. Only a shown RTK output can lose a marker.
+      if [ "$_WX_RRES" != accepted ] && [ "$_WX_RGOT" != yes ]; then fail "real RTK $_WX_RC: markers are missing from raw output"; fi
+    fi
+    case "$_WX_REAL_VERSION" in
+      *0.42.4*)
+        [ "$_WX_RRES" = "$_WX_RW" ] || fail "real RTK $_WX_RC: expected $_WX_RW, got $_WX_RRES"
+        [ "$_WX_RGOT" = "$_WX_REV" ] || fail "real RTK $_WX_RC: evidence expected $_WX_REV, got $_WX_RGOT"
+        ;;
+      *) printf 'NOTE: real RTK %s on %s: %s, evidence %s (outcomes are pinned for 0.42.4 only)\n' "$_WX_REAL_VERSION" "$_WX_RC" "$_WX_RRES" "$_WX_RGOT" ;;
+    esac
+    if [ "$_WX_RGOT" = no ]; then
+      _WX_REAL_LOSS=$((_WX_REAL_LOSS + 1))
+      printf 'WARN: known loss, real RTK %s on %s: %s raw bytes became %s bytes, markers missing: "%s"\n' "$_WX_REAL_VERSION" "$_WX_RC" "$(jq -r '.raw.stdout_bytes' <<< "$_WX_RREC")" "$(jq -r '.visible.stdout_bytes' <<< "$_WX_RREC")" "$(head -n 1 "$_WX_TEST_ROOT/real-out" | cut -c1-60)"
     fi
     _WX_REAL_COUNT=$((_WX_REAL_COUNT + 1))
   }
-  # Every success case and every empty-stdout case. Failing cases never reach RTK, so they are not repeated here.
-  while read -r _WX_RCASE _WX_RWANT; do
-    case "$_WX_RWANT" in accepted|guard|smaller|empty) real_case "$_WX_RCASE" "$_WX_RWANT" ;; esac
-  done <<< "$_WX_FIXTURE_TABLE"
-  for _WX_F in cargo-test go-test go-build pytest tsc vitest; do
-    printf '%s\n' "$_WX_FIXTURE_TABLE" | grep -q "^$_WX_F/" || fail "no real-RTK check for $_WX_F"
-  done
-  printf 'NOTE: real RTK %s checked on %s recorded runs (cargo-test, go-test, go-build, pytest, tsc, vitest)\n' "$_WX_REAL_VERSION" "$_WX_REAL_COUNT"
+  # Every recording that exits 0. Failing recordings never reach RTK, so they are not repeated here.
+  while read -r _WX_RCASE _WX_RGROUP _WX_RKIND _WX_RFAKE _WX_RWANT _WX_REVWANT; do
+    [ "$_WX_RKIND" != nonzero ] || continue
+    real_case "$_WX_RCASE" "$_WX_RWANT" "$_WX_REVWANT"
+  done <<< "$_WX_MATRIX"
+  printf 'NOTE: real RTK %s checked on %s recorded runs of %s filters, %s with a known loss of evidence in the shown output\n' "$_WX_REAL_VERSION" "$_WX_REAL_COUNT" "$(printf '%s\n' $_WX_ALL_FILTERS | wc -l)" "$_WX_REAL_LOSS"
 else
-  printf 'SKIP: real RTK is not installed. The 6 real-RTK filter checks were skipped. The fake RTK matrix ran.\n'
+  printf 'SKIP: real RTK is not installed. The real-RTK checks of the matrix were skipped. The fake RTK matrix ran.\n'
 fi
 source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
 
 # 5. Token Controller never runs "rtk init" (or anything except --version and pipe -f <mapped filter>).
-if grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | grep -q .; then
-  fail "unexpected RTK call: $(grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | head -3)"
+if grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest|mypy|ruff-check|ruff-format|prettier|grep|rg|find|fd|git-log|git-status|git-diff|log))$' "$_WX_RTK_ALL_LOG" | grep -q .; then
+  fail "unexpected RTK call: $(grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest|mypy|ruff-check|ruff-format|prettier|grep|rg|find|fd|git-log|git-status|git-diff|log))$' "$_WX_RTK_ALL_LOG" | head -3)"
 fi
 grep -q 'init' "$_WX_RTK_ALL_LOG" && fail 'rtk init was called'
 # Static scan: no script runs "rtk init". The only matches outside comments and messages are in the text that
