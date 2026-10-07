@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
-import { CliError, CliMode, CliStatus, resolveCli, WorkflowCli } from './cli';
+import { CliError, CliMode, CliStatus, formatLeanctxStatus, LeanctxStatus, resolveCli, WorkflowCli } from './cli';
 import { findProjectControlled } from './trust';
 
 let statusBarItem: vscode.StatusBarItem;
@@ -12,6 +12,8 @@ let refreshTimer: NodeJS.Timeout | undefined;
 let watcher: vscode.FileSystemWatcher | undefined;
 let watchedFile = '';
 let lastStatus: CliStatus | undefined;
+// The last LeanCTX adapter status. Only set when the user runs "Show LeanCTX Status". Shown in the tooltip while the mode is the same.
+let lastLeanctx: LeanctxStatus | undefined;
 
 // Codicon per mode id. Presentation only. A mode without an entry gets the default icon.
 const ICONS: Record<string, string> = {
@@ -98,7 +100,8 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('tokenController.selectMode', () => selectMode())
+        vscode.commands.registerCommand('tokenController.selectMode', () => selectMode()),
+        vscode.commands.registerCommand('tokenController.showLeanctxStatus', () => showLeanctxStatus())
     );
 
     ensureWatcher(defaultActiveEnvFile());
@@ -216,6 +219,9 @@ function renderStatus(status: CliStatus) {
             'Already-open terminals can differ and cannot be checked from here. Run the workflow command in a terminal to update it.'
         );
     }
+    if (lastLeanctx && lastLeanctx.profile === status.profile && lastLeanctx.leanctxMode === status.leanctxMode) {
+        lines.push(`LeanCTX adapter: ${lastLeanctx.allowed ? 'allowed' : 'refused'}`);
+    }
     lines.push('', 'Click to switch.');
     statusBarItem.tooltip = lines.join('\n');
     statusBarItem.backgroundColor = status.staleShell || status.risk === 'critical'
@@ -298,6 +304,39 @@ async function selectMode() {
     }
     scheduleRefresh(0);
     void vscode.window.showInformationMessage(`AI Context switched to: ${selected.mode}`);
+}
+
+/**
+ * Show the LeanCTX adapter status in the output channel. This is the only LeanCTX call of the extension.
+ * It runs "workflow leanctx status --json", which reads state and runs lean-ctx --version. No read, search, or tree.
+ */
+async function showLeanctxStatus() {
+    const resolved = getCli();
+    if (!resolved.ok) {
+        if (resolved.restricted) {
+            renderRestricted(resolved.reason);
+            void vscode.window.showWarningMessage(resolved.reason);
+            return;
+        }
+        renderUnavailable(resolved.reason);
+        await showCliError('Cannot show LeanCTX status', new CliError(resolved.reason, 'unavailable'));
+        return;
+    }
+    // The adapter checks that lean-ctx is not inside the project. Use the workspace folder, but only in a trusted workspace.
+    const folder = vscode.workspace.isTrusted
+        ? (vscode.workspace.workspaceFolders ?? []).find((f) => f.uri.scheme === 'file')?.uri.fsPath
+        : undefined;
+    try {
+        const status = await resolved.cli.leanctxStatus(folder);
+        lastLeanctx = status;
+        output.appendLine(`[${new Date().toISOString()}] ${formatLeanctxStatus(status).join('\n')}`);
+        output.show(true);
+        if (lastStatus) {
+            renderStatus(lastStatus);
+        }
+    } catch (error) {
+        await showCliError('Cannot show LeanCTX status', error);
+    }
 }
 
 export function deactivate() {}

@@ -2,7 +2,7 @@
 # Path: scripts/workflow.sh
 # Usage: source scripts/workflow.sh <mode>
 # Modes (defined in config/workflow_settings.json): raw scope architect decisions code rapid-prototype snippet micro agent test test-full debug data-analysis docs cicd review security migration db perf release off
-# Commands: init setup status modes version report doctor reset-session
+# Commands: init setup status modes version report doctor leanctx reset-session
 # Backward-compatible aliases: plan=architect, ci=cicd
 
 # This script is intended to be sourced, because it exports variables to the current shell.
@@ -68,6 +68,7 @@ Modes:
   version      Show the CLI version and the JSON schema numbers. Option: --json
   doctor       Read-only check of settings, instruction files, and tools. Option: --json
                It can create an empty ~/.config/ai-workflow when run through workflow.sh.
+  leanctx      Controlled LeanCTX CLI: status, read, read-exact, search, tree. Refused in protected or off modes.
   report       Summarize the current project's wx session. Options: --json, --project <dir>
   reset-session Archive the current wx session and start a new one.
 
@@ -405,6 +406,12 @@ USAGE
       shift
       # Read-only check. Runs in a child process so it cannot change this shell.
       AICONTEXT_DOCTOR_VIA_WORKFLOW=1 bash "$_SCRIPT_DIR/doctor.sh" "$@"
+      return $?
+      ;;
+    leanctx)
+      shift
+      # Controlled LeanCTX CLI adapter. Runs in a child process. It never runs wrap, setup, init, a shell, or wx.
+      bash "$_SCRIPT_DIR/leanctx-cli.sh" "$@"
       return $?
       ;;
     report)

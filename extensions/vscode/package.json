@@ -42,6 +42,10 @@
       {
         "command": "tokenController.selectMode",
         "title": "AI Context: Switch Mode"
+      },
+      {
+        "command": "tokenController.showLeanctxStatus",
+        "title": "Token Controller: Show LeanCTX Status"
       }
     ],
     "configuration": {

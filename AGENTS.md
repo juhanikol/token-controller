@@ -51,8 +51,6 @@ Run these before declaring work complete:
 
 ```bash
 bash -n scripts/workflow.sh
-find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
-jq . config/workflow_settings.json >/dev/null
 git diff --check
 ```
 

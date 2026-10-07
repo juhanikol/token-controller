@@ -106,4 +106,24 @@ suite('Security model', () => {
 		assert.ok(/import \{ execFile \} from 'child_process'/.test(cli));
 		assert.ok(/execFile\(\s*'bash',\s*\[cliPath, \.\.\.args\]/.test(cli));
 	});
+
+	test('source: the only LeanCTX call is "leanctx status --json" (no read, read-exact, search, or tree)', function () {
+		const srcDir = path.join(EXTENSION_ROOT, 'src');
+		if (!fs.existsSync(srcDir)) {
+			this.skip();
+		}
+		for (const name of fs.readdirSync(srcDir).filter((file) => file.endsWith('.ts'))) {
+			const text = fs.readFileSync(path.join(srcDir, name), 'utf8');
+			const calls = text.match(/\[\s*'leanctx'[^\]]*\]/g) ?? [];
+			for (const call of calls) {
+				assert.strictEqual(call.replace(/\s+/g, ''), "['leanctx','status','--json']", `${name}: unexpected LeanCTX call ${call}`);
+			}
+			// The codicon name 'search' in extension.ts is not a command, so the word is only checked in cli.ts.
+			assert.ok(!/['"`](read-exact|tree)['"`]/.test(text) && (name !== 'cli.ts' || !/['"`]search['"`]/.test(text)), `${name}: a LeanCTX read, search, or tree command`);
+		}
+		const manifest = JSON.parse(fs.readFileSync(path.join(EXTENSION_ROOT, 'package.json'), 'utf8'));
+		const ids = manifest.contributes.commands.map((command: { command: string }) => command.command);
+		assert.ok(ids.includes('tokenController.showLeanctxStatus'));
+		assert.deepStrictEqual(ids.filter((id: string) => /leanctx/i.test(id)), ['tokenController.showLeanctxStatus']);
+	});
 });

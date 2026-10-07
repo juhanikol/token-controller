@@ -3,7 +3,7 @@ set -euo pipefail
 
 cat <<'INTRO'
 This script installs only basic WSL/Ubuntu prerequisites automatically.
-It then prints optional commands for RTK, Headroom, LeanCTX, Caveman, Claude Code, and MemStack (legacy).
+It then prints optional commands for RTK, Headroom, LeanCTX, Caveman, ccusage, Claude Code, and MemStack (legacy).
 No optional tool command is run automatically.
 Review each optional command before running it.
 INTRO
@@ -45,8 +45,9 @@ LeanCTX (choose one installation method; do not run both):
   curl -fsSL https://leanctx.com/install.sh | sh
 
   source ~/.bashrc
-  lean-ctx setup
   lean-ctx doctor
+  # Token Controller never runs lean-ctx setup, wrap, or init. They edit host and MCP config and can add a shell hook
+  # that conflicts with wx. Run them yourself only after you read what they change.
 
   # OPTIONAL: language servers are needed only for the ctx_refactor feature.
   # Core LeanCTX features do not require rust-analyzer or other LSP servers.
@@ -62,6 +63,10 @@ Caveman (optional output-style skill; off by default in every Token Controller m
   npx skills add JuliusBrussee/caveman -g
   # In a session, say "stop caveman" or "normal mode" to turn it off.
   # It adds input tokens and can cost more than it saves on short tasks.
+
+ccusage (optional usage reports from local Claude Code logs; Token Controller does not install or run it):
+  npm install -g ccusage
+  ccusage --version
 
 Node.js 18+ (needed for Claude Code):
   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
