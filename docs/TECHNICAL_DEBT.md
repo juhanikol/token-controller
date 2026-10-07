@@ -13,9 +13,9 @@ How to keep it:
 
 | ID | Type | Severity | Area | Issue | Status | Details |
 |---|---|---|---|---|---|---|
-| D-01 | Not implemented | High | Orchestration | LeanCTX is not orchestrated. `leanctx_mode` is exported state only. There is no design doc and no code. | Open | Plan work package 7 |
+| D-01 | Not implemented | High | Orchestration | LeanCTX is not orchestrated. `leanctx_mode` is exported state only. There is no design doc and no code. The critical modes have `leanctx_mode` `off` until LeanCTX has its own design and tests. | Open | Plan work package 7 |
 | D-02 | Not implemented | High | Orchestration | Headroom is not orchestrated. `headroom_mode` is exported state only. No design doc, no code. | Open | Plan work package 7 |
-| D-03 | Not implemented | Medium | Config | Mode to tool mapping uses free-text labels. Only `off` or not-`off` is read. `compress_files`, `memory_layer`, `codebase_index`, `leanctx_mode`, `headroom_mode` have no consumer. | Open | Plan work package 4 |
+| D-03 | Not implemented | Medium | Config | Mode to tool mapping uses free-text labels. Only `off` or not-`off` is read. `compress_files`, `memory_layer`, `codebase_index`, `leanctx_mode`, `headroom_mode` have no consumer. `memory_layer` and `codebase_index` are still on for `security`, `db`, and `migration`. | Open | Plan work package 4 |
 | D-04 | Decision | Medium | Config | MemStack is legacy. `MEMSTACK_ACTIVE` and `memory_layer` are kept until the tool shape is clear. | Decision needed | Plan, "LeanCTX/Headroom" |
 | D-05 | Not implemented | Medium | Output style | `AICONTEXT_OUTPUT_STYLE` (`ste-inspired`) is exported but nothing uses it. The template does not mention it. | Open | Foundation debt status |
 | D-06 | Decision | Medium | Validation | `docs/VALIDATION_MATRIX.md` has no entry for the RTK prototype. The benchmark has no RTK scenario, so no measured RTK reduction exists. Required after a second tool is integrated. | Decision needed | RTK post-capture prototype |
@@ -46,7 +46,6 @@ How to keep it:
 | D-31 | Debt | Low | Extension | Missing `jq` or an old controller shows "unavailable" with no install help. `stale_shell` describes the VS Code environment, not a terminal. | Open | Extension uses the CLI JSON interface |
 | D-32 | Not implemented | Low | Research | Research candidates are not evaluated: ccusage, Aider repo map, token-optimizer, token-savior. | Open | Plan, "External tools" |
 | D-33 | Debt | Low | Config | The flags `raw_on_fail`, `keep_raw_logs`, `preserve_*`, `target_files_full`, and `compress_files` are exported but read by nothing. `wx` hard-wires the safe behavior, so setting them to `false` has no effect. Keeping target files full is policy only. | Open | Profile/state manager review in `VALIDATION_MATRIX.md` (F2) |
-| D-34 | Contradiction | Low | Docs | The README policy rules list `raw`, `security`, `db`, and `release` as raw or lossless. `migration` is also `critical` and protected in `wx`. The README does not define the risk levels (`high` is not raw). | Open | Profile/state manager review in `VALIDATION_MATRIX.md` (F1, F4) |
 
 ## Remaining contradictions (fixing these changes code or behavior, so I left them)
 
@@ -435,3 +434,15 @@ Every "Open" item in the sections above was checked against the current code, co
 * **D-01 to D-03, D-05:** These are the largest gaps against the product direction, and they were not on any earlier list. LeanCTX and Headroom have no design doc and no code. Their config values (`leanctx_mode`, `headroom_mode`), and `compress_files`, `memory_layer`, and `codebase_index`, are exported as state and read by nothing. `compress_shell` and `rtk_mode` are the only labels that `wx` interprets. `AICONTEXT_OUTPUT_STYLE` is exported and used by nothing.
 
 **Still open:** see the table. Counts at this review: 32 rows. By type: Not implemented 10, Debt 13, Risk 5, Decision 2, Contradiction 2. By status: Open 28, Decision needed 2 (D-04, D-06), Mitigated 1 (D-13), Risk accepted 1 (D-30). By severity: High 2, Medium 15, Low 15.
+
+## Applied from the profile review (2026-10-07)
+
+Fixed (details of the findings are in `docs/VALIDATION_MATRIX.md`, "profile/state manager review"):
+* **F1 / D-34:** the README policy rules now list `raw`, `security`, `db`, `migration`, and `release` as raw or lossless. D-34 is closed.
+* **F4:** the README defines the risk levels in one bullet: `normal` routine work, `high` evidence-sensitive work that is not necessarily raw, `critical` raw or lossless work with protected evidence.
+* **F3:** `leanctx_mode` is `off` in all critical modes (`raw`, `security`, `db`, `migration`, `release`). It was `guarded` (`security`, `release`), `diagnostic` (`db`), and `graph-read` (`migration`). This is intent only: no code reads `leanctx_mode` yet, so nothing changed at run time. D-01 and D-03 are revised, not closed. Re-enabling LeanCTX in a critical mode needs its own design and tests.
+
+Still open from the same review:
+* **D-33 (F2):** the protection flags are exported and read by nothing.
+* **D-03:** `memory_layer` and `codebase_index` are still on for `security`, `db`, and `migration`. They are state only today.
+* **Scenario table:** the `migration` row says "Use a global map and full active files". It does not say "raw or lossless", although the mode is `critical`. The wording was left as it is.

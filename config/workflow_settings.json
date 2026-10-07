@@ -265,7 +265,7 @@
       "codebase_index": true,
       "memory_layer": "session",
       "headroom_mode": "lossless-only",
-      "leanctx_mode": "guarded",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "migration": {
@@ -276,7 +276,7 @@
       "codebase_index": true,
       "memory_layer": "project",
       "headroom_mode": "lossless-only",
-      "leanctx_mode": "graph-read",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "db": {
@@ -287,7 +287,7 @@
       "codebase_index": true,
       "memory_layer": "session",
       "headroom_mode": "lossless-only",
-      "leanctx_mode": "diagnostic",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "perf": {
@@ -310,7 +310,7 @@
       "codebase_index": false,
       "memory_layer": "off",
       "headroom_mode": "off",
-      "leanctx_mode": "guarded",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "off": {

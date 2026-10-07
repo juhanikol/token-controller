@@ -259,7 +259,8 @@ workflow ci     # same as workflow cicd
 These rules are written into the active profile and agent instructions. Their execution depends on the agent and any connected context tool; the `wx` wrapper does not inspect output to verify them.
 
 * Correctness is more important than saving tokens.
-* `raw`, `security`, `db`, and `release` use raw or lossless context.
+* `raw`, `security`, `db`, `migration`, and `release` use raw or lossless context.
+* Risk levels: `normal` is routine work, `high` is evidence-sensitive work that is not necessarily raw, and `critical` is raw or lossless work with protected evidence.
 * `debug` and `test` keep the first failure, stderr, exit code, paths, and line numbers.
 * Target files being edited should be read in full.
 * Repetitive successful output is the safest content to compress.

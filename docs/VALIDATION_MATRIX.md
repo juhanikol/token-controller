@@ -645,3 +645,4 @@ Copy this block for each experiment.
 - Pass/fail: PASS. The repository acts as a profile/state manager. The only mechanical layer is `wx`. File and mode-level protection beyond `wx` is policy for agents and tools. No check found a mode that exports a value different from the config.
 - Interpretation: this review checks state and wording. It does not show token savings, agent compliance, or any behavior of LeanCTX, Headroom, or Caveman.
 - Recommended profile change: none. Apply F1 and F4 (docs) first. Decide F3. F2 is recorded as debt D-33.
+- Update (2026-10-07): F1, F3, and F4 were applied (README wording and `leanctx_mode` `off` in critical modes). F2 stays open as debt D-33. After the change: `bash -n`, `jq`, `workflow-cli.sh modes --json`, and `tests/workflow-session.test.sh` passed.
