@@ -460,10 +460,32 @@ if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
   fi
 fi
 
+# ---------- LeanCTX policy ----------
+# Read only. The policy is not used at run time yet. Doctor checks its shape and that nothing automatic is on.
+if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
+  _lc_state="$(jq -r '
+    (.leanctx_policy // null) as $p
+    | if $p == null then "missing"
+      elif ($p | type) != "object" then "invalid"
+      elif ([$p.shell_enabled, $p.auto_wrap, $p.auto_setup, $p.auto_init] | any(. != false)) or ($p.shell_owner != "wx") then "unsafe"
+      elif (($p.transport_preference | type) != "string") or (($p.smart_file_owner | type) != "string") or (($p.operations | type) != "object")
+        or ([$p.operations[] | (type == "object") and (.status | IN("enabled", "disabled", "deferred")) and ((.mcp // []) | type == "array") and ((.cli // []) | type == "array")] | all | not)
+        or ($p.operations.shell.status // "") != "disabled" then "invalid"
+      else "ok" end' "$_SETTINGS_FILE" 2>/dev/null)"
+  case "$_lc_state" in
+    ok) add "LeanCTX policy" ok leanctx.policy "LeanCTX policy is present. Shell, wrap, setup, and init are off. The policy is not used at run time yet." "$(pl "$_SETTINGS_FILE" "")" ;;
+    missing) add "LeanCTX policy" info leanctx.policy_missing "No leanctx_policy in the config." "$(pl "$_SETTINGS_FILE" "")" ;;
+    unsafe) add "LeanCTX policy" warn leanctx.policy_unsafe "leanctx_policy turns on shell, wrap, setup, or init, or shell_owner is not wx. Token Controller does not support that yet." "$(pl "$_SETTINGS_FILE" "")" "Set shell_enabled, auto_wrap, auto_setup, auto_init to false and shell_owner to wx." ;;
+    *) add "LeanCTX policy" warn leanctx.policy_invalid "leanctx_policy is malformed. Each operation needs status (enabled, disabled, deferred), and the shell operation must be disabled." "$(pl "$_SETTINGS_FILE" "")" ;;
+  esac
+fi
+
 # ---------- tools ----------
 # _TOOLS entry: name|found|kind|path|version   (version last, it may contain text)
 for _tool in rtk lean-ctx headroom caveman ccusage; do
   _tpath="$(command -v "$_tool" 2>/dev/null || true)"
+  # Test hook: AICONTEXT_LEANCTX_BIN (set, possibly empty) replaces the lean-ctx lookup.
+  if [ "$_tool" = lean-ctx ] && [ "${AICONTEXT_LEANCTX_BIN+set}" = set ]; then _tpath="$AICONTEXT_LEANCTX_BIN"; fi
   if [ -n "$_tpath" ] && [ -x "$_tpath" ]; then
     # --version only. Short timeout. No input.
     _tver="$(timeout 3 "$_tpath" --version </dev/null 2>&1 | head -n 1 | cut -c1-80)"
@@ -489,6 +511,110 @@ for _tool in rtk lean-ctx headroom caveman ccusage; do
     add Tools info "tool.$_tool" "$_tool not found."
   fi
 done
+
+# ---------- LeanCTX runtime ----------
+# Read only. Runs "lean-ctx --version" and "lean-ctx doctor" (both bounded by a timeout, no input). It does not run
+# status (it writes a report file in the LeanCTX data directory), wrap, setup, init, or doctor --fix. It reads shell
+# startup files and MCP config files as text and changes nothing. wx owns terminal output in phase one.
+_LC_FOUND=false
+_LC_PATH=""
+_LC_PLATFORM_PATH=""
+_LC_VERSION=""
+_LC_VERSION_OK=false
+_LC_DOC_RAN=false
+_LC_DOC_EXIT=""
+_LC_DOC_TIMEOUT=false
+_LC_DOC_OK=0
+_LC_DOC_WARN=0
+_LC_DOC_FAIL=0
+_LC_STATUS_REASON="not run: lean-ctx status writes a report file in the LeanCTX data directory"
+_LC_HOOKS=()
+_LC_MCP=()
+_LC_TIMEOUT="${AICONTEXT_LEANCTX_TIMEOUT:-15}"
+case "$_LC_TIMEOUT" in ''|*[!0-9]*) _LC_TIMEOUT=15 ;; esac
+
+_LC_PATH="$(command -v lean-ctx 2>/dev/null || true)"
+if [ "${AICONTEXT_LEANCTX_BIN+set}" = set ]; then _LC_PATH="$AICONTEXT_LEANCTX_BIN"; fi
+if [ -n "$_LC_PATH" ] && [ -f "$_LC_PATH" ] && [ -x "$_LC_PATH" ]; then
+  _LC_FOUND=true
+  _LC_MNT="${AICONTEXT_DOCTOR_MNT_PREFIX:-/mnt/}"
+  case "$_LC_PATH" in
+    "$_LC_MNT"[a-zA-Z]/*) _LC_PLATFORM_PATH=windows ;;
+    *) _LC_PLATFORM_PATH=linux ;;
+  esac
+  # Version. Exit code and timeout are checked.
+  _lc_out="$(timeout -k 1 3 "$_LC_PATH" --version </dev/null 2>&1; printf '\n@@rc=%s' "$?")"
+  _lc_rc="${_lc_out##*@@rc=}"
+  _LC_VERSION="$(printf '%s' "${_lc_out%@@rc=*}" | head -c 400 | head -n 1 | cut -c1-80)"
+  if [ "$_lc_rc" -eq 0 ] && [ -n "$_LC_VERSION" ]; then
+    _LC_VERSION_OK=true
+    :  # the version is reported by tool.lean-ctx and in the JSON leanctx object
+  elif [ "$_lc_rc" -eq 124 ] || [ "$_lc_rc" -eq 137 ]; then
+    add LeanCTX warn leanctx.version_failed "lean-ctx --version did not finish in 3 seconds." "$(pl "$_LC_PATH" "")" "Check the lean-ctx install."
+  else
+    add LeanCTX warn leanctx.version_failed "lean-ctx --version failed (exit $_lc_rc)." "$(pl "$_LC_PATH" "")" "Check the lean-ctx install."
+  fi
+  if [ "$_PLATFORM" = wsl ]; then
+    if [ "$_LC_PLATFORM_PATH" = windows ]; then
+      add LeanCTX warn leanctx.windows_binary "lean-ctx resolves to a Windows path under WSL. The Windows lean-ctx may be used by accident." "$(pl "$_LC_PATH" "")" "Install lean-ctx inside WSL, and put it before the Windows path in PATH."
+    else
+      add LeanCTX ok leanctx.linux_binary "lean-ctx is a WSL Linux binary." "$(pl "$_LC_PATH" "")"
+    fi
+  fi
+  add LeanCTX info leanctx.status "lean-ctx status $_LC_STATUS_REASON."
+  if [ "$_LC_PLATFORM_PATH" = windows ]; then
+    add LeanCTX info leanctx.doctor_skipped "lean-ctx doctor was not run: the binary is a Windows path under WSL."
+  else
+    # lean-ctx doctor reads and reports. Exit 1 means it found problems. Output is cut to 20000 bytes.
+    _lc_doc="$(timeout -k 1 "$_LC_TIMEOUT" "$_LC_PATH" doctor </dev/null 2>&1; printf '\n@@rc=%s' "$?")"
+    _lc_rc="${_lc_doc##*@@rc=}"
+    _lc_doc="$(printf '%s' "${_lc_doc%@@rc=*}" | head -c 20000)"
+    _LC_DOC_RAN=true
+    _LC_DOC_EXIT="$_lc_rc"
+    _lc_plain="$(printf '%s\n' "$_lc_doc" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g')"
+    _LC_DOC_OK="$(printf '%s\n' "$_lc_plain" | grep -c '^[[:space:]]*✓' || true)"
+    _LC_DOC_WARN="$(printf '%s\n' "$_lc_plain" | grep -c '^[[:space:]]*⚠' || true)"
+    _LC_DOC_FAIL="$(printf '%s\n' "$_lc_plain" | grep -c '^[[:space:]]*✗' || true)"
+    if [ "$_lc_rc" -eq 124 ] || [ "$_lc_rc" -eq 137 ]; then
+      _LC_DOC_TIMEOUT=true
+      add LeanCTX warn leanctx.doctor_timeout "lean-ctx doctor did not finish in $_LC_TIMEOUT seconds and was stopped." "$(pl "$_LC_PATH" "")"
+    elif [ "$_lc_rc" -ne 0 ] && [ "$_LC_DOC_FAIL" -eq 0 ]; then
+      add LeanCTX warn leanctx.doctor_failed "lean-ctx doctor failed (exit $_lc_rc) without a report." "$(pl "$_LC_PATH" "")"
+    elif [ "$_LC_DOC_FAIL" -gt 0 ] || [ "$_LC_DOC_WARN" -gt 0 ] || [ "$_lc_rc" -ne 0 ]; then
+      _lc_first="$(printf '%s\n' "$_lc_plain" | grep -E '^[[:space:]]*(✗|⚠)' | head -n 2 | sed 's/^[[:space:]]*//' | cut -c1-80 | paste -sd';' | sed 's/;/; /g')"
+      add LeanCTX warn leanctx.doctor_problems "lean-ctx doctor: $_LC_DOC_OK ok, $_LC_DOC_WARN warnings, $_LC_DOC_FAIL failed. ${_lc_first}" "$(pl "$_LC_PATH" "")" "Run lean-ctx doctor yourself. Token Controller does not run doctor --fix."
+    else
+      add LeanCTX ok leanctx.doctor "lean-ctx doctor: $_LC_DOC_OK checks ok." "$(pl "$_LC_PATH" "")"
+    fi
+  fi
+else
+  add LeanCTX info leanctx.missing "lean-ctx not found. It is optional. The Token Controller LeanCTX policy is not used at run time yet."
+fi
+
+# Shell hook markers (text match, no changes). A hook can compress terminal output before wx captures it.
+for _f in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$HOME/.zshrc" "$HOME/.zprofile"; do
+  [ -f "$_f" ] || continue
+  _rl="$(grep -nE 'lean-ctx (shell hook|agent aliases)|lean-ctx/shell-hook' "$_f" 2>/dev/null | head -n 1 | cut -d: -f1)"
+  [ -n "$_rl" ] && _LC_HOOKS+=("$(pl "$_f" "$_rl")")
+done
+for _f in "$_XDG_CONFIG_HOME"/lean-ctx/shell-hook.*; do
+  [ -f "$_f" ] && _LC_HOOKS+=("$(pl "$_f" "")")
+done
+if [ "${#_LC_HOOKS[@]}" -gt 0 ]; then
+  add LeanCTX warn leanctx.shell_hook "A LeanCTX shell hook or alias is set up. It may shape terminal output, or its ctx_shell tool may run commands, before wx captures raw output. In Token Controller wx owns terminal output." "$(printf '%s\n' "${_LC_HOOKS[@]}")" "Use one route per command. Keep shell compression in wx (and RTK). Doctor does not edit shell files or LeanCTX config."
+fi
+
+# MCP config files that mention lean-ctx (text match, no changes).
+for _f in "$HOME/.claude.json" "$_CLAUDE_DIR/.mcp.json" "$_PROJECT/.mcp.json" "$_PROJECT/.vscode/mcp.json" \
+  "$_XDG_CONFIG_HOME/Code/User/mcp.json" "$HOME/.vscode-server/data/User/mcp.json" "$HOME/.cursor/mcp.json" \
+  "$HOME/.codex/config.toml" "$HOME/.copilot/mcp-config.json" "$HOME/.gemini/settings.json"; do
+  [ -f "$_f" ] || continue
+  _rl="$(grep -n 'lean-ctx' "$_f" 2>/dev/null | head -n 1 | cut -d: -f1)"
+  [ -n "$_rl" ] && _LC_MCP+=("$(pl "$_f" "$_rl")")
+done
+if [ "${#_LC_MCP[@]}" -gt 0 ]; then
+  add LeanCTX info leanctx.mcp "LeanCTX appears in ${#_LC_MCP[@]} MCP config file(s). Agents may use ctx_read, ctx_search, ctx_tree (the policy allows them). The policy keeps shell output with wx, so agents should not use ctx_shell." "$(printf '%s\n' "${_LC_MCP[@]}")" "Doctor does not edit MCP config."
+fi
 
 # ---------- caveman state ----------
 # Doctor only reads the state file. It never changes it. Token Controller's own state comes from the env file.
@@ -663,6 +789,16 @@ print_json() {
         },
         summary: {error: $errors, warn: $warns, info: $infos}
       }'
+    jq -cn --argjson found "$_LC_FOUND" --arg path "$_LC_PATH" --arg ppath "$_LC_PLATFORM_PATH" --arg version "$_LC_VERSION" \
+      --argjson version_ok "$_LC_VERSION_OK" --argjson ran "$_LC_DOC_RAN" --arg exit "$_LC_DOC_EXIT" --argjson timed_out "$_LC_DOC_TIMEOUT" \
+      --argjson ok "$_LC_DOC_OK" --argjson warn "$_LC_DOC_WARN" --argjson fail "$_LC_DOC_FAIL" --arg status_reason "$_LC_STATUS_REASON" \
+      --arg hooks "$(printf '%s\n' "${_LC_HOOKS[@]:-}")" --arg mcp "$(printf '%s\n' "${_LC_MCP[@]:-}")" \
+      '{leanctx: {found: $found, path: (if $found then $path else null end), platform_path: (if $ppath == "" then null else $ppath end),
+        version: (if $version == "" then null else $version end), version_ok: $version_ok,
+        status: {ran: false, reason: $status_reason},
+        doctor: {ran: $ran, exit_code: (if $exit == "" then null else ($exit | tonumber) end), timed_out: $timed_out, ok: $ok, warn: $warn, fail: $fail},
+        shell_hook_paths: ($hooks | split("\n") | map(select(. != "")) | map(split("\t")[0])),
+        mcp_config_paths: ($mcp | split("\n") | map(select(. != "")) | map(split("\t")[0]))}}'
     for _t in "${_TOOLS[@]}"; do
       IFS='|' read -r _tname _tfound _tkind _tpath _tver <<< "$_t"
       jq -cn --arg name "$_tname" --arg found "$_tfound" --arg kind "$_tkind" --arg path "$_tpath" --arg version "$_tver" \
@@ -683,6 +819,7 @@ print_json() {
     done
   } | jq -s '
     (.[0]) + {
+      leanctx: ([.[] | select(has("leanctx")) | .leanctx][0]),
       tools: [.[] | select(has("tool")) | .tool],
       locations: [.[] | select(has("location")) | .location],
       findings: [.[] | select(has("finding")) | .finding]

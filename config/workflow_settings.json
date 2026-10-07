@@ -63,6 +63,77 @@
     ],
     "opt_in_required": true
   },
+  "leanctx_policy": {
+    "transport_preference": "mcp-preferred-cli-validated",
+    "shell_owner": "wx",
+    "shell_enabled": false,
+    "auto_wrap": false,
+    "auto_setup": false,
+    "auto_init": false,
+    "smart_file_owner": "leanctx",
+    "operations": {
+      "read": {
+        "status": "enabled",
+        "mcp": [
+          "ctx_read"
+        ],
+        "cli": [
+          "lean-ctx read"
+        ]
+      },
+      "search": {
+        "status": "enabled",
+        "mcp": [
+          "ctx_search"
+        ],
+        "cli": [
+          "lean-ctx grep"
+        ]
+      },
+      "tree": {
+        "status": "enabled",
+        "mcp": [
+          "ctx_tree"
+        ],
+        "cli": [
+          "lean-ctx ls",
+          "lean-ctx find"
+        ]
+      },
+      "compose": {
+        "status": "enabled",
+        "mcp": [
+          "ctx_compose"
+        ],
+        "cli": []
+      },
+      "graph": {
+        "status": "enabled",
+        "mcp": [
+          "ctx_graph",
+          "ctx_repomap",
+          "ctx_overview"
+        ],
+        "cli": []
+      },
+      "shell": {
+        "status": "disabled",
+        "mcp": [],
+        "cli": [],
+        "note": "Reserved. wx owns shell output, with RTK as the pipe filter."
+      },
+      "edit": {
+        "status": "deferred",
+        "mcp": [],
+        "cli": []
+      },
+      "memory": {
+        "status": "deferred",
+        "mcp": [],
+        "cli": []
+      }
+    }
+  },
   "aliases": {
     "plan": "architect",
     "ci": "cicd"

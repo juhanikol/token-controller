@@ -13,7 +13,7 @@ How to keep it:
 
 | ID | Type | Severity | Area | Issue | Status | Details |
 |---|---|---|---|---|---|---|
-| D-01 | Not implemented | High | Orchestration | LeanCTX is not orchestrated. `leanctx_mode` is exported state only. There is no design doc and no code. The critical modes have `leanctx_mode` `off` until LeanCTX has its own design and tests. | Open | Plan work package 7 |
+| D-01 | Not implemented | High | Orchestration | Policy scaffold exists; orchestration not implemented. `leanctx_policy` in the config fixes the surface: MCP preferred and CLI validated, `wx` owns shell output, shell, wrap, setup, and init are off, LeanCTX owns smart file reading, and read, search, tree, compose, and graph are enabled with their MCP tools and CLI commands. Doctor checks its shape (`leanctx.policy*`) and the LeanCTX install and environment (`leanctx.*`, read only). No code reads the policy and LeanCTX is never run. `leanctx_mode` is still exported state only. The critical modes keep `leanctx_mode` `off` until the integration has its own design and tests. | Open (scaffold only) | LeanCTX policy (this file) |
 | D-02 | Not implemented | High | Orchestration | Headroom is not orchestrated. `headroom_mode` is exported state only. No design doc, no code. | Open | Plan work package 7 |
 | D-03 | Not implemented | Medium | Config | Mode to tool mapping uses free-text labels. Only `off` or not-`off` is read. `compress_files`, `memory_layer`, `codebase_index`, `leanctx_mode`, `headroom_mode` have no consumer. `memory_layer` and `codebase_index` are still on for `security`, `db`, and `migration`. | Open | Plan work package 4 |
 | D-04 | Decision | Medium | Config | MemStack is legacy. `MEMSTACK_ACTIVE` and `memory_layer` are kept until the tool shape is clear. | Decision needed | Plan, "LeanCTX/Headroom" |
@@ -34,7 +34,7 @@ How to keep it:
 | D-21 | Debt | Low | Scripts | `ccusage` is checked by doctor but not by `check-tools.sh` or `install-optional-tools.sh`. | Open | Debt review (this file) |
 | D-22 | Debt | Low | Docs | README does not document `AICONTEXT_USE_SHELL_STATE`, `AICONTEXT_CAVEMAN_REQUEST`, `AICONTEXT_RTK_BIN`, `AICONTEXT_RTK_TIMEOUT`. README is long (475 lines). | Open | Debt review (this file) |
 | D-23 | Contradiction | Low | Docs | `docs/MODE_SWITCHER_AND_ORCHESTRATOR_PLAN.md` "Documents to revise" table and work packages are out of date. | Open | Debt review (this file) |
-| D-24 | Debt | Low | Doctor | MCP config checks are not implemented. RTK setup detection is a text match on known Claude Code locations. `.caveman-active` format is assumed to be a level name. | Open | Doctor improvements |
+| D-24 | Debt | Low | Doctor | MCP config checks are text matches only: doctor lists known config files that mention `lean-ctx` and does not parse them or check that the server works. RTK setup detection is a text match on known Claude Code locations. `.caveman-active` format is assumed to be a level name. LeanCTX hook detection is a text match on shell startup files. | Open | Doctor improvements |
 | D-25 | Not implemented | Medium | CLI | No `set --json`. `wx` is not reachable through `workflow-cli.sh`. `status --json` has no `description` or `caveman_shrink`. The extension does not call `version --json` yet: it checks only the `schema_version` of each reply. | Open | `workflow report --json` (this file) |
 | D-26 | Not implemented | Medium | Extension | The extension does not show the report summary (the CLI side, `report --json`, now exists), the doctor summary, or tool availability. No Caveman toggle. `caveman_requested` is not shown. | Open | `workflow report --json` (this file) |
 | D-27 | Not implemented | Medium | Windows | No Windows or WSL backend, no environment check (`remoteName`, distro), no Windows CI. The CLI uses GNU tools (`timeout`, `stat -c`, `awk`) and Bash. | Open | Extension alignment design |
@@ -633,3 +633,16 @@ Debt IDs changed: D-06, D-07, D-38.
 ## D-05 closed (2026-10-07)
 
 `templates/AGENTS_base.md` now tells agents to read `AICONTEXT_OUTPUT_STYLE` from `active_mode.env` and, for `ste-inspired`, write short direct technical English while keeping errors, paths, commands, code, warnings, and test output exact. This is policy only: it depends on agent compliance, and no code interprets the value. Nothing else needed the variable, so the row is removed.
+
+## LeanCTX policy scaffold (2026-10-07)
+
+Added top-level `leanctx_policy` to `config/workflow_settings.json`: `transport_preference` `mcp-preferred-cli-validated`, `shell_owner` `wx`, `shell_enabled`, `auto_wrap`, `auto_setup`, `auto_init` all `false`, `smart_file_owner` `leanctx`, and `operations` (read, search, tree, compose, graph enabled; shell disabled and reserved; edit and memory deferred). Doctor validates it (`leanctx.policy`, `leanctx.policy_unsafe`, `leanctx.policy_invalid`, `leanctx.policy_missing`), with tests in `tests/doctor.test.sh`. Nothing else reads it. LeanCTX was not run. Debt ID changed: D-01 (revised, still open).
+
+## LeanCTX doctor checks (2026-10-07)
+
+`workflow doctor` reports LeanCTX (text and JSON). New JSON object `leanctx` (found, path, platform_path, version, version_ok, status, doctor, shell_hook_paths, mcp_config_paths). Findings: `leanctx.missing`, `leanctx.version_failed`, `leanctx.windows_binary` (WSL and the path is under /mnt/<drive>), `leanctx.linux_binary`, `leanctx.status`, `leanctx.doctor`, `leanctx.doctor_problems`, `leanctx.doctor_failed`, `leanctx.doctor_timeout`, `leanctx.doctor_skipped`, `leanctx.shell_hook` (warn: wx owns terminal output), `leanctx.mcp`.
+* **Safe calls only:** `--version` (3 s) and `doctor` (15 s, `AICONTEXT_LEANCTX_TIMEOUT`, output cut at 20000 bytes). `lean-ctx status` is not run: with 3.9.19 it writes `status/latest.json` in the LeanCTX data directory. `lean-ctx doctor` changed no file in a check on this machine. Never `wrap`, `setup`, `init`, `onboard`, or `doctor --fix`.
+* **Cost:** about 3 seconds more per doctor run when lean-ctx is installed.
+* **Tests:** fake lean-ctx in `tests/doctor.test.sh` (missing, ok, problems, nonzero without report, version failure, timeout, WSL with a Windows-mount path, WSL with a Linux path, hook and MCP markers with a no-change snapshot, and no change-capable call in the call log). Test hooks: `AICONTEXT_LEANCTX_BIN`, `AICONTEXT_DOCTOR_MNT_PREFIX`.
+
+Debt IDs changed: D-01 (text), D-24 (narrowed: LeanCTX hook and MCP detection added as text matches).
