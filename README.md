@@ -17,10 +17,11 @@ The `wx` wrapper is the safety and measurement layer: it captures raw output, pr
 
 The implementation has three distinct layers:
 
-| Layer | Current status |
-| --- | --- |
-| Policy layer | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy. |
-| Mechanical layer | The explicit `wx` wrapper captures raw evidence and collapses exact consecutive repetitions only for eligible successful stdout. Failures and protected profiles or commands remain raw. |
+
+| Layer                  | Current status                                                                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Policy layer           | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy.                                                                                               |
+| Mechanical layer       | The explicit`wx` wrapper captures raw evidence and collapses exact consecutive repetitions only for eligible successful stdout. Failures and protected profiles or commands remain raw.                                                                |
 | Measured savings layer | Per-run metadata records raw and visible byte counts; the benchmark also captures total emitted bytes including wrapper diagnostics. Fixture validation demonstrates byte reduction, but no tokenizer-backed token-saving result has been established. |
 
 ## Why this matters (even with million-token context windows)
@@ -222,30 +223,30 @@ docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:24.04 bash
 Use this table when you are unsure which mode to choose. It describes the policy requested from an agent or connected tool, not behavior the controller independently enforces.
 
 
-| Scenario                           | Command                    | Requested policy                                 | Evidence requested complete                                 |
-| ---------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
-| Requirements and scope             | `workflow scope`           | Summarize carefully                              | User intent, constraints, acceptance criteria               |
-| Architecture and structure         | `workflow architect`       | Map the codebase, then read selected files fully | Interfaces, module boundaries, design reasoning             |
-| Models, schemas, and decisions     | `workflow decisions`       | Preserve contracts and types                     | Schemas, invariants, API contracts                          |
-| Normal coding                      | `workflow code`            | Keep target files full; summarize dependencies   | Edited files, nearby tests, compiler errors                 |
-| Rapid prototype                    | `workflow rapid-prototype` | Compress successful build noise aggressively     | Backend API errors, migration warnings, raw failure logs    |
-| Small snippet review               | `workflow snippet`         | Use little or no compression                     | The complete snippet, method, or file                       |
-| Very small task (one function/file) | `workflow micro`          | No context tools, no compression                 | The complete target file or snippet                         |
-| Agent-rule work                    | `workflow agent`           | Keep agent instructions stable                   | `AGENTS.md` and dynamic task-state files                    |
-| Data analysis                      | `workflow data-analysis`   | Preserve numeric evidence                        | Numbers, units, statistics, plots, data sources             |
-| Bug fixing                         | `workflow debug`           | Keep the first failure raw                       | Error, stderr, exit code, stack origin, paths, line numbers |
-| Unit and integration tests         | `workflow test`            | Compress passing noise only                      | Failing tests, assertions, stack traces                     |
-| Full test suite                    | `workflow test-full`       | Compress successful repetition                   | First failure and final test summary                        |
-| Documentation                      | `workflow docs`            | Gather sources efficiently; write normal prose   | Final documentation and factual behavior                    |
-| CI/CD                              | `workflow cicd`            | Compress install and fetch boilerplate           | Workflow files, scripts, environment, failing lines         |
-| Codebase or pull-request review    | `workflow review`          | Index first, then read important files fully     | Diffs, public interfaces, risk areas                        |
-| Security and compliance            | `workflow security`        | Raw or lossless context only                     | CVEs, secrets, auth, crypto, license findings               |
-| Large refactor or legacy migration | `workflow migration`       | Use a global map and full active files           | Compatibility rules and changed files                       |
-| Database migration                 | `workflow db`              | Raw or lossless context only                     | SQL, constraints, ordering, data-loss warnings              |
-| Performance work                   | `workflow perf`            | Preserve measurements exactly                    | Timings, percentiles, memory, sample size, environment      |
-| Release preparation                | `workflow release`         | Raw or lossless context only                     | Versions, changelog, artifacts, hashes, signing output      |
-| Maximum fidelity                   | `workflow raw`             | Disable compression                              | Everything                                                  |
-| Disable optimizers                 | `workflow off`             | Turn optional optimization modes off             | Normal shell output                                         |
+| Scenario                            | Command                    | Requested policy                                 | Evidence requested complete                                 |
+| ----------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
+| Requirements and scope              | `workflow scope`           | Summarize carefully                              | User intent, constraints, acceptance criteria               |
+| Architecture and structure          | `workflow architect`       | Map the codebase, then read selected files fully | Interfaces, module boundaries, design reasoning             |
+| Models, schemas, and decisions      | `workflow decisions`       | Preserve contracts and types                     | Schemas, invariants, API contracts                          |
+| Normal coding                       | `workflow code`            | Keep target files full; summarize dependencies   | Edited files, nearby tests, compiler errors                 |
+| Rapid prototype                     | `workflow rapid-prototype` | Compress successful build noise aggressively     | Backend API errors, migration warnings, raw failure logs    |
+| Small snippet review                | `workflow snippet`         | Use little or no compression                     | The complete snippet, method, or file                       |
+| Very small task (one function/file) | `workflow micro`           | No context tools, no compression                 | The complete target file or snippet                         |
+| Agent-rule work                     | `workflow agent`           | Keep agent instructions stable                   | `AGENTS.md` and dynamic task-state files                    |
+| Data analysis                       | `workflow data-analysis`   | Preserve numeric evidence                        | Numbers, units, statistics, plots, data sources             |
+| Bug fixing                          | `workflow debug`           | Keep the first failure raw                       | Error, stderr, exit code, stack origin, paths, line numbers |
+| Unit and integration tests          | `workflow test`            | Compress passing noise only                      | Failing tests, assertions, stack traces                     |
+| Full test suite                     | `workflow test-full`       | Compress successful repetition                   | First failure and final test summary                        |
+| Documentation                       | `workflow docs`            | Gather sources efficiently; write normal prose   | Final documentation and factual behavior                    |
+| CI/CD                               | `workflow cicd`            | Compress install and fetch boilerplate           | Workflow files, scripts, environment, failing lines         |
+| Codebase or pull-request review     | `workflow review`          | Index first, then read important files fully     | Diffs, public interfaces, risk areas                        |
+| Security and compliance             | `workflow security`        | Raw or lossless context only                     | CVEs, secrets, auth, crypto, license findings               |
+| Large refactor or legacy migration  | `workflow migration`       | Use a global map and full active files           | Compatibility rules and changed files                       |
+| Database migration                  | `workflow db`              | Raw or lossless context only                     | SQL, constraints, ordering, data-loss warnings              |
+| Performance work                    | `workflow perf`            | Preserve measurements exactly                    | Timings, percentiles, memory, sample size, environment      |
+| Release preparation                 | `workflow release`         | Raw or lossless context only                     | Versions, changelog, artifacts, hashes, signing output      |
+| Maximum fidelity                    | `workflow raw`             | Disable compression                              | Everything                                                  |
+| Disable optimizers                  | `workflow off`             | Turn optional optimization modes off             | Normal shell output                                         |
 
 Aliases kept for compatibility:
 
@@ -298,7 +299,7 @@ The VS Code settings updater expects a strict JSON `settings.json`. It stops wit
 
 ## Optional context tools
 
-RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The `wx` capture layer invokes only RTK, and only as described below (a prototype); outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
+RTK, Headroom, LeanCTX, and Caveman are not required to use this controller. The `wx` capture layer invokes only RTK, and only as described below (a prototype); outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
 
 To inspect what is installed:
 
@@ -316,6 +317,23 @@ If you choose to install the Python tools using those printed commands, their vi
 
 * Headroom: `~/.venvs/headroom`
 * MemStack: `~/.venvs/memstack`
+
+## Important note on context tools
+
+Token savings are significantly increased when using context tools such as RTK, Headroom, LeanCTX and caveman. Or at least when the tools are used separately. However this separation, configuring and different options make using all the tools quite complicated. This token-controller should give you less things to worry about and easy to use method for users with different skills. Beginner and advanced developer included.
+
+I advise always installing these tools. I cannot promise significant improvements without them.
+
+Roughly the idea with those tools are:
+
+**RTK:**
+  terminal-output noise reduction through wx raw capture + rtk pipe
+**LeanCTX:**
+  codebase exploration, file reads, search, tree/map, signatures, context composition
+**Caveman:**
+  assistant response/output brevity only
+**Headroom:**
+  more advanced "rtk" with MCP, multiagent coding and affects to RAG pipeline aswell
 
 ## Mechanical `wx` layer and optional integrations
 
@@ -389,21 +407,21 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 ## Useful commands
 
 
-| Command           | Purpose                                                  |
-| ----------------- | -------------------------------------------------------- |
-| `workflow init`   | Create or safely extend the current project's`AGENTS.md` |
-| `workflow setup`  | Configure optional global editor instructions            |
-| `workflow <mode>` | Select a context mode                                    |
-| `workflow status` | Show the active mode and policy (`--json` for tools)     |
-| `workflow doctor` | Read-only check of settings, instruction files, and tools (`--json` available) |
-| `wx <command>`    | Capture, preserve, optionally compress, and measure output |
-| `workflow report` | Summarize command, byte, reduction, and failure counts (`--json` for tools, `--project <dir>`) |
-| `workflow reset-session` | Archive session metadata without deleting raw logs |
-| `workflow off`    | Select the off policy                                      |
-| `workflow help`   | List available commands and modes                        |
-| `workflow modes`  | List modes and aliases from the settings file (`--json` for tools) |
-| `workflow version` | Show the CLI version and the JSON schema numbers (`--json` for tools; also `--version`) |
-| `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes `active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
+| Command                                     | Purpose                                                                                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `workflow init`                             | Create or safely extend the current project's`AGENTS.md`                                                                                                           |
+| `workflow setup`                            | Configure optional global editor instructions                                                                                                                      |
+| `workflow <mode>`                           | Select a context mode                                                                                                                                              |
+| `workflow status`                           | Show the active mode and policy (`--json` for tools)                                                                                                               |
+| `workflow doctor`                           | Read-only check of settings, instruction files, and tools (`--json` available)                                                                                     |
+| `wx <command>`                              | Capture, preserve, optionally compress, and measure output                                                                                                         |
+| `workflow report`                           | Summarize command, byte, reduction, and failure counts (`--json` for tools, `--project <dir>`)                                                                     |
+| `workflow reset-session`                    | Archive session metadata without deleting raw logs                                                                                                                 |
+| `workflow off`                              | Select the off policy                                                                                                                                              |
+| `workflow help`                             | List available commands and modes                                                                                                                                  |
+| `workflow modes`                            | List modes and aliases from the settings file (`--json` for tools)                                                                                                 |
+| `workflow version`                          | Show the CLI version and the JSON schema numbers (`--json` for tools; also `--version`)                                                                            |
+| `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes`active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
 
 JSON output compatibility (the rule is written in `scripts/lib/versions.sh`):
 
