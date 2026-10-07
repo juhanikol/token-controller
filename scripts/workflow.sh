@@ -2,7 +2,7 @@
 # Path: scripts/workflow.sh
 # Usage: source scripts/workflow.sh <mode>
 # Modes (defined in config/workflow_settings.json): raw scope architect decisions code rapid-prototype snippet micro agent test test-full debug data-analysis docs cicd review security migration db perf release off
-# Commands: init setup status modes version report doctor reset-session
+# Commands: init setup status modes version report doctor leanctx reset-session
 # Backward-compatible aliases: plan=architect, ci=cicd
 
 # This script is intended to be sourced, because it exports variables to the current shell.

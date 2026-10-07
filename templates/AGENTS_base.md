@@ -22,10 +22,13 @@ Do not use `Caveman` to record the first failure.
 Do not use `Caveman` to write instructions for a human user.
 
 **LeanCTX Rules**
-Use `LeanCTX` only when `AICONTEXT_LEANCTX_MODE` in `active_mode.env` is not `off` and the LeanCTX MCP tools are available.
-Use `ctx_tree`, `ctx_search`, `ctx_read`, and `ctx_compose` to explore the code and to read files.
-Use the `map`, `signatures`, or `task` read modes first.
-Use a fresh `full` or raw read before an exact edit.
+Use `LeanCTX` only when `AICONTEXT_LEANCTX_MODE` in `active_mode.env` is not `off`.
+Use the MCP tools `ctx_tree`, `ctx_search`, `ctx_read`, and `ctx_compose` for exploration and a code overview only. Use the `map`, `signatures`, or `task` read modes first.
+Use these MCP tools for exploration only until the exact behavior of `ctx_read` is validated.
+Treat all `LeanCTX` output as not exact, unless the controller verifies it.
+Do not trust `LeanCTX` output that says content was filtered, triaged, summarized, omitted, or shortened.
+For an exact edit, use a raw file read or `workflow leanctx read-exact <path>`.
+Do not call `lean-ctx` directly. Use `workflow leanctx` for CLI access.
 Do not use `ctx_shell`. Use `wx` for terminal commands.
 Do not use `LeanCTX` in the `raw`, `security`, `db`, `migration`, or `release` profiles, unless the active profile allows it.
 Do not run `lean-ctx wrap`, `setup`, or `init`.

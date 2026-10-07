@@ -3,7 +3,7 @@ set -u
 
 printf 'AI Context Workflow tool check\n'
 printf '================================\n'
-printf 'Note: workflow <mode> only exports AICONTEXT_* policy. wx captures raw output and does not invoke RTK, LeanCTX, Headroom, MemStack, or Caveman. Each tool needs its own shell/IDE/MCP setup.\n'
+printf 'Note: workflow <mode> only exports AICONTEXT_* policy. wx captures raw output first, and then may run rtk pipe on it (only for commands with a pipe entry in the config). wx does not invoke LeanCTX, Headroom, MemStack, or Caveman. workflow leanctx runs bounded lean-ctx CLI commands on request. Each tool needs its own shell/IDE/MCP setup.\n'
 
 check() {
   local name="$1"
@@ -62,6 +62,7 @@ check npm npm 'To install: install Node.js 18+ with nvm (see scripts/install-opt
 check rtk rtk 'To install: review the RTK commands in scripts/install-optional-tools.sh'
 check headroom headroom 'To install: create ~/.venvs/headroom, then run pip install "headroom-ai[all]"'
 check lean-ctx lean-ctx 'To install core: cargo install lean-ctx'
+check ccusage ccusage 'Optional usage reports. To install: npm install -g ccusage (Token Controller does not install it)'
 check claude claude 'To install: npm install -g @anthropic-ai/claude-code'
 check_caveman
 # MemStack is a legacy integration. Its status is under review.
