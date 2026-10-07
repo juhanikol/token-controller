@@ -44,7 +44,7 @@ jobs:
         # scripts/leanctx-cli.sh is called through "bash" (workflow leanctx), and is listed because it is meant for direct use too.
         run: |
           missing=0
-          for f in scripts/workflow-cli.sh scripts/leanctx-cli.sh \
+          for f in scripts/workflow-cli.sh scripts/leanctx-cli.sh scripts/install-wsl.sh \
             tests/fixtures/bin/* tests/fixtures/leanctx/lean-ctx tests/fixtures/shim-command.sh tests/fixtures/failing-stack.sh \
             benchmarks/fixtures/*.sh; do
             if [ ! -e "$f" ]; then echo "missing: $f"; missing=1; continue; fi
@@ -77,6 +77,9 @@ jobs:
 
       - name: Doctor tests
         run: bash tests/doctor.test.sh
+
+      - name: Install scripts (fake apt and fake tools)
+        run: bash tests/install.test.sh
 
       - name: LeanCTX CLI harness (fake lean-ctx, real one skipped)
         env:

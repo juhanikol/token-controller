@@ -52,9 +52,14 @@ The "stale shell" warning only covers the environment of VS Code. Terminals that
 
 ## Install
 
-1. Build it: `cd extensions/vscode && npm ci && npx vsce package`. This writes `token-controller-ui-<version>.vsix` there. No built VSIX is kept in git. Older ones are under the git tags (for example `v1.1.0`).
-2. In VS Code connected to WSL, open Extensions → **…** → **Install from VSIX…** and select the file.
-3. Reload the window.
+You need **WSL 2 with Ubuntu**, VS Code connected to it (the window shows `WSL: Ubuntu` at the bottom left), and the Token Controller repository cloned in that distro with `scripts/install-wsl.sh` run (see the main README).
+
+1. **Get the VSIX.** Download `token-controller-ui-2.0.0.vsix` from the GitHub release. Or build it: `cd extensions/vscode && npm ci && npm run package && npx vsce package`. No VSIX is kept in git. Older ones are under the git tags (for example `v1.1.0`).
+2. **Open your project from WSL.** In a WSL terminal: `code .`
+3. **Install into the WSL extension host.** In that window, open Extensions → **…** → **Install from VSIX…** and select the file. Or, in the WSL terminal of that window: `code --install-extension token-controller-ui-2.0.0.vsix`. The extension must show under "WSL: Ubuntu", not only locally.
+4. **Reload the window.** The status bar shows `AI Context: <mode>`. Click it to switch.
+
+If you cloned the controller somewhere other than `~/projects/token-controller`, set `tokenController.scriptPath` (below) in your **user** settings.
 
 ## Setting
 
