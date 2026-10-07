@@ -341,6 +341,35 @@ for _WX_RTK_MODE in fail drop-warning same empty; do
   cmp -s "$_WX_TEST_ROOT/rtk-stderr-fallback.stdout" "$_WX_TEST_ROOT/direct.pytest.out" || fail "stdout changed after an RTK fallback ($_WX_RTK_MODE)"
 done
 
+# 3f. Caveman and failure evidence. wx records the Caveman level. When Caveman is on and a run fails, wx prints
+# a reminder next to the failure output. When Caveman is off (the default), nothing is added.
+export AICONTEXT_CAVEMAN_REQUEST=lite
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+unset AICONTEXT_CAVEMAN_REQUEST
+grep -Fq 'export AICONTEXT_CAVEMAN_MODE="lite"' "$AICONTEXT_CONFIG_DIR/active_mode.env" || fail 'Caveman lite was not set for the failure-reminder test'
+FIXTURE_EXIT=1 rtk_run cave-fail pytest
+[ "$_WX_RUN_EXIT" -eq 1 ] || fail 'exit code changed with Caveman on'
+assert_file_contains "$_WX_TEST_ROOT/rtk-cave-fail.stderr" '[wx] Caveman is lite and this run failed (exit 1). Quote the error, stack trace, paths, and line numbers exactly.'
+cmp -s "$_WX_TEST_ROOT/rtk-cave-fail.stdout" "$_WX_TEST_ROOT/direct.pytest.out" || fail 'failing output changed with Caveman on'
+rtk_last | jq -e '.caveman_mode == "lite" and .exit_code == 1 and .output_policy == "raw-nonzero-exit"' >/dev/null || fail 'failing run record with Caveman on is invalid'
+[ "$(grep -c 'Caveman is' "$_WX_TEST_ROOT/rtk-cave-fail.stderr")" -eq 1 ] || fail 'the reminder should appear once'
+rtk_run cave-ok pytest
+if grep -Fq 'Caveman is' "$_WX_TEST_ROOT/rtk-cave-ok.stderr"; then fail 'a successful run printed the Caveman reminder'; fi
+rtk_last | jq -e '.caveman_mode == "lite"' >/dev/null || fail 'successful run did not record the Caveman level'
+# Default (off): no reminder, the level is recorded as off.
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+FIXTURE_EXIT=1 rtk_run cave-off pytest
+if grep -Fq 'Caveman' "$_WX_TEST_ROOT/rtk-cave-off.stderr"; then fail 'the reminder was printed with Caveman off'; fi
+rtk_last | jq -e '.caveman_mode == "off"' >/dev/null || fail 'Caveman off was not recorded'
+# A blocked mode ignores the request, so no reminder is needed there.
+export AICONTEXT_CAVEMAN_REQUEST=lite
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" debug >/dev/null 2>&1
+unset AICONTEXT_CAVEMAN_REQUEST
+FIXTURE_EXIT=1 rtk_run cave-debug pytest
+if grep -Fq 'Caveman' "$_WX_TEST_ROOT/rtk-cave-debug.stderr"; then fail 'the reminder was printed in debug (Caveman is blocked there)'; fi
+rtk_last | jq -e '.caveman_mode == "off"' >/dev/null || fail 'debug should record Caveman off'
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+
 # 5. Token Controller never runs "rtk init" (or anything except --version and pipe -f <mapped filter>).
 if grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | grep -q .; then
   fail "unexpected RTK call: $(grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | head -3)"

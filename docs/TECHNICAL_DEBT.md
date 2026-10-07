@@ -22,9 +22,8 @@ How to keep it:
 | D-07 | Debt | Medium | RTK | Evidence guard is a heuristic. It was widened (`warn:`, `fatal:`, upper-case `WARN`/`ERROR`/`FATAL`) after tests showed gaps, but it is still tuned with a fake RTK and one real-RTK check, not with real runs of each tool. Real RTK 0.42.4 drops `warning:` lines from pytest-like output, so the guard falls back to raw. Coverage is six filters (no `python -m pytest`, `npx`, `npm test`, `dotnet test`, `log`). | Open | RTK hardening (this file) |
 | D-08 | Risk | Medium | RTK | An RTK global hook rewrites commands and skips `wx` capture. Doctor now warns about the hook or instructions that `rtk init` writes for Claude, Copilot, Gemini, Cursor, Codex, OpenCode, Pi, Hermes, `.windsurfrules`, and `.clinerules`. Hooks still bypass `wx`, per-command detection is impossible, and Kilo Code, Antigravity, and other project layouts were not probed. | Open | RTK hardening (this file) |
 | D-09 | Risk | Low | RTK | Side effects of `rtk --version` and `rtk pipe` (tracking, telemetry) were checked once, in one scratch `HOME`. `rtk init` was seen to write `~/.config/rtk/filters.toml` and `~/.local/share/rtk/.hook_warn_last`. Project-local `.rtk/filters.toml` may override built-in filters (one probe saw no effect on `rtk pipe -f`). | Open | RTK hardening (this file) |
-| D-10 | Not implemented | Medium | Caveman | Prompt guards are not implemented. Caveman rules for first-failure evidence are policy text. Only `debug` is blocked in code, so failing `test` and `cicd` runs rely on the template. | Open | Caveman policy state |
+| D-10 | Not implemented | Medium | Caveman | Prompt guards are not applied (the phrases are stored only). Failure evidence is partly mechanical: `debug` and the other blocked modes cannot have Caveman on, failing `wx` output is always raw, `wx` records the Caveman level and prints a reminder on a failed run when Caveman is on, and doctor warns when Caveman is active after a failed run. Whether the agent obeys is policy only. The plugin's own state cannot be changed by Token Controller. | Open | Caveman safety (this file) |
 | D-11 | Not implemented | Medium | Caveman | Shrink and proxy are not implemented (`caveman_shrink` has no effect). Upstream questions are open: state file format, session-start hook, `caveman-compress` vs the managed block, gateway data flow. | Open | `docs/integrations/CAVEMAN.md` |
-| D-12 | Risk | Low | Caveman | `AICONTEXT_CAVEMAN_REQUEST` exported in a shell profile opts in on every activation. Doctor does not check it. | Open | Caveman policy state |
 | D-13 | Risk | Medium | Stale terminals | Already-open terminals keep old `AICONTEXT_*` variables. `wx` and `report` are protected. A person, script, or agent that reads the variables directly can see the wrong profile. The extension cannot inspect terminals. | Mitigated | Stale terminal safety |
 | D-14 | Debt | Medium | `workflow.sh` | `workflow setup` writes the same instruction to several user-level files without a conflict check. | Open | Foundation debt status |
 | D-15 | Debt | Low | `workflow.sh` | `workflow.sh` runs `mkdir -p ~/.config/ai-workflow` before any command, so `doctor`, `status`, and `help` are not read-only through it. Documented, not fixed. | Open | Workflow --doctor |
@@ -37,8 +36,8 @@ How to keep it:
 | D-22 | Debt | Low | Docs | README does not document `AICONTEXT_USE_SHELL_STATE`, `AICONTEXT_CAVEMAN_REQUEST`, `AICONTEXT_RTK_BIN`, `AICONTEXT_RTK_TIMEOUT`. README is long (475 lines). | Open | Debt review (this file) |
 | D-23 | Contradiction | Low | Docs | `docs/MODE_SWITCHER_AND_ORCHESTRATOR_PLAN.md` "Documents to revise" table and work packages are out of date. | Open | Debt review (this file) |
 | D-24 | Debt | Low | Doctor | MCP config checks are not implemented. RTK setup detection is a text match on known Claude Code locations. `.caveman-active` format is assumed to be a level name. | Open | Doctor improvements |
-| D-25 | Not implemented | Medium | CLI | No `version` command or schema compatibility rule. No `set --json` or `report --json`. `wx` is not reachable through `workflow-cli.sh`. `status --json` has no `description` or `caveman_shrink`. | Open | Non-sourced entry point |
-| D-26 | Not implemented | Medium | Extension | Report summary, doctor summary, and tool availability are not shown. No Caveman toggle. `caveman_requested` is not shown. | Open | Extension uses the CLI JSON interface |
+| D-25 | Not implemented | Medium | CLI | No `set --json`. `wx` is not reachable through `workflow-cli.sh`. `status --json` has no `description` or `caveman_shrink`. The extension does not call `version --json` yet: it checks only the `schema_version` of each reply. | Open | `workflow report --json` (this file) |
+| D-26 | Not implemented | Medium | Extension | The extension does not show the report summary (the CLI side, `report --json`, now exists), the doctor summary, or tool availability. No Caveman toggle. `caveman_requested` is not shown. | Open | `workflow report --json` (this file) |
 | D-27 | Not implemented | Medium | Windows | No Windows or WSL backend, no environment check (`remoteName`, distro), no Windows CI. The CLI uses GNU tools (`timeout`, `stat -c`, `awk`) and Bash. | Open | Extension alignment design |
 | D-28 | Debt | Medium | Extension | Not tested in a real VS Code or WSL window. `vscode-test` was not run. The status bar, picker, and watcher code has no automated test. Manifest scope, `inspect()`, and `isTrusted` behavior are untested. | Open | Extension configuration and trust hardening |
 | D-29 | Debt | Low | Extension | The tracked `.vsix` is 1.1.0 and does not contain the fixes. Version and CHANGELOG are "Unreleased". | Open | Extension uses the CLI JSON interface |
@@ -46,6 +45,7 @@ How to keep it:
 | D-31 | Debt | Low | Extension | Missing `jq` or an old controller shows "unavailable" with no install help. `stale_shell` describes the VS Code environment, not a terminal. | Open | Extension uses the CLI JSON interface |
 | D-32 | Not implemented | Low | Research | Research candidates are not evaluated: ccusage, Aider repo map, token-optimizer, token-savior. | Open | Plan, "External tools" |
 | D-33 | Debt | Low | Config | The flags `raw_on_fail`, `keep_raw_logs`, `preserve_*`, `target_files_full`, and `compress_files` are exported but read by nothing. `wx` hard-wires the safe behavior, so setting them to `false` has no effect. Keeping target files full is policy only. | Open | Profile/state manager review in `VALIDATION_MATRIX.md` (F2) |
+| D-35 | Debt | Low | CI | `cli-ci.yml` has not run on GitHub yet. It was run locally in a CI-like environment (empty `HOME`, no optional tool on the `PATH`, `mawk`, `jq` 1.7), and all four commands passed. It runs on Ubuntu only. A real RTK is used only if present, so the real-tool path is not covered in CI. | Open | CLI CI (this file) |
 
 ## Remaining contradictions (fixing these changes code or behavior, so I left them)
 
@@ -459,3 +459,84 @@ Fixed or improved:
 * **Tests:** RTK not found by name or without the execute bit, a command without a filter is not labelled and RTK is not called, a pass-through is not labelled, nine evidence formats dropped or kept by RTK, RTK stderr never in the visible output after success or any of four fallbacks, 15 doctor artifacts and no false warnings.
 
 Still open (RTK): D-07, D-08, D-09 as revised in the table. Real-tool fixtures for each of the six filters are still missing, and `docs/VALIDATION_MATRIX.md` has no RTK entry (D-06).
+
+## Caveman safety (2026-10-07)
+
+Confirmed (no change needed):
+* Supported levels are `off`, `lite`, `full`. `ultra` and `wenyan` stay unsupported. Caveman is off by default in every mode (a new test checks the config: defaults and every mode `off`, only `cicd`, `code`, `rapid-prototype`, and `test-full` have a limit, no `ultra` or `wenyan` as a value). Hard-blocked in code and config: `raw`, `security`, `db`, `release`, `migration`, `docs`, `debug` (plus `micro`, `snippet`, `off`).
+
+Fixed:
+* **D-12 closed:** doctor warns when `AICONTEXT_CAVEMAN_REQUEST` stands in the environment, in a shell startup file, or in a VS Code settings file (`caveman.request_standing`, with file and line). Tests cover the environment, six startup files, comments and aliases (not reported), a settings file, and an unsupported value. Limit: a variable that is set but not exported in the current shell cannot be seen.
+* **Doctor:** `caveman.active_after_failure` warns when Caveman is active and the latest `wx` run in the project failed. Doctor already checked `.caveman-active`, unsupported active levels (`ultra`, `wenyan*`), and active Caveman in blocked modes.
+* **Failure evidence (D-10, partly):** `wx` records `caveman_mode` in `session.jsonl` and prints a one-line reminder on stderr after a failed run when Caveman is `lite` or `full`. Nothing is printed when Caveman is off, so default `wx` output and the benchmark are unchanged. Tests check the reminder after a failure, no reminder after a success, with Caveman off, and in `debug` (where a request is ignored).
+
+Still open:
+* **D-10:** prompt guards are not applied. Agent compliance with the reminder, the template rule, and "stop caveman" is policy only. Token Controller cannot write or clear the plugin's `.caveman-active`. Commands outside `wx` get no reminder.
+* **D-11:** shrink and proxy are not implemented. The upstream questions in `docs/integrations/CAVEMAN.md` are still open. No design until they are answered.
+
+## CLI version and schema basics (2026-10-07)
+
+Fixed (part of D-25):
+* **`workflow version` and `workflow version --json`** (also `--version`, `-V`, and `scripts/workflow-cli.sh version`). Unknown option returns 2. Text prints the CLI version, the schema numbers, and the git commit and branch when the controller folder is a git checkout.
+* **JSON fields** (`schema_version` 1 for this output): `cli_version`, `config_schema_version` (read from the settings file in use, `null` if missing or not a number), `status_schema_version`, `modes_schema_version`, `doctor_schema_version`, `session_schema_version`, `git_commit` (12 characters), `git_branch`. The git fields are `null` outside a git checkout or when git does not answer. They come from `git rev-parse` and `git branch --show-current` only, with a 3 second limit. A `GIT_DIR` or `GIT_WORK_TREE` in the caller's environment is ignored.
+* **One place for the numbers:** `scripts/lib/versions.sh` holds `AIW_CLI_VERSION` (`0.1.0`, changed by hand) and the schema numbers. `status --json`, `modes --json`, `doctor --json`, `version --json`, and the `session.jsonl` records now take their `schema_version` from it. Tests check that each number in `version --json` equals the number the matching output really carries, so they cannot drift.
+* **Compatibility rule** (written in `versions.sh`, summarized in the README): adding a field does not change the schema number, and a consumer ignores unknown fields. Renaming or removing a field, or changing its type or meaning, bumps that number. A consumer checks the number it needs and refuses any other. `cli_version` is not used to decide compatibility.
+* No package or release automation was added.
+
+Still open (D-25, smaller):
+* `set --json` and `report --json` do not exist. `wx` is not reachable through `workflow-cli.sh`. `status --json` lacks `description` and `caveman_shrink`.
+* The extension does not call `version --json`. It accepts only `schema_version` 1 of each reply and shows "unavailable" for anything else. A minimum `cli_version` or per-output check is not defined.
+* `AIW_CLI_VERSION` is bumped by hand and has no release process. There is no changelog for the CLI.
+* The settings file schema (`config_schema_version` 2) has no migration or rejection logic. A different number is only reported.
+
+## `workflow report --json` (2026-10-07)
+
+Fixed (part of D-25, and the CLI side of D-26): `workflow report --json` and `scripts/workflow-cli.sh report --json [--project <dir>]`. The text report is unchanged (a test compares its numbers with the JSON). Unknown option and a missing `--project` directory return 2. A broken session file returns 1 with the error on stderr and nothing on stdout. `report` reads the session file and never writes.
+
+Schema (`schema_version` 1, version number in `scripts/lib/versions.sh` as `AIW_REPORT_SCHEMA_VERSION`, also shown by `version --json` as `report_schema_version`). **All numbers are byte counts from `.ai-context/session.jsonl`. They are not token counts, and `byte_reduction_percent` is not a token saving.**
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | 1 |
+| `available` | `true` when the session file has records, `false` when there is no session (then the counts are 0) |
+| `profile` | Active profile from the mode file or the shell, `null` if none |
+| `command_count` | Number of wrapped commands |
+| `failure_count` | Commands with a nonzero exit code |
+| `raw_stdout_bytes_total`, `raw_stderr_bytes_total` | Captured raw bytes |
+| `visible_stdout_bytes_total`, `visible_stderr_bytes_total` | Bytes `wx` showed (not counting the raw-log pointer line) |
+| `raw_bytes_total`, `visible_bytes_total` | The sums of the two lines above |
+| `byte_reduction_percent` | `(raw - visible) / raw * 100`, rounded to 2 decimals. `null` when `raw_bytes_total` is 0. Can be negative |
+| `session_file` | Absolute path of `session.jsonl` |
+| `raw_log_dir` | Absolute path of the raw log directory (`AICONTEXT_RAW_LOG_DIR` or the default) |
+| `last_run_at` | `completed_at` of the last record (else `started_at`), `null` if the record has neither |
+
+Notes:
+* `--project <dir>` selects the project. Without it the current directory is used. The extension should pass the workspace folder.
+* Old records without `raw` or `visible` fields use `stdout.bytes` and `stderr.bytes`, as the text report does.
+* The text report prints `0.00%` when raw bytes are 0. The JSON uses `null`, because "no data" is not "no reduction".
+* Tests: no session, one command, mixed success and failure with a compressed run (totals, percent, and last run time are checked against a separate sum of the records), old records, a broken file, zero raw bytes, options, the sourced form, the CLI form, and that `report` does not create or change files.
+
+Still open:
+* The extension does not call `report --json` or watch `session.jsonl` yet (D-26).
+* `report` is per project folder. Multi-root workspaces need one call per folder.
+* No per-command list, no per-profile split, and no compressor totals (for example how many runs used RTK). Add fields only with the rule in `scripts/lib/versions.sh`.
+* `last_run_at` is the last record in file order, not the latest time.
+
+## CLI CI (2026-10-07)
+
+Added `.github/workflows/cli-ci.yml` (name "CLI CI"). It runs on pull requests to `main` and on pushes to `main`, with no path filter, on `ubuntu-24.04` with a 25 minute limit. It has read-only permissions and cancels an older run of the same ref.
+
+Steps:
+* Show tool versions, and list which optional tools are on the runner (information only).
+* Check that `scripts/workflow-cli.sh` and `tests/fixtures/bin/*` are executable. The tests run them directly, and a lost execute bit would otherwise fail in a confusing way.
+* `bash -n` on `scripts/workflow.sh`, `scripts/workflow-cli.sh`, every `scripts/lib/*.sh`, every script under `scripts`, and the test and benchmark scripts.
+* `jq . config/workflow_settings.json >/dev/null`.
+* `bash tests/wx-wrapper.test.sh`, `bash tests/workflow-session.test.sh`, `bash tests/doctor.test.sh` (not on your list, added because it needs no tool), and `bash benchmarks/run-benchmark.sh` (exits 1 if failure, security, or database evidence is not preserved).
+
+Not installed or required: RTK, LeanCTX, Headroom, Caveman, ccusage, Node. The RTK tests use the fake `tests/fixtures/bin/rtk` and the noisy command fixtures. The real-RTK check in `tests/wx-wrapper.test.sh` runs only if a real `rtk` is on the `PATH` (it prints a note otherwise).
+
+Closes no debt ID. It adds a safety net for D-07, D-10, D-13, D-14, and D-25 (their behavior is covered by these tests), but none of those items is fixed by it. The extension build stays in `vscode-extension-ci.yml`.
+
+Checked locally before the first run on GitHub: all four commands pass in a CI-like environment (`env -i` with an empty `HOME`, none of RTK, LeanCTX, Headroom, Caveman, ccusage on the `PATH`, `mawk` as `awk`, and system `jq` 1.7 as on the runner image). The tests also passed with `gawk` and `jq` 1.8.2, and with a real RTK present.
+
+Still open: D-35, and `git diff --check` is not part of CI (it is a local step).

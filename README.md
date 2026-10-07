@@ -397,12 +397,20 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 | `workflow status` | Show the active mode and policy (`--json` for tools)     |
 | `workflow doctor` | Read-only check of settings, instruction files, and tools (`--json` available) |
 | `wx <command>`    | Capture, preserve, optionally compress, and measure output |
-| `workflow report` | Summarize command, byte, reduction, and failure counts   |
+| `workflow report` | Summarize command, byte, reduction, and failure counts (`--json` for tools, `--project <dir>`) |
 | `workflow reset-session` | Archive session metadata without deleting raw logs |
 | `workflow off`    | Select the off policy                                      |
 | `workflow help`   | List available commands and modes                        |
 | `workflow modes`  | List modes and aliases from the settings file (`--json` for tools) |
+| `workflow version` | Show the CLI version and the JSON schema numbers (`--json` for tools; also `--version`) |
 | `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes `active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
+
+JSON output compatibility (the rule is written in `scripts/lib/versions.sh`):
+
+* Each JSON output has its own `schema_version`. `workflow version --json` lists all of them.
+* Adding a field does not change the number. A consumer must ignore fields it does not know.
+* Renaming or removing a field, or changing its type or meaning, bumps that number. A consumer checks the number it needs and refuses any other.
+* `cli_version` is for people and logs. It is changed by hand and is not used to decide compatibility.
 
 ## Repository layout
 
@@ -438,6 +446,7 @@ token-controller/
 │   └── lib/
 │       ├── wx.sh
 │       ├── wx-compress.sh
+│       ├── versions.sh            # CLI version and JSON schema numbers
 │       └── wx-session.sh
 ├── templates/
 │   └── AGENTS_base.md             # block added by workflow init
@@ -457,6 +466,8 @@ bash tests/workflow-session.test.sh
 bash tests/doctor.test.sh
 bash benchmarks/run-benchmark.sh
 ```
+
+GitHub Actions runs the Bash checks, the three test files, and the benchmark on pull requests to `main` and on pushes to `main` (`.github/workflows/cli-ci.yml`). It installs no optional tool. The tests use the fake tools in `tests/fixtures`.
 
 Validate the optional Claude Code example separately:
 

@@ -12,6 +12,8 @@ export LC_ALL=C
 
 _DOCTOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CONTROLLER_ROOT="$(cd "$_DOCTOR_DIR/.." && pwd)"
+# shellcheck source=lib/versions.sh
+source "$_DOCTOR_DIR/lib/versions.sh"
 _SETTINGS_FILE="${AICONTEXT_SETTINGS_FILE:-$_CONTROLLER_ROOT/config/workflow_settings.json}"
 _CONFIG_DIR="${AICONTEXT_CONFIG_DIR:-$HOME/.config/ai-workflow}"
 _ACTIVE_ENV_FILE="$_CONFIG_DIR/active_mode.env"
@@ -461,6 +463,45 @@ if [ -f "$_ACTIVE_ENV_FILE" ] && [ -n "$_TC_CAVE_MAX" ]; then
   add Caveman ok caveman.policy "Token Controller Caveman policy: level $_TC_CAVE_MODE, requested ${_TC_CAVE_REQ:-off}, limit $_TC_CAVE_MAX (mode '${_PROFILE:-none}'). Off by default." "$(pl "$_ACTIVE_ENV_FILE" "")"
 fi
 
+# AICONTEXT_CAVEMAN_REQUEST is meant for one activation. When it stands in the environment, in a shell
+# startup file, or in a VS Code settings file, every activation opts in. Text and environment check only.
+_REQ_NOTES=()
+_REQ_PATHS=()
+if [ -n "${AICONTEXT_CAVEMAN_REQUEST:-}" ]; then
+  _req_val="$(printf '%s' "$AICONTEXT_CAVEMAN_REQUEST" | tr 'A-Z' 'a-z' | tr -cd 'a-z' | cut -c1-12)"
+  _REQ_NOTES+=("the environment of this process (value '${_req_val:-invalid}')")
+fi
+for _f in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$HOME/.bash_aliases" "$HOME/.zshrc" "$HOME/.zprofile" "${_VSCODE_FOUND[@]}"; do
+  [ -f "$_f" ] || continue
+  # Shell files: a line that sets it, not a comment. Settings files: any mention.
+  case "$_f" in
+    *.json) _rl="$(grep -n 'AICONTEXT_CAVEMAN_REQUEST' "$_f" 2>/dev/null | head -n 1 | cut -d: -f1)" ;;
+    *) _rl="$(grep -nE '^[[:space:]]*(export[[:space:]]+)?AICONTEXT_CAVEMAN_REQUEST=' "$_f" 2>/dev/null | head -n 1 | cut -d: -f1)" ;;
+  esac
+  [ -n "$_rl" ] && _REQ_PATHS+=("$(pl "$_f" "$_rl")")
+done
+if [ "${#_REQ_NOTES[@]}" -gt 0 ] || [ "${#_REQ_PATHS[@]}" -gt 0 ]; then
+  _req_where="${_REQ_NOTES[*]:-}"
+  [ "${#_REQ_PATHS[@]}" -gt 0 ] && _req_where="${_req_where:+$_req_where, and }a startup or settings file"
+  add Caveman warn caveman.request_standing "AICONTEXT_CAVEMAN_REQUEST is set in $_req_where. Every activation opts in to Caveman, not one." "$(printf '%s\n' "${_REQ_PATHS[@]:-}")" "Remove it, and opt in per activation: AICONTEXT_CAVEMAN_REQUEST=lite workflow <mode>. Unsupported values (ultra, wenyan) become off."
+fi
+
+# Caveman is on and the latest wx run in this project failed. Failure evidence must not be shortened.
+_SESSION_FILE="$_PROJECT/.ai-context/session.jsonl"
+if [ -f "$_CAVE_STATE" ] && [ -f "$_SESSION_FILE" ] && command -v jq >/dev/null 2>&1; then
+  _cave_now="$(head -c 64 "$_CAVE_STATE" 2>/dev/null | tr -d '\r\n\t ' | tr 'A-Z' 'a-z')"
+  _last_exit="$(tail -n 1 "$_SESSION_FILE" 2>/dev/null | jq -r '.exit_code // empty' 2>/dev/null)"
+  case "$_cave_now" in
+    ''|off|none|false|0) ;;
+    *)
+      case "$_last_exit" in
+        ''|0|*[!0-9]*) ;;
+        *) add Caveman warn caveman.active_after_failure "Caveman is active and the latest wx run failed (exit $_last_exit). Failure evidence must not be shortened." "$(pl "$_SESSION_FILE" "")" "Say 'stop caveman' while you work on this failure. Quote errors, stack traces, paths, and line numbers exactly." ;;
+      esac
+      ;;
+  esac
+fi
+
 # ---------- side effect note ----------
 # workflow.sh runs mkdir -p on the config directory before it starts any command.
 if [ "${AICONTEXT_DOCTOR_VIA_WORKFLOW:-}" = 1 ]; then
@@ -513,8 +554,9 @@ print_json() {
       --arg shell_match "$_SHELL_MATCH" \
       --arg generated_at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
       --argjson errors "$_ERRORS" --argjson warns "$_WARNS" --argjson infos "$_INFOS" \
+      --argjson schema_version "$AIW_DOCTOR_SCHEMA_VERSION" \
       '{
-        schema_version: 1,
+        schema_version: $schema_version,
         generated_at: $generated_at,
         project: $project,
         environment: {platform: $platform, distro: (if $distro == "" then null else $distro end), shell: "bash", bash_version: $bash_version, home: $home},

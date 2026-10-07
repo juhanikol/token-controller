@@ -60,7 +60,7 @@ Non-sourced entry point: `scripts/workflow-cli.sh` (**implemented**). It runs `w
 | `status --json` | Profile, risk, tool modes, `source`, `stale_shell` from the env file (not the caller's shell). `profile: null` if none | **implemented** as `workflow status --json` with flat field names (`rtk_mode`, not `tools.rtk`). Schema: `docs/TECHNICAL_DEBT.md`. Not yet behind a non-sourced entry point |
 | `set <mode> --json` | Switch without sourcing. Returns the new status. Errors: `{error:{code,message}}` | new. Reuses the existing activation code |
 | `doctor --json --project <dir>` | Tools, warnings, environment | exists |
-| `report --json --project <dir>` | Commands, raw and visible bytes, reduction %, failures, last run time, or `{available:false}` | new. The text version exists but reads only the current directory |
+| `report --json --project <dir>` | Commands, raw and visible bytes, reduction %, failures, last run time, or `available: false` | **implemented** (`workflow report --json [--project <dir>]`). Field names in `docs/TECHNICAL_DEBT.md`. All numbers are byte counts |
 
 Examples:
 
@@ -133,7 +133,7 @@ git diff --check
 
 ## Later
 
-- **Report in the tooltip (phase 2):** needs `report --json`, `--project`, and the `session.jsonl` watcher.
+- **Report in the tooltip (phase 2):** the CLI side exists (`report --json --project`). The extension still needs the call, the display, and a `session.jsonl` watcher.
 - **Windows:** `WslBackend` or a native backend. A Windows CI job.
 - **Bundling the CLI in the VSIX:** removes the dependency on the repository path. It also makes the extension ship the controller. This is a release decision.
 - **Doctor webview and quick fixes:** needs a separate `--fix` design. Doctor is read-only until then.

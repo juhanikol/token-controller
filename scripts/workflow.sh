@@ -2,7 +2,7 @@
 # Path: scripts/workflow.sh
 # Usage: source scripts/workflow.sh <mode>
 # Modes (defined in config/workflow_settings.json): raw scope architect decisions code rapid-prototype snippet micro agent test test-full debug data-analysis docs cicd review security migration db perf release off
-# Commands: init setup status report doctor reset-session
+# Commands: init setup status modes version report doctor reset-session
 # Backward-compatible aliases: plan=architect, ci=cicd
 
 # This script is intended to be sourced, because it exports variables to the current shell.
@@ -13,6 +13,8 @@ _AI_WORKFLOW_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_AI_WORKFLOW_SCRIPT_DIR/lib/wx.sh"
 # shellcheck source=lib/wx-session.sh
 source "$_AI_WORKFLOW_SCRIPT_DIR/lib/wx-session.sh"
+# shellcheck source=lib/versions.sh
+source "$_AI_WORKFLOW_SCRIPT_DIR/lib/versions.sh"
 unset _AI_WORKFLOW_SCRIPT_DIR
 
 _ai_workflow_main() {
@@ -63,9 +65,10 @@ Modes:
   off          Disable all optimizers.
   status       Show current profile. Option: --json (reads the active mode file)
   modes        List modes and aliases from the settings file. Option: --json
+  version      Show the CLI version and the JSON schema numbers. Option: --json
   doctor       Read-only check of settings, instruction files, and tools. Option: --json
                It can create an empty ~/.config/ai-workflow when run through workflow.sh.
-  report       Summarize the current project's wx session.
+  report       Summarize the current project's wx session. Options: --json, --project <dir>
   reset-session Archive the current wx session and start a new one.
 
 Environment:
@@ -162,6 +165,7 @@ USAGE
       fi
 
       jq -n \
+        --argjson schema_version "$AIW_STATUS_SCHEMA_VERSION" \
         --arg source "$_SOURCE" \
         --arg env_file "$_ACTIVE_ENV_FILE" \
         --arg shell_profile "$_SHELL_PROFILE" \
@@ -185,7 +189,7 @@ USAGE
         def b: if . == "true" then true elif . == "false" then false else null end;
         ($profile | s) as $p
         | {
-            schema_version: 1,
+            schema_version: $schema_version,
             profile: $p,
             risk: ($risk | s),
             output_style: ($output_style | s),
@@ -220,14 +224,14 @@ USAGE
       return 1
     fi
 
-    jq '
+    jq --argjson schema_version "$AIW_MODES_SCHEMA_VERSION" '
       def rank: if . == "off" then 0 elif . == "lite" then 1 elif . == "full" then 2 else null end;
       def level($v): if ($v | rank) == null then "off" else $v end;
       (.defaults // {}) as $d
       | (.caveman_policy.hard_blocked_profiles // []) as $config_blocked
       | ["raw", "security", "db", "release", "migration", "docs", "debug", "micro", "snippet", "off"] as $blocked
       | {
-          schema_version: 1,
+          schema_version: $schema_version,
           modes: [
             .modes | to_entries[] | .key as $name | .value as $m
             | level($m.caveman_mode // $d.caveman_mode // "off") as $requested
@@ -268,10 +272,100 @@ USAGE
     return 0
   }
 
+  # Version and schema numbers. The numbers come from lib/versions.sh. The config schema is read from the
+  # settings file. The git fields are filled only when the controller folder is a git checkout and git answers.
+  version_values() {
+    _V_CONFIG_SCHEMA=""
+    _V_GIT_COMMIT=""
+    _V_GIT_BRANCH=""
+    local _VALUE
+
+    if command -v jq >/dev/null 2>&1 && [ -r "$_SETTINGS_FILE" ]; then
+      _VALUE="$(jq -r '.schema_version // empty | tostring' "$_SETTINGS_FILE" 2>/dev/null)"
+      case "$_VALUE" in
+        ''|*[!0-9]*) ;;
+        *) _V_CONFIG_SCHEMA="$_VALUE" ;;
+      esac
+    fi
+
+    if command -v git >/dev/null 2>&1 && [ -e "$_PROJECT_ROOT/.git" ]; then
+      # git rev-parse and git branch only read refs. GIT_DIR and GIT_WORK_TREE from the caller are ignored.
+      local -a _GIT=(env -u GIT_DIR -u GIT_WORK_TREE GIT_OPTIONAL_LOCKS=0 git -C "$_PROJECT_ROOT")
+      command -v timeout >/dev/null 2>&1 && _GIT=(timeout 3 "${_GIT[@]}")
+      _VALUE="$("${_GIT[@]}" rev-parse --short=12 HEAD 2>/dev/null)"
+      case "$_VALUE" in
+        ''|*[!0-9a-f]*) ;;
+        *) _V_GIT_COMMIT="$_VALUE" ;;
+      esac
+      _V_GIT_BRANCH="$("${_GIT[@]}" branch --show-current 2>/dev/null | tr -cd '[:alnum:]._/-' | cut -c1-80)"
+    fi
+  }
+
+  version_json() {
+    need_jq || return 1
+    version_values
+    jq -n \
+      --argjson schema_version "$AIW_VERSION_SCHEMA_VERSION" \
+      --arg cli_version "$AIW_CLI_VERSION" \
+      --argjson config_schema_version "${_V_CONFIG_SCHEMA:-null}" \
+      --argjson status_schema_version "$AIW_STATUS_SCHEMA_VERSION" \
+      --argjson modes_schema_version "$AIW_MODES_SCHEMA_VERSION" \
+      --argjson doctor_schema_version "$AIW_DOCTOR_SCHEMA_VERSION" \
+      --argjson report_schema_version "$AIW_REPORT_SCHEMA_VERSION" \
+      --argjson session_schema_version "$AIW_SESSION_SCHEMA_VERSION" \
+      --arg git_commit "$_V_GIT_COMMIT" \
+      --arg git_branch "$_V_GIT_BRANCH" \
+      '{
+        schema_version: $schema_version,
+        cli_version: $cli_version,
+        config_schema_version: $config_schema_version,
+        status_schema_version: $status_schema_version,
+        modes_schema_version: $modes_schema_version,
+        doctor_schema_version: $doctor_schema_version,
+        report_schema_version: $report_schema_version,
+        session_schema_version: $session_schema_version,
+        git_commit: (if $git_commit == "" then null else $git_commit end),
+        git_branch: (if $git_branch == "" then null else $git_branch end)
+      }'
+  }
+
+  version_text() {
+    version_values
+    printf 'Token Controller CLI %s\n' "$AIW_CLI_VERSION"
+    printf '  config schema:   %s\n' "${_V_CONFIG_SCHEMA:-unknown}"
+    printf '  status schema:   %s\n' "$AIW_STATUS_SCHEMA_VERSION"
+    printf '  modes schema:    %s\n' "$AIW_MODES_SCHEMA_VERSION"
+    printf '  doctor schema:   %s\n' "$AIW_DOCTOR_SCHEMA_VERSION"
+    printf '  report schema:   %s\n' "$AIW_REPORT_SCHEMA_VERSION"
+    printf '  session schema:  %s\n' "$AIW_SESSION_SCHEMA_VERSION"
+    printf '  version schema:  %s\n' "$AIW_VERSION_SCHEMA_VERSION"
+    if [ -n "$_V_GIT_COMMIT" ]; then
+      printf '  git:             %s%s\n' "$_V_GIT_COMMIT" "${_V_GIT_BRANCH:+ ($_V_GIT_BRANCH)}"
+    fi
+    return 0
+  }
+
   case "$_MODE" in
     -h|--help|help)
       usage
       return 0
+      ;;
+    version|--version|-V)
+      [ "$#" -gt 0 ] && shift
+      case "${1:-}" in
+        --json)
+          version_json
+          return $?
+          ;;
+        ""|--text)
+          version_text
+          return $?
+          ;;
+        *)
+          echo "Error: unknown version option: $1. Use: workflow version [--json]" >&2
+          return 2
+          ;;
+      esac
       ;;
     modes)
       [ "$#" -gt 0 ] && shift
@@ -315,7 +409,8 @@ USAGE
       ;;
     report)
       need_jq || return 1
-      workflow_report "$_ACTIVE_ENV_FILE"
+      [ "$#" -gt 0 ] && shift
+      workflow_report "$_ACTIVE_ENV_FILE" "$@"
       return $?
       ;;
     reset-session)

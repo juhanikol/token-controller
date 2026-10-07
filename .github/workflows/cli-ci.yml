@@ -1,0 +1,69 @@
+name: CLI CI
+
+# Bash CLI checks and tests. No optional tool (RTK, LeanCTX, Headroom, Caveman, ccusage) is installed or needed.
+# The tests use fake tools from tests/fixtures. If a real RTK happens to be on the runner, one test also uses it.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli:
+    # Pinned, so a new "latest" image does not change the tools under the tests.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show tool versions
+        run: |
+          bash --version | head -n 1
+          jq --version
+          git --version
+          awk -W version 2>&1 | head -n 1 || true
+          for tool in rtk lean-ctx headroom caveman ccusage; do
+            if command -v "$tool" >/dev/null 2>&1; then echo "found: $tool"; else echo "not installed (not needed): $tool"; fi
+          done
+
+      - name: Check executable bits
+        # The tests run these files directly. Git must keep the execute bit.
+        run: |
+          missing=0
+          for f in scripts/workflow-cli.sh tests/fixtures/bin/*; do
+            if [ ! -x "$f" ]; then echo "not executable: $f"; missing=1; fi
+          done
+          exit "$missing"
+
+      - name: Bash syntax
+        run: |
+          bash -n scripts/workflow.sh
+          bash -n scripts/workflow-cli.sh
+          for f in scripts/lib/*.sh; do bash -n "$f"; done
+          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+          for f in tests/*.sh benchmarks/*.sh; do bash -n "$f"; done
+
+      - name: Config is valid JSON
+        run: jq . config/workflow_settings.json >/dev/null
+
+      - name: wx wrapper tests
+        run: bash tests/wx-wrapper.test.sh
+
+      - name: Workflow session, status, modes, version, and report tests
+        run: bash tests/workflow-session.test.sh
+
+      - name: Doctor tests
+        run: bash tests/doctor.test.sh
+
+      - name: Benchmark
+        # Exits 1 if failure, security, or database evidence is not preserved.
+        run: bash benchmarks/run-benchmark.sh

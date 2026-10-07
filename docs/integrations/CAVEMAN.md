@@ -213,7 +213,9 @@ AICONTEXT_CAVEMAN_REQUEST=lite scripts/workflow-cli.sh code
 - Blocked modes ignore it. A notice says why (`ignored. Mode 'security' does not allow Caveman`, or `lowered to 'lite'`). Activation still succeeds.
 - Exported state (all in `active_mode.env`): `AICONTEXT_CAVEMAN_REQUESTED` (validated request), `AICONTEXT_CAVEMAN_MODE` (effective), `AICONTEXT_CAVEMAN_MAX` (cap), `AICONTEXT_CAVEMAN_SHRINK`, and the derived `AICONTEXT_CAVEMAN_OUTPUT`. `status --json` shows `caveman_requested`, `caveman_mode`, `caveman_max`, `caveman_output`. `modes --json` shows the config policy (no request).
 
-**Hard-blocked** (code and config): `raw`, `security`, `db`, `release`, `migration`, `docs`, `debug`. No-Caveman by code too: `micro`, `snippet`, `off`. Config can add profiles (`caveman_policy.hard_blocked_profiles`) but cannot remove these. `debug` is the first-failure evidence mode. A failing `test`, `test-full`, or `cicd` run is covered by the template rule, which is policy text only.
+**Hard-blocked** (code and config): `raw`, `security`, `db`, `release`, `migration`, `docs`, `debug`. No-Caveman by code too: `micro`, `snippet`, `off`. Config can add profiles (`caveman_policy.hard_blocked_profiles`) but cannot remove these. `debug` is the first-failure evidence mode. For a failing run in a mode that allows Caveman (`code`, `cicd`, `test-full`, `rapid-prototype`), see "Failure evidence" below.
+
+**Doctor** also warns when `AICONTEXT_CAVEMAN_REQUEST` stands in the environment of the doctor process, in a shell startup file (`~/.bashrc`, `~/.bash_profile`, `~/.profile`, `~/.bash_aliases`, `~/.zshrc`, `~/.zprofile`), or in a VS Code settings file (`caveman.request_standing`, a `warn`, with file and line). A comment or a per-command use in an alias is not reported. A variable that is set but not exported in the current shell cannot be seen. It also warns when Caveman is active and the latest `wx` run in the project failed (`caveman.active_after_failure`).
 
 **Doctor** reads `${CLAUDE_CONFIG_DIR:-~/.claude}/.caveman-active`:
 - `error`: active in a hard-blocked profile.
@@ -237,3 +239,18 @@ Facts below come from skill files installed on this machine, not from official d
 6. **Shrink, proxy, stats.** Their commands and behavior are not documented in the quickstart. No design until upstream docs are read.
 7. **Auto-clarity.** Does Caveman switch itself off for security warnings or destructive steps by itself? Token Controller does not rely on it.
 8. **Measured savings.** There is no agreed number. A fixed prompt set with output-token counts is still needed.
+
+## Failure evidence (what is enforced and what is not)
+
+Caveman changes how an agent writes. Token Controller cannot change that. These parts are mechanical:
+- `debug` and the other hard-blocked modes cannot have Caveman on in `active_mode.env` (code and config).
+- `wx` never changes failing output: a nonzero exit always shows the complete raw stdout and stderr.
+- `wx` records the Caveman level of every run in `session.jsonl` (`caveman_mode`).
+- When Caveman is `lite` or `full` and a run fails, `wx` prints one line on stderr next to the failure output: `[wx] Caveman is <level> and this run failed (exit N). Quote the error, stack trace, paths, and line numbers exactly. Do not shorten them.` With Caveman off (the default) nothing is printed, so default output is unchanged.
+- Doctor warns when Caveman is active (the plugin's own state file) and the latest `wx` run failed.
+
+These parts are **policy only**:
+- Whether the agent follows the reminder, the template rule, or "stop caveman".
+- The plugin's own state (`.caveman-active`). Token Controller never writes it, so it cannot turn Caveman off.
+- Failures of commands that do not run through `wx`.
+- Prompt guards (the phrases in `caveman_policy.prompt_guards`) are stored, not applied.

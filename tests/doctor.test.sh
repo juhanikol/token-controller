@@ -173,6 +173,53 @@ cave security full >/dev/null; bash "$_DOCTOR" --json --project "$_PROJECT" >/de
 [ "$(cat "$_CAVE")" = "full" ] || fail "doctor changed the caveman state file"
 rm -f "$_CAVE"
 
+# 4f. AICONTEXT_CAVEMAN_REQUEST should be set per activation. A standing value in the environment, a shell
+# startup file, or a VS Code settings file is a warn.
+rm -f "$_CAVE"
+req_finding() { bash "$_DOCTOR" --json --project "$_PROJECT" | jq -c '[.findings[] | select(.id == "caveman.request_standing") | {severity, message, paths}]'; }
+[ "$(req_finding)" = "[]" ] || fail "request warning without any request: $(req_finding)"
+[ "$(AICONTEXT_CAVEMAN_REQUEST=lite req_finding | jq -r '.[0].severity')" = "warn" ] || fail "request in the environment must be a warn"
+AICONTEXT_CAVEMAN_REQUEST=lite req_finding | jq -e '.[0].message | contains("environment of this process") and contains("lite")' >/dev/null || fail "environment warning should name the source and the value"
+AICONTEXT_CAVEMAN_REQUEST=ultra req_finding | jq -e '.[0].message | contains("ultra")' >/dev/null || fail "an unsupported value should be named"
+for _RC in .bashrc .bash_profile .profile .bash_aliases .zshrc .zprofile; do
+  printf '# first\nexport AICONTEXT_CAVEMAN_REQUEST=lite\n' > "$HOME/$_RC"
+  req_finding | jq -e --arg p "$HOME/$_RC" '.[0].severity == "warn" and (.[0].paths | any(.path == $p and .line == 2))' >/dev/null || fail "request in $_RC not reported with its line"
+  printf 'AICONTEXT_CAVEMAN_REQUEST=full\n' > "$HOME/$_RC"
+  req_finding | jq -e --arg p "$HOME/$_RC" '.[0].paths | any(.path == $p and .line == 1)' >/dev/null || fail "request without export in $_RC not reported"
+  # A comment, and a per-command use in an alias, are not standing values.
+  printf '# export AICONTEXT_CAVEMAN_REQUEST=lite\nalias wl="AICONTEXT_CAVEMAN_REQUEST=lite workflow"\n' > "$HOME/$_RC"
+  [ "$(req_finding)" = "[]" ] || fail "a comment or an alias in $_RC was reported: $(req_finding)"
+  rm -f "$HOME/$_RC"
+done
+mkdir -p "$XDG_CONFIG_HOME/Code/User"
+printf '{\n  "terminal.integrated.env.linux": {"AICONTEXT_CAVEMAN_REQUEST": "lite"}\n}\n' > "$XDG_CONFIG_HOME/Code/User/settings.json"
+req_finding | jq -e --arg p "$XDG_CONFIG_HOME/Code/User/settings.json" '.[0].severity == "warn" and (.[0].paths | any(.path == $p and .line == 2))' >/dev/null || fail "request in VS Code settings not reported"
+rm -f "$XDG_CONFIG_HOME/Code/User/settings.json"
+[ "$(req_finding)" = "[]" ] || fail "request warning stayed after cleanup"
+bash "$_DOCTOR" --project "$_PROJECT" >/dev/null; [ "$?" -eq 0 ] || fail "the request warning must not change the exit code"
+
+# 4g. Caveman is active and the latest wx run in this project failed.
+mkdir -p "$_PROJECT/.ai-context"
+after_failure() { bash "$_DOCTOR" --json --project "$_PROJECT" | jq -r '[.findings[] | select(.id == "caveman.active_after_failure") | .severity] | join(",")'; }
+printf 'export AICONTEXT_PROFILE="code"\nexport AICONTEXT_CAVEMAN_MODE="lite"\nexport AICONTEXT_CAVEMAN_MAX="lite"\n' > "$AICONTEXT_CONFIG_DIR/active_mode.env"
+printf 'lite\n' > "$_CAVE"
+printf '{"exit_code":0}\n{"exit_code":2}\n' > "$_PROJECT/.ai-context/session.jsonl"
+[ "$(after_failure)" = "warn" ] || fail "Caveman active after a failed wx run must be a warn"
+printf '{"exit_code":2}\n{"exit_code":0}\n' > "$_PROJECT/.ai-context/session.jsonl"
+[ -z "$(after_failure)" ] || fail "only the latest run counts: a later success should clear the warning"
+printf '{"exit_code":2}\n' > "$_PROJECT/.ai-context/session.jsonl"
+printf 'off\n' > "$_CAVE"
+[ -z "$(after_failure)" ] || fail "no warning when Caveman is off"
+rm -f "$_CAVE"
+[ -z "$(after_failure)" ] || fail "no warning when Caveman is not active"
+printf 'lite\n' > "$_CAVE"
+rm -f "$_PROJECT/.ai-context/session.jsonl"
+[ -z "$(after_failure)" ] || fail "no warning without a session file"
+printf 'not json\n' > "$_PROJECT/.ai-context/session.jsonl"
+[ -z "$(after_failure)" ] || fail "an unreadable session file should not warn"
+rm -rf "$_PROJECT/.ai-context" "$_CAVE"
+printf 'export AICONTEXT_PROFILE="code"\n' > "$AICONTEXT_CONFIG_DIR/active_mode.env"
+
 # 4e. Via workflow.sh, doctor says it can create the config directory. Direct run does not.
 AICONTEXT_DOCTOR_VIA_WORKFLOW=1 bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[].id] | index("doctor.config_dir") != null' >/dev/null || fail "missing side effect note via workflow.sh"
 bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[].id] | index("doctor.config_dir") == null' >/dev/null || fail "direct run should not show the note"

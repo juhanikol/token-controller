@@ -9,6 +9,8 @@ if [ -z "${AICONTEXT_SETTINGS_FILE:-}" ]; then
 fi
 # shellcheck source=wx-compress.sh
 source "$_WX_LIB_DIR/wx-compress.sh"
+# shellcheck source=versions.sh
+source "$_WX_LIB_DIR/versions.sh"
 unset _WX_LIB_DIR
 
 # Policy state precedence. wx is the safety layer, so the active mode file wins over shell variables.
@@ -235,6 +237,8 @@ workflow_run() (
       --arg compressor_version "$_WX_COMPRESSOR_VERSION" \
       --arg filter "$_WX_FILTER" \
       --arg fallback_reason "$_WX_FALLBACK_REASON" \
+      --arg caveman_mode "${AICONTEXT_CAVEMAN_MODE:-}" \
+      --argjson schema_version "$AIW_SESSION_SCHEMA_VERSION" \
       --arg policy_source "$_WX_POLICY_SOURCE" \
       --arg stale_shell_profile "$_WX_STALE_SHELL_PROFILE" \
       --argjson stdout_bytes "$_WX_STDOUT_BYTES" \
@@ -243,7 +247,7 @@ workflow_run() (
       --argjson visible_stderr_bytes "$_WX_VISIBLE_STDERR_BYTES" \
       --argjson exit_code "$_WX_EXIT_CODE" \
       '{
-        schema_version: 2,
+        schema_version: $schema_version,
         started_at: $started_at,
         completed_at: $completed_at,
         cwd: $cwd,
@@ -254,6 +258,7 @@ workflow_run() (
         compressor_version: (if $compressor_version == "" then null else $compressor_version end),
         filter: (if $filter == "" then null else $filter end),
         fallback_reason: (if $fallback_reason == "" then null else $fallback_reason end),
+        caveman_mode: (if $caveman_mode == "" then null else $caveman_mode end),
         policy_source: $policy_source,
         stale_shell_profile: (if $stale_shell_profile == "" then null else $stale_shell_profile end),
         stdout: {path: $stdout_path, bytes: $stdout_bytes},
@@ -283,6 +288,15 @@ workflow_run() (
   command cat -- "$_WX_VISIBLE_STDOUT_FILE"
   command cat -- "$_WX_VISIBLE_STDERR_FILE" >&2
   printf '[wx] raw logs: %s\n' "$_WX_RUN_DIR" >&2
+  # Failure evidence is never shortened by Caveman. wx cannot change how an agent writes. When Caveman is
+  # on and a run failed, it puts the rule next to the failure output. Nothing is printed when Caveman is off.
+  if [ "$_WX_EXIT_CODE" -ne 0 ]; then
+    case "${AICONTEXT_CAVEMAN_MODE:-off}" in
+      lite|full)
+        printf '[wx] Caveman is %s and this run failed (exit %s). Quote the error, stack trace, paths, and line numbers exactly. Do not shorten them.\n' "$AICONTEXT_CAVEMAN_MODE" "$_WX_EXIT_CODE" >&2
+        ;;
+    esac
+  fi
 
   return "$_WX_EXIT_CODE"
 )

@@ -327,6 +327,15 @@ for _WX_VALUE in ultra wenyan FULL yes 1 'lite;touch X'; do
   assert_file_contains "$_WX_TEST_ROOT/caveman.err" 'is not supported. Use off, lite, or full'
 done
 [ ! -e X ] || fail 'a request value was executed'
+# Config invariants: Caveman is off by default, only four modes have a limit, and ultra/wenyan appear only as unsupported.
+jq -e '.defaults.caveman_mode == "off" and .defaults.caveman_max == "off" and .defaults.caveman_shrink == "off"' "$_WX_SETTINGS" >/dev/null || fail 'config defaults for Caveman are not off'
+jq -e '[.modes[] | .caveman_mode // "off"] | all(. == "off")' "$_WX_SETTINGS" >/dev/null || fail 'a mode starts with Caveman on'
+jq -e '[.modes[] | .caveman_shrink // "off"] | all(. == "off")' "$_WX_SETTINGS" >/dev/null || fail 'a mode turns shrink on'
+jq -e '[.modes | to_entries[] | select(.value.caveman_max != null) | .key] | sort == ["cicd", "code", "rapid-prototype", "test-full"]' "$_WX_SETTINGS" >/dev/null || fail 'the set of modes with a Caveman limit changed'
+jq -e '[.modes[] | .caveman_max // "off"] | all(IN("off", "lite", "full"))' "$_WX_SETTINGS" >/dev/null || fail 'a Caveman limit is not off, lite, or full'
+jq -e '[del(.caveman_policy.unsupported_levels) | .. | strings | select(test("^(ultra|wenyan)"))] | length == 0' "$_WX_SETTINGS" >/dev/null || fail 'ultra or wenyan appears as a config value'
+jq -e '.caveman_policy.unsupported_levels == ["ultra", "wenyan"] and .caveman_policy.supported_levels == ["lite", "full"]' "$_WX_SETTINGS" >/dev/null || fail 'supported and unsupported Caveman levels changed'
+jq -e '.caveman_policy.hard_blocked_profiles | (index("raw") != null and index("docs") != null and index("security") != null and index("db") != null and index("release") != null and index("migration") != null and index("debug") != null)' "$_WX_SETTINGS" >/dev/null || fail 'config hard_blocked_profiles is incomplete'
 # The request is per activation: the next activation without it goes back to off. The mode file shows it.
 AICONTEXT_CAVEMAN_REQUEST=lite "$_WX_CLI" code >/dev/null 2>&1 || fail 'workflow-cli.sh with a request failed'
 grep -Fq 'export AICONTEXT_CAVEMAN_MODE="lite"' "$AICONTEXT_CONFIG_DIR/active_mode.env" || fail 'the effective level is not in the mode file'
@@ -349,5 +358,149 @@ AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/cave-blocked.json" "$_WX_CLI" modes --js
 jq -e '.caveman_policy.hard_blocked_profiles | (index("debug") != null and index("docs") != null and index("security") != null and index("db") != null and index("release") != null and index("migration") != null)' "$_WX_SETTINGS" >/dev/null || fail 'config hard_blocked_profiles is incomplete'
 "$_WX_CLI" modes --json | jq -e '[.modes[] | select(.name | IN("debug", "docs", "security", "db", "release", "migration")) | .caveman_max] | all(. == "off")' >/dev/null || fail 'modes --json shows a blocked mode with a Caveman limit'
 "$_WX_CLI" code >/dev/null 2>&1
+
+# version and schema numbers. Each number in `version --json` must equal the number the matching output really carries.
+"$_WX_CLI" version --json >"$_WX_TEST_ROOT/version.json" || fail 'version --json failed'
+jq -e '
+  .schema_version == 1
+  and (.cli_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+  and (.config_schema_version | type) == "number"
+  and (.status_schema_version | type) == "number" and (.modes_schema_version | type) == "number"
+  and (.doctor_schema_version | type) == "number" and (.session_schema_version | type) == "number"
+' "$_WX_TEST_ROOT/version.json" >/dev/null || fail 'version --json is invalid'
+[ "$(jq -r '.config_schema_version' "$_WX_TEST_ROOT/version.json")" = "$(jq -r '.schema_version' "$_WX_SETTINGS")" ] || fail 'config_schema_version differs from the settings file'
+[ "$(jq -r '.status_schema_version' "$_WX_TEST_ROOT/version.json")" = "$("$_WX_CLI" status --json | jq -r '.schema_version')" ] || fail 'status_schema_version differs from status --json'
+[ "$(jq -r '.modes_schema_version' "$_WX_TEST_ROOT/version.json")" = "$("$_WX_CLI" modes --json | jq -r '.schema_version')" ] || fail 'modes_schema_version differs from modes --json'
+[ "$(jq -r '.doctor_schema_version' "$_WX_TEST_ROOT/version.json")" = "$("$_WX_CLI" doctor --json --project "$_WX_TEST_ROOT" 2>/dev/null | jq -r '.schema_version')" ] || fail 'doctor_schema_version differs from doctor --json'
+wx echo version-check >/dev/null 2>&1
+[ "$(jq -r '.session_schema_version' "$_WX_TEST_ROOT/version.json")" = "$(jq -s -r '.[-1].schema_version' .ai-context/session.jsonl)" ] || fail 'session_schema_version differs from a session record'
+# Git fields: both set in a git checkout and equal to git, or both null. A caller GIT_DIR does not change them.
+if [ -e "$_WX_REPOSITORY_ROOT/.git" ] && command -v git >/dev/null 2>&1; then
+  [ "$(jq -r '.git_commit' "$_WX_TEST_ROOT/version.json")" = "$(git -C "$_WX_REPOSITORY_ROOT" rev-parse --short=12 HEAD)" ] || fail 'git_commit differs from git'
+  [ "$(GIT_DIR=/nonexistent "$_WX_CLI" version --json | jq -r '.git_commit')" = "$(git -C "$_WX_REPOSITORY_ROOT" rev-parse --short=12 HEAD)" ] || fail 'a caller GIT_DIR changed git_commit'
+else
+  jq -e '.git_commit == null and .git_branch == null' "$_WX_TEST_ROOT/version.json" >/dev/null || fail 'git fields should be null outside a git checkout'
+fi
+# The config schema is read from whatever settings file is used. A missing file gives null, not an error.
+jq '.schema_version = 7' "$_WX_SETTINGS" > "$_WX_TEST_ROOT/schema7.json"
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/schema7.json" "$_WX_CLI" version --json | jq -e '.config_schema_version == 7' >/dev/null || fail 'config_schema_version ignores the settings file'
+AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/no-such-settings.json" "$_WX_CLI" version --json | jq -e '.config_schema_version == null' >/dev/null || fail 'a missing settings file should give a null config schema'
+# Text form, aliases, sourced form, and errors.
+"$_WX_CLI" version >"$_WX_TEST_ROOT/version.txt" || fail 'version (text) failed'
+assert_file_contains "$_WX_TEST_ROOT/version.txt" "Token Controller CLI $(jq -r '.cli_version' "$_WX_TEST_ROOT/version.json")"
+assert_file_contains "$_WX_TEST_ROOT/version.txt" "status schema:   $(jq -r '.status_schema_version' "$_WX_TEST_ROOT/version.json")"
+[ "$("$_WX_CLI" --version | head -n 1)" = "$("$_WX_CLI" version | head -n 1)" ] || fail '--version differs from version'
+[ "$("$_WX_CLI" -V | head -n 1)" = "$("$_WX_CLI" version | head -n 1)" ] || fail '-V differs from version'
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" version --json | jq -e '.schema_version == 1' >/dev/null || fail 'sourced version --json failed'
+"$_WX_CLI" version --bogus >/dev/null 2>&1
+[ "$?" -eq 2 ] || fail 'version --bogus should return 2'
+# The compatibility rule is written next to the numbers.
+grep -q 'Adding a field does not change the schema number' "$_WX_REPOSITORY_ROOT/scripts/lib/versions.sh" || fail 'the compatibility rule is missing from versions.sh'
+grep -q 'Renaming or removing a field' "$_WX_REPOSITORY_ROOT/scripts/lib/versions.sh" || fail 'the rename/remove rule is missing from versions.sh'
+
+# report --json: a stable interface for tools. All numbers are byte counts, not token counts.
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+_WX_REPORT_REQUIRED='["schema_version","available","profile","command_count","failure_count","raw_stdout_bytes_total","raw_stderr_bytes_total","visible_stdout_bytes_total","visible_stderr_bytes_total","raw_bytes_total","visible_bytes_total","byte_reduction_percent","session_file","raw_log_dir","last_run_at"]'
+report_checks() { # json file: required keys, types, no "token" in any key
+  jq -e --argjson req "$_WX_REPORT_REQUIRED" '
+    . as $r | ($req | all(. as $k | $r | has($k)))
+    and .schema_version == 1 and (.available | type) == "boolean"
+    and ([.command_count, .failure_count, .raw_stdout_bytes_total, .raw_stderr_bytes_total, .visible_stdout_bytes_total, .visible_stderr_bytes_total, .raw_bytes_total, .visible_bytes_total] | all(type == "number" and . >= 0))
+    and (.byte_reduction_percent == null or (.byte_reduction_percent | type) == "number")
+    and (.session_file | type) == "string" and (.raw_log_dir | type) == "string"
+    and (.last_run_at == null or (.last_run_at | type) == "string")
+    and (keys | all(test("token") | not))
+  ' "$1" >/dev/null
+}
+
+# 1. No session.
+_WX_RP_EMPTY="$_WX_TEST_ROOT/rp-empty"
+mkdir -p "$_WX_RP_EMPTY"
+"$_WX_CLI" report --json --project "$_WX_RP_EMPTY" >"$_WX_TEST_ROOT/rp-empty.json" || fail 'report --json failed without a session'
+jq -e . "$_WX_TEST_ROOT/rp-empty.json" >/dev/null || fail 'report --json (no session) is not valid JSON'
+report_checks "$_WX_TEST_ROOT/rp-empty.json" || fail "report --json (no session) has a missing or wrong field: $(cat "$_WX_TEST_ROOT/rp-empty.json")"
+jq -e --arg f "$_WX_RP_EMPTY/.ai-context/session.jsonl" --arg r "$_WX_RP_EMPTY/.ai-context/raw" '
+  .available == false and .command_count == 0 and .failure_count == 0 and .raw_bytes_total == 0 and .visible_bytes_total == 0
+  and .byte_reduction_percent == null and .last_run_at == null and .session_file == $f and .raw_log_dir == $r
+' "$_WX_TEST_ROOT/rp-empty.json" >/dev/null || fail 'report --json (no session) has wrong values'
+"$_WX_CLI" report --project "$_WX_RP_EMPTY" | grep -q 'No workflow session data found' || fail 'text report changed for no session'
+[ ! -e "$_WX_RP_EMPTY/.ai-context" ] || fail 'report created files in the project'
+
+# 2. One command.
+_WX_RP_ONE="$_WX_TEST_ROOT/rp-one"
+mkdir -p "$_WX_RP_ONE"
+(cd "$_WX_RP_ONE" && wx echo hello >/dev/null 2>&1) || fail 'wx fixture failed'
+"$_WX_CLI" report --json --project "$_WX_RP_ONE" >"$_WX_TEST_ROOT/rp-one.json" || fail 'report --json failed for one command'
+report_checks "$_WX_TEST_ROOT/rp-one.json" || fail "report --json (one command) has a missing or wrong field: $(cat "$_WX_TEST_ROOT/rp-one.json")"
+jq -e --arg f "$_WX_RP_ONE/.ai-context/session.jsonl" '
+  .available == true and .profile == "code" and .command_count == 1 and .failure_count == 0
+  and .raw_stdout_bytes_total == 6 and .raw_stderr_bytes_total == 0 and .visible_stdout_bytes_total == 6 and .visible_stderr_bytes_total == 0
+  and .raw_bytes_total == 6 and .visible_bytes_total == 6 and .byte_reduction_percent == 0
+  and .session_file == $f and (.last_run_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T"))
+' "$_WX_TEST_ROOT/rp-one.json" >/dev/null || fail 'report --json (one command) has wrong values'
+_WX_RP_SHA="$(sha256sum "$_WX_RP_ONE/.ai-context/session.jsonl")"
+"$_WX_CLI" report --json --project "$_WX_RP_ONE" >/dev/null
+[ "$(sha256sum "$_WX_RP_ONE/.ai-context/session.jsonl")" = "$_WX_RP_SHA" ] || fail 'report changed the session file'
+
+# 3. Mixed success and failure, with one compressed run. Totals must match the session file.
+_WX_RP_MIX="$_WX_TEST_ROOT/rp-mix"
+mkdir -p "$_WX_RP_MIX"
+(cd "$_WX_RP_MIX" && wx echo hello >/dev/null 2>&1; wx bash -c 'echo out; echo err >&2; exit 3' >/dev/null 2>&1; wx npm install >/dev/null 2>&1)
+"$_WX_CLI" report --json --project "$_WX_RP_MIX" >"$_WX_TEST_ROOT/rp-mix.json" || fail 'report --json failed for mixed runs'
+report_checks "$_WX_TEST_ROOT/rp-mix.json" || fail "report --json (mixed) has a missing or wrong field: $(cat "$_WX_TEST_ROOT/rp-mix.json")"
+jq -e '
+  .command_count == 3 and .failure_count == 1
+  and .raw_bytes_total == (.raw_stdout_bytes_total + .raw_stderr_bytes_total)
+  and .visible_bytes_total == (.visible_stdout_bytes_total + .visible_stderr_bytes_total)
+  and .raw_stderr_bytes_total >= 4 and .visible_bytes_total < .raw_bytes_total
+  and .byte_reduction_percent > 0 and .byte_reduction_percent < 100
+  and .byte_reduction_percent == ((((.raw_bytes_total - .visible_bytes_total) * 10000 / .raw_bytes_total) | round) / 100)
+' "$_WX_TEST_ROOT/rp-mix.json" >/dev/null || fail "report --json (mixed) numbers are inconsistent: $(cat "$_WX_TEST_ROOT/rp-mix.json")"
+# An independent sum straight from the session records.
+jq -s -c '{c: length, f: (map(select(.exit_code != 0)) | length), rs: (map(.raw.stdout_bytes) | add), re: (map(.raw.stderr_bytes) | add), vs: (map(.visible.stdout_bytes) | add), ve: (map(.visible.stderr_bytes) | add), last: (.[-1].completed_at)}' "$_WX_RP_MIX/.ai-context/session.jsonl" >"$_WX_TEST_ROOT/rp-mix.sum"
+jq -e --slurpfile sum "$_WX_TEST_ROOT/rp-mix.sum" '
+  .command_count == $sum[0].c and .failure_count == $sum[0].f
+  and .raw_stdout_bytes_total == $sum[0].rs and .raw_stderr_bytes_total == $sum[0].re
+  and .visible_stdout_bytes_total == $sum[0].vs and .visible_stderr_bytes_total == $sum[0].ve
+  and .last_run_at == $sum[0].last
+' "$_WX_TEST_ROOT/rp-mix.json" >/dev/null || fail 'report --json differs from a sum of the session records'
+# The text report shows the same numbers.
+"$_WX_CLI" report --project "$_WX_RP_MIX" >"$_WX_TEST_ROOT/rp-mix.txt" || fail 'text report failed'
+assert_file_contains "$_WX_TEST_ROOT/rp-mix.txt" 'Workflow session report:'
+assert_file_contains "$_WX_TEST_ROOT/rp-mix.txt" "wrapped commands: $(jq -r '.command_count' "$_WX_TEST_ROOT/rp-mix.json")"
+assert_file_contains "$_WX_TEST_ROOT/rp-mix.txt" "raw bytes total: $(jq -r '.raw_bytes_total' "$_WX_TEST_ROOT/rp-mix.json")"
+assert_file_contains "$_WX_TEST_ROOT/rp-mix.txt" "visible/emitted bytes total: $(jq -r '.visible_bytes_total' "$_WX_TEST_ROOT/rp-mix.json")"
+assert_file_contains "$_WX_TEST_ROOT/rp-mix.txt" "failures: $(jq -r '.failure_count' "$_WX_TEST_ROOT/rp-mix.json")"
+assert_file_contains "$_WX_TEST_ROOT/rp-mix.txt" "raw log directory: $(jq -r '.raw_log_dir' "$_WX_TEST_ROOT/rp-mix.json")"
+assert_file_contains "$_WX_TEST_ROOT/rp-mix.txt" "$(printf 'estimated reduction: %.2f%%' "$(jq -r '.byte_reduction_percent' "$_WX_TEST_ROOT/rp-mix.json")")"
+"$_WX_CLI" report --text --project "$_WX_RP_MIX" | cmp -s - "$_WX_TEST_ROOT/rp-mix.txt" || fail 'report --text differs from report'
+
+# 4. Old records without raw/visible fields use the stdout/stderr bytes. Missing times give a null last_run_at.
+_WX_RP_OLD="$_WX_TEST_ROOT/rp-old"
+mkdir -p "$_WX_RP_OLD/.ai-context"
+printf '{"stdout":{"bytes":5},"stderr":{"bytes":1},"exit_code":0}\n' > "$_WX_RP_OLD/.ai-context/session.jsonl"
+"$_WX_CLI" report --json --project "$_WX_RP_OLD" | jq -e '.command_count == 1 and .raw_bytes_total == 6 and .visible_bytes_total == 6 and .last_run_at == null' >/dev/null || fail 'old session records are not handled'
+
+# 5. A broken session file is an error: nothing on stdout, exit code 1. Raw bytes of zero give a null percent.
+_WX_RP_BAD="$_WX_TEST_ROOT/rp-bad"
+mkdir -p "$_WX_RP_BAD/.ai-context"
+printf 'not json\n' > "$_WX_RP_BAD/.ai-context/session.jsonl"
+"$_WX_CLI" report --json --project "$_WX_RP_BAD" >"$_WX_TEST_ROOT/rp-bad.out" 2>"$_WX_TEST_ROOT/rp-bad.err"
+[ "$?" -eq 1 ] || fail 'report --json should return 1 for invalid JSONL'
+[ ! -s "$_WX_TEST_ROOT/rp-bad.out" ] || fail 'report --json wrote to stdout for invalid JSONL'
+assert_file_contains "$_WX_TEST_ROOT/rp-bad.err" 'invalid JSONL'
+printf '{"exit_code":0,"raw":{"stdout_bytes":0,"stderr_bytes":0},"visible":{"stdout_bytes":0,"stderr_bytes":0}}\n' > "$_WX_RP_BAD/.ai-context/session.jsonl"
+"$_WX_CLI" report --json --project "$_WX_RP_BAD" | jq -e '.command_count == 1 and .raw_bytes_total == 0 and .byte_reduction_percent == null' >/dev/null || fail 'zero raw bytes should give a null percent'
+
+# 6. Options, entry points, and the schema number in version --json.
+"$_WX_CLI" report --json --bogus >/dev/null 2>&1
+[ "$?" -eq 2 ] || fail 'report --bogus should return 2'
+"$_WX_CLI" report --json --project "$_WX_TEST_ROOT/no-such-dir" >/dev/null 2>&1
+[ "$?" -eq 2 ] || fail 'report --project with a missing directory should return 2'
+"$_WX_CLI" report --project >/dev/null 2>&1
+[ "$?" -eq 2 ] || fail 'report --project without a value should return 2'
+(cd "$_WX_RP_MIX" && source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" report --json | jq -e '.command_count == 3' >/dev/null) || fail 'sourced report --json failed'
+(cd "$_WX_RP_MIX" && "$_WX_CLI" report --json | jq -e '.command_count == 3' >/dev/null) || fail 'report --json without --project should use the current directory'
+[ "$(jq -r '.report_schema_version' "$_WX_TEST_ROOT/version.json")" = "$(jq -r '.schema_version' "$_WX_TEST_ROOT/rp-mix.json")" ] || fail 'report_schema_version differs from report --json'
 
 printf '%s\n' 'PASS: workflow report and reset-session'
