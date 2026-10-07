@@ -10,7 +10,7 @@
 #   * A consumer checks the schema number it needs and refuses any other number.
 #   * AIW_CLI_VERSION is for people and logs. It is changed by hand. It is not used to decide compatibility.
 
-AIW_CLI_VERSION="0.1.0"
+AIW_CLI_VERSION="2.0.0"
 AIW_VERSION_SCHEMA_VERSION=1
 AIW_STATUS_SCHEMA_VERSION=1
 AIW_MODES_SCHEMA_VERSION=1

@@ -46,6 +46,18 @@
       {
         "command": "tokenController.showLeanctxStatus",
         "title": "Token Controller: Show LeanCTX Status"
+      },
+      {
+        "command": "tokenController.setupHelp",
+        "title": "Token Controller: Setup Help"
+      },
+      {
+        "command": "tokenController.initProject",
+        "title": "Token Controller: Initialize Current Project"
+      },
+      {
+        "command": "tokenController.checkTools",
+        "title": "Token Controller: Check Optional Tools"
       }
     ],
     "configuration": {
@@ -56,6 +68,11 @@
           "default": "~/projects/token-controller/scripts/workflow.sh",
           "description": "Absolute path (or ~/...) to workflow.sh. The extension runs workflow-cli.sh from the same folder. Set it in user or remote machine settings. Workspace settings are ignored. The file must be named workflow.sh.",
           "scope": "machine"
+        },
+        "tokenController.promptToInitialize": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask once per session to initialize a trusted project that has no Token Controller block in AGENTS.md. The project is never changed without your confirmation."
         }
       }
     }

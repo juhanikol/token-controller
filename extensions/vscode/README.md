@@ -20,6 +20,8 @@ Token Controller is a mode switcher for AI context policy. You select the work m
 | Fill the mode picker | `workflow-cli.sh modes --json` |
 | Switch mode | `workflow-cli.sh <mode>` |
 | Show LeanCTX status (command **Token Controller: Show LeanCTX Status**) | `workflow-cli.sh leanctx status --json` |
+| Initialize the project (**Token Controller: Initialize Current Project**) | `workflow-cli.sh init` (working directory: your project folder) |
+| Check optional tools (**Token Controller: Check Optional Tools**) | `bash check-tools.sh` (beside the CLI) |
 
 The extension runs `bash <path>/workflow-cli.sh <arguments>` without a shell command string. The path and every argument are passed as separate arguments. A mode id must match `^[a-z0-9][a-z0-9-]*$` and be in the list the CLI just returned. The extension accepts only `schema_version` 1 from the CLI.
 
@@ -52,14 +54,34 @@ The "stale shell" warning only covers the environment of VS Code. Terminals that
 
 ## Install
 
-1. Build it: `cd extensions/vscode && npm ci && npx vsce package`. This writes `token-controller-ui-<version>.vsix` there. No built VSIX is kept in git. Older ones are under the git tags (for example `v1.1.0`).
-2. In VS Code connected to WSL, open Extensions → **…** → **Install from VSIX…** and select the file.
-3. Reload the window.
+You need **WSL 2 with Ubuntu**, VS Code connected to it (the window shows `WSL: Ubuntu` at the bottom left), and the Token Controller repository cloned in that distro with `scripts/install-wsl.sh` run (see the main README).
+
+1. **Get the VSIX.** Download `token-controller-ui-2.0.0.vsix` from the GitHub release. Or build it: `cd extensions/vscode && npm ci && npm run package && npx vsce package`. No VSIX is kept in git. Older ones are under the git tags (for example `v1.1.0`).
+2. **Open your project from WSL.** In a WSL terminal: `code .`
+3. **Install into the WSL extension host.** In that window, open Extensions → **…** → **Install from VSIX…** and select the file. Or, in the WSL terminal of that window: `code --install-extension token-controller-ui-2.0.0.vsix`. The extension must show under "WSL: Ubuntu", not only locally.
+4. **Reload the window.** The status bar shows `AI Context: <mode>`. Click it to switch.
+
+If you cloned the controller somewhere other than `~/projects/token-controller`, set `tokenController.scriptPath` (below) in your **user** settings.
+
+## First run: what the extension tells you
+
+| Status bar | Meaning | What to do |
+|---|---|---|
+| `AI Context: setup needed` | The Token Controller CLI was not found (or `tokenController.scriptPath` is wrong). | Click it. Choose **Open setup guide**, **Copy install command** (paste it in a WSL terminal; it runs `scripts/install-wsl.sh`), or **Select workflow.sh** (saves the path in your user settings). |
+| `AI Context: <mode>` | Ready. | Click it to switch mode. |
+| Tooltip: "Project: not initialized" | `AGENTS.md` in the workspace has no Token Controller block. | Run **Token Controller: Initialize Current Project**. |
+
+**Token Controller: Initialize Current Project** runs `workflow init` with your project folder as the working directory. It works only in a **trusted** workspace and asks for confirmation first. It creates `AGENTS.md`, or adds a managed block to the existing one and keeps your own text. Nothing else in the project is changed. The extension also asks once per session when it sees an uninitialized trusted project (turn it off with `tokenController.promptToInitialize`).
+
+**Token Controller: Check Optional Tools** runs `scripts/check-tools.sh` and shows the result in the **Token Controller** output channel. RTK, LeanCTX, and Caveman are optional. A missing optional tool is a note, not an error, and Token Controller falls back to raw output. Only a missing base tool (`jq`, `git`, `curl`) is reported as a problem. The extension never installs anything. To install an optional tool, use the helpers in `scripts/install-tools/` in a WSL terminal.
+
+**Install in the WSL extension host.** If the extension is installed only in local Windows VS Code, it cannot see your WSL files and shows `setup needed`. The window must show `WSL: Ubuntu` at the bottom left, and the extension must be listed under "WSL: Ubuntu" in the Extensions view.
 
 ## Setting
 
 | Setting | Default | Purpose |
 |---|---|---|
+| `tokenController.promptToInitialize` | `true` | Ask once per session to initialize a trusted project that has no Token Controller block. Nothing changes without your confirmation. |
 | `tokenController.scriptPath` | `~/projects/token-controller/scripts/workflow.sh` | Path to `workflow.sh`. Absolute, or starting with `~/`. The file must be named `workflow.sh`. |
 
 ## Security model

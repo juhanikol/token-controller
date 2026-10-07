@@ -1,10 +1,10 @@
 # Token Controller
 
-**Stop burning context on noise. Pick the work mode, let the controller guide the tools, and keep the important evidence safe.**
+**Stop burning tokens on noise. Pick the work mode, let the controller guide the tools, and keep the important evidence safe.**
 
-Are your AI-coding tokens disappearing faster than expected?
+Are your AI-coding context disappearing faster than expected?
 
-Maybe you are exploring a large codebase. Maybe your agent just dumped a wall of test output into the context. Maybe you already have a good `<span>AGENTS.md</span>` or `<span>SKILLS.md</span>`, but the context still fills up with logs, file listings, repeated success output, and tool chatter.
+Maybe you are exploring a large codebase. Maybe your agent just dumped a wall of test output into the context. Maybe you already have a good `AGENTS.md` or `SKILLS.md`, but the context still fills up with logs, file listings, repeated success output, and tool chatter.
 
 You may have tried token-saving tools before. They help, but each one has its own setup, commands, hooks, flags, and risks. Then another promising tool appears next week, and now you have one more thing to configure and remember.
 
@@ -15,6 +15,8 @@ You may have tried token-saving tools before. They help, but each one has its ow
 The Status Bar dropdown provides another way to select a profile.
 
 ![select context](assets/20260824_212040_image.png)
+
+Impressed already? Looking for quick install? **Jump to:** [releases](https://github.com/juhanikol/token-controller/releases) and download
 
 It also gives you one simple workflow in CLI for choosing the task you are doing:
 
@@ -29,12 +31,12 @@ The controller then publishes that mode to your shell, your project instructions
 
 Token Controller does not try to replace your tools. It orchestrates them.
 
-* **RTK** reduces noisy terminal output after raw output has been captured.
-* **LeanCTX** helps with controlled codebase exploration, file reads, search, and tree views.
-* **Caveman** can reduce assistant response verbosity when explicitly allowed.
-* **wx** is the safety layer that keeps raw command output, stderr, and exit codes available.
+1. **RTK** reduces noisy terminal output after raw output has been captured.
+2. **LeanCTX** helps with controlled codebase exploration, file reads, search, and tree views.
+3. **Caveman** can reduce assistant response verbosity when explicitly allowed.
+4. **wx** is the token controller's safety layer that keeps raw command output, stderr, and exit codes available.
 
-These are all community praised and respected solutions! Thousands have already tested these! So you know that the tools used are already proven and you might have even used them. Token-controller just orchestrates them so you do not need to worry about them.
+The first three are all community praised and respected solutions! Thousands have already tested these! So you know that the tools used are already proven and you might have even used them. Token-controller just orchestrates them so you do not need to worry about them.
 
 The goal is simple: **save context where it is safe**, and keep full evidence where correctness matters.
 
@@ -49,21 +51,128 @@ workflow code
 
 Install once. Initialize each project once. Then select the work mode from the terminal or the VS Code status bar.
 
-# Recommended easy-install approach
+## Install (WSL 2 + Ubuntu)
 
-For now, support WSL only. No Windows yet :( 
+Token Controller is tested on **WSL 2 with Ubuntu**, with VS Code connected to the same WSL distro. Native Windows is not supported yet.
 
-#### Best path for release
+**The release flow in short:** download the release (the `token-controller-ui-x.x.x.vsix` extension file, plus this repository). Then run `scripts/install-wsl.sh` in WSL, which install the VSIX into the WSL VS Code, and open your project. The extension tells you what is missing and offers to run `workflow init` for you.
 
-1. Download or clone Token Controller into WSL.
-2. Run one install script.
-3. Install the VSIX into VS Code WSL.
-4. Open a project.
-5. Run workflow init.
-6. Select mode from status bar.
+1. **Get it.** In a WSL terminal:
 
+   ```bash
+   mkdir -p ~/projects
+   git clone https://github.com/juhanikol/token-controller.git ~/projects/token-controller
+   ```
+2. **Run the install script.**
 
-## Token controller - as AI Context Workflow Controller
+   ```bash
+   bash ~/projects/token-controller/scripts/install-wsl.sh
+   ```
+
+   It installs `jq`, `git`, and `curl` with apt, adds a `workflow` alias to `~/.bashrc` (only if there is none), runs a tool check, and prints the next steps. It does **not** install RTK, LeanCTX, Caveman, or any other optional tool. Preview it first with `--dry-run`.
+3. **Open a new terminal** (or `source ~/.bashrc`) and check:
+
+   ```bash
+   workflow status
+   ```
+4. **Use it in a project:**
+
+   ```bash
+   cd ~/projects/my-project
+   workflow init     # once per project: adds the rules to AGENTS.md
+   workflow code     # choose a mode
+   ```
+5. **Optional: install the VS Code extension** for the status-bar mode switcher (next section).
+
+That is all. For daily use, remember `workflow init` and `workflow <mode>`. (With the extension you can run **Token Controller: Initialize Current Project** instead of `workflow init`.)
+
+## VS Code extension (optional)
+
+The extension shows the active mode in the status bar and lets you switch it. It does not compress anything itself.
+
+1. Get `token-controller-ui-x.x.x.vsix` from the [GitHub release](https://github.com/juhanikol/token-controller/releases), or build it ([extensions/vscode/README.md](extensions/vscode/README.md)).
+2. Open your project in VS Code **connected to WSL** (the window shows `WSL: Ubuntu` at the bottom left). Run `code .` from a WSL terminal.
+3. Open the Extensions view, click `…`, choose **Install from VSIX…**, and pick the file
+
+![1791410318765](image/README/1791410318765.png)
+
+1. Or, in a WSL terminal inside that window:
+
+   ```bash
+   code --install-extension token-controller-ui-2.0.0.vsix
+   ```
+
+**Reload the window.** The status bar shows `AI Context: <mode>`. Click it to switch.
+
+### What the extension tells you on first run:
+
+* **`AI Context: setup needed`**: the Token Controller CLI was not found (not installed yet, or in another folder). Click it for three actions: *Open setup guide*, *Copy install command* (paste it in a WSL terminal), and *Select workflow.sh*.
+* **Project not initialized**: the tooltip says so when `AGENTS.md` has no Token Controller block, and the extension asks once per session if you want to initialize it. The command **Token Controller: Initialize Current Project** asks for confirmation, runs `workflow init` in your project folder (trusted workspaces only), and shows the result.
+* **Token Controller: Check Optional Tools** shows which tools are installed in the output channel. A missing optional tool is only a note.
+
+Install it in the **WSL extension host** ("Install in WSL: Ubuntu"), not only in local Windows VS Code. If you cloned the controller somewhere other than `~/projects/token-controller`, set `tokenController.scriptPath` in your user settings.
+
+## Which mode?
+
+| You are...                             | Run                                                       | What it asks for                               |
+| -------------------------------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| Exploring a codebase                   | `workflow architect`                                    | Map first, then read the important files fully |
+| Writing normal code                    | `workflow code`                                         | Target files full; compress successful noise   |
+| Fixing a failure                       | `workflow debug`                                        | The first failure stays raw                    |
+| Running tests                          | `workflow test`                                         | Compress passing noise only                    |
+| Reviewing a change                     | `workflow review`                                       | Index first, then read important files fully   |
+| Security, database, release, migration | `workflow security`, `db`, `release`, `migration` | Raw or lossless. No compression.               |
+| A tiny edit                            | `workflow micro`                                        | No context tools                               |
+| Anything, maximum fidelity             | `workflow raw`                                          | Everything raw                                 |
+
+There are 22 modes. The full list is in [the scenario matrix](#scenario-matrix) below, or run `workflow modes`.
+
+## How it keeps you safe
+
+* **Failures stay raw.** A command that exits with an error is never compressed. The first failure of a debug run keeps its message, stack trace, stderr, paths, and line numbers.
+* **Protected modes stay raw.** `raw`, `security`, `db`, `migration`, and `release` never use compression tools.
+* **Raw output is always saved first.** `wx <command>` runs your command once, saves the raw stdout, stderr, and exit code under `.ai-context/raw/`, and only then may shorten what is shown. The exit code is never changed.
+* **A tool that fails or is missing is not a problem.** If RTK is not installed, times out, or produces something that is not smaller or that drops an error or warning line, you see the raw output and the reason is recorded. Nothing breaks.
+* **LeanCTX output is checked.** `workflow leanctx read-exact <file>` prints a file only if the output equals the file byte for byte. Otherwise it refuses. It is refused in the protected modes.
+
+Some of this is policy: agents are *asked* to follow the mode, and the controller cannot force them. The parts that are code (`wx`, the LeanCTX adapter, `workflow doctor`) are tested.
+
+## Optional tools are optional
+
+Token Controller works with none of them installed. Install a tool only if you want its features.
+
+| Tool              | What it does for you                                                                              | How Token Controller uses it                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **RTK**     | Shortens noisy terminal output (tests, builds, git, search)                                       | `wx` runs `rtk pipe` on the saved output, after raw capture             |
+| **LeanCTX** | Codebase exploration: file maps, search, tree                                                     | `workflow leanctx status`, `read`, `read-exact`, `search`, `tree` |
+| **Caveman** | Shorter assistant replies. Off by default. Never in docs, security, db, release, migration, debug | You opt in per activation:`AICONTEXT_CAVEMAN_REQUEST=lite workflow code`  |
+
+See what is installed (changes nothing):
+
+```bash
+workflow doctor
+bash ~/projects/token-controller/scripts/check-tools.sh
+```
+
+To see how to install them, read the commands (nothing is installed for you):
+
+```bash
+bash ~/projects/token-controller/scripts/show-optional-tools.sh --print-only
+```
+
+Missing tools degrade safely: without RTK you see the raw output, without LeanCTX `workflow leanctx` says it is not available, and without Caveman nothing changes. The install script never installs any of them.
+
+When you want one, a helper script shows the upstream source, says it may be out of date, and asks you to confirm before it installs anything (one tool per helper):
+
+```bash
+bash ~/projects/token-controller/scripts/install-tools/rtk.sh
+bash ~/projects/token-controller/scripts/install-tools/leanctx.sh
+bash ~/projects/token-controller/scripts/install-tools/caveman.sh
+```
+
+Do not run `rtk init` or `lean-ctx setup/wrap/init` casually. They edit agent or MCP settings and can add hooks that skip `wx` capture. Token Controller never runs them, and `workflow doctor` warns if it finds such a hook.
+
+#### Token controller - as AI Context tool Workflow Controller
 
 **Choose how agents should handle context, while keeping high-risk evidence visible.**
 
@@ -71,222 +180,35 @@ Token Controller is a mode switcher for AI context policy. The goal is to orches
 
 The `wx` wrapper is the safety and measurement layer: it captures raw output, preserves exit codes, and records byte counts for commands run as `wx <command>`. Its only built-in compression collapses consecutive identical stdout lines for successful allowlisted commands. It is a fallback, not the main token-saving mechanism. Token Controller does not enforce agent compliance, measure model tokens, or guarantee token savings.
 
-## How it works
+## What is measured, and what is not
 
-* **Profile control:** `workflow <mode>` exports policy variables and writes them to `~/.config/ai-workflow/active_mode.env`.
-* **Project guidance:** `workflow init` creates or extends `AGENTS.md` with instructions for agents to read the active profile and preserve specified evidence.
-* **Explicit command capture:** `wx <command>` runs the command directly, always saves raw stdout/stderr, applies only eligible conservative compression, records raw and visible byte counts under `.ai-context/`, prints the raw-log location, and preserves the command's exit code.
-* **VS Code control:** The Status Bar dropdown provides another way to select a profile.
+`wx` records the **byte counts** of raw and shown output in `.ai-context/session.jsonl`. `workflow report` summarizes them.
 
-![select context](assets/20260824_212040_image.png)
-
-The implementation has three distinct layers:
-
-| Layer                  | Current status                                                                                                                                                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Policy layer           | Stable controller behavior: profiles, environment variables, the active-mode file, and injected agent instructions express the requested context policy.                                                                                               |
-| Mechanical layer       | The explicit`wx` wrapper captures raw evidence and collapses exact consecutive repetitions only for eligible successful stdout. Failures and protected profiles or commands remain raw.                                                              |
-| Measured savings layer | Per-run metadata records raw and visible byte counts; the benchmark also captures total emitted bytes including wrapper diagnostics. Fixture validation demonstrates byte reduction, but no tokenizer-backed token-saving result has been established. |
-
-## Why this matters (even with million-token context windows)
-
-Context windows have reached massive scales, but simply having a larger window does not eliminate the need for optimization. In fact, unmanaged capacity often leads to **"context rot."** As the window fills with raw logs, uncompressed MCP (Model Context Protocol) tool outputs, and irrelevant file contents, the AI's attention dilutes. This causes reasoning drops, latency spikes, and unnecessary inference costs.
-
-While native IDE features and RAG (Retrieval-Augmented Generation) are highly effective at finding static code snippets, they lack awareness of your immediate engineering intent. This controller bridges that gap:
-
-* **Proactive vs. Reactive:** RAG reacts to your prompt. This tool publishes the selected work profile through shell variables, an active-mode file, and project instructions that compatible agents can read.
-* **Risk-Based Fidelity:** An IDE indexer does not inherently know that a database migration requires higher fidelity than a UI component update. Critical modes such as `workflow db` request strict, lossless handling from the agent and connected tools; the controller does not independently verify that they comply.
-* **Establishing Boundaries:** Injecting rules into a project's `AGENTS.md` gives compatible agents an explicit policy that correctness takes priority over token savings. Those instructions are a policy guardrail, not mechanical enforcement.
-
-## Supported environment
-
-> **Currently supported and tested only on WSL 2 with Ubuntu, using VS Code connected to the same WSL distro through the WSL extension.** The current validation environment is Ubuntu 24.04 x86-64 on WSL2 with Bash 5.2 and `jq` 1.8.
-
-Native Windows, WSL 1, macOS, native Linux, Dev Containers, SSH remotes, and GitHub Codespaces have not been verified. They may work, but they are not currently supported by this project.
-
-Environment requirements and assumptions:
-
-* Run the setup and workflow commands in a WSL Bash terminal, not PowerShell or Command Prompt.
-* Open the project from that same WSL distro in VS Code. The terminal, extension, controller files, and `~/.config/ai-workflow/active_mode.env` must resolve to the same Linux home directory.
-* Each WSL distro has its own Linux home and active-mode file. If you use multiple distros, install and configure the controller separately in each one.
-* Keep the controller and projects in the WSL Linux filesystem, such as `~/tools` and `~/projects`. Windows-mounted paths such as `/mnt/c/...` are unverified and may behave differently for permissions, file watching, and shell scripts.
-* Keep shell scripts in Linux LF format. Windows CRLF conversion can prevent Bash from reading them correctly.
-* Use Bash. The documented alias is added to `~/.bashrc`; zsh, fish, and other shells are not currently documented or tested.
-* Install Git and `jq`. Standard Ubuntu tools such as `grep`, `mktemp`, `cp`, `mv`, and `chmod` are also required.
-* Keep `~/.config` writable so the active-mode file can be created and updated.
-* Optional context tools are not required. Install them only if you intend to use their features.
-
-You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md` with instructions telling compatible coding agents to check the active workflow mode before they answer or modify files.
-
-The selected policy is saved in:
-
-```text
-~/.config/ai-workflow/active_mode.env
-```
-
-## The simple flow
-
-```text
-One central clone
-      │
-      ├── workflow init ──────> project/AGENTS.md
-      │                          project-local agent rules
-      │
-      └── workflow <mode> ────> ~/.config/ai-workflow/active_mode.env
-                                 current context policy
-```
-
-For everyday use, remember only two commands:
+Byte reduction is not model-token measurement. Token Controller does not promise token savings. RTK, LeanCTX, and Caveman make their own claims, and those claims are theirs. Small outputs can even grow, because `wx` adds a pointer to the raw log. The evidence is in [docs/VALIDATION_MATRIX.md](docs/VALIDATION_MATRIX.md). Run the benchmark yourself:
 
 ```bash
-workflow init
-workflow code
-```
-
-## VS Code extension
-
-The extension is optional. It shows the active mode in the status bar and lets you switch modes. Install it into the **WSL extension host**, not only into local Windows VS Code. Install steps, requirements, and limits: [extensions/vscode/README.md](extensions/vscode/README.md).
-
-## Quick start and dependencies
-
-You need the supported WSL2/Ubuntu environment described above, plus Bash, Git, and `jq`. If Git or `jq` is missing:
-
-```bash
-sudo apt install -y jq git
-```
-
-### 1. Clone the controller once
-
-Choose one central location and keep the controller there:
-
-```bash
-mkdir -p ~/projects
-git clone <repository-url> ~/projects/token-controller
-```
-
-If you choose a different location, use that path in the alias below.
-
-### 2. Add the `workflow` alias
-
-Run this once:
-
-```bash
-echo "alias workflow='source ~/projects/token-controller/scripts/workflow.sh'" >> ~/.bashrc
-source ~/.bashrc
-```
-
-Check that the alias works:
-
-```bash
-workflow status
-```
-
-### 3. Initialize each project
-
-Go to a project and run `workflow init`:
-
-```bash
-cd ~/projects/my-project
-workflow init
-```
-
-Within the current project, this changes only `AGENTS.md`; the controller also ensures that its user-level configuration directory exists.
-
-* If `AGENTS.md` is missing, the command creates it from `templates/AGENTS_base.md`.
-* If `AGENTS.md` already exists, the command keeps the project's custom instructions and appends the required AI workflow rules.
-* If you run `workflow init` again, it does not add duplicate rules.
-
-Commit the generated or updated `AGENTS.md` if you want everyone working on the project to use the same rules.
-
-### 4. Choose a mode before you work
-
-Pick the mode that matches your task:
-
-```bash
-workflow architect
-workflow code
-workflow debug
-```
-
-The selected mode applies to the current shell and is also written to `~/.config/ai-workflow/active_mode.env` for agents to read.
-
-Because the alias sources `workflow.sh`, it also makes the `wx` function available in that shell. Commands are mechanically captured and measured only when they are invoked through `wx`:
-
-```bash
-workflow code
-wx npm test
-workflow report
-```
-
-Direct `npm test` output is not captured or compressed by Token Controller unless an optional integration blocks the direct command and requires a retry through `wx`.
-
-See the current mode at any time:
-
-```bash
-workflow status
+bash benchmarks/run-benchmark.sh
 ```
 
 ## Everyday example
 
 ```bash
 cd ~/projects/my-project
-
-# Run once for this project.
-workflow init
-
-# Understand the structure before making changes.
-workflow architect
-
-# Switch when implementation begins.
-workflow code
-
-# Use this if a test fails.
-workflow debug
+workflow init        # once for this project
+workflow architect   # understand the structure
+workflow code        # implement
+wx npm test          # run through wx: raw saved, noise shortened if safe
+workflow debug       # a test failed: keep the first failure raw
+workflow report      # byte counts for this session
 ```
 
-You can switch modes as often as needed. Running `workflow init` is normally a one-time step per project.
+Commands are captured only when you run them as `wx <command>`. A direct `npm test` is not captured.
 
-### Step-by-Step Local Cleanup / Uninstall Commands
-
-Bash
-
-```bash
-# 1. Remove the active workflow cache directory
-rm -rf ~/.config/ai-workflow
-
-# 2. Remove generated global instruction files
-rm -f ~/.copilot/instructions/ai-workflow.instructions.md
-rm -f ~/.claude/CLAUDE.md
-
-# 3. Clean up the current project's test AGENTS.md (if testing in a dummy folder)
-rm -f ./AGENTS.md
-
-# 4.a.  Remove the Shell Alias. Open your ~/.bashrc file in a text editor (or via terminal):
-nano ~/.bashrc
-# 4.b   Find and delete the following line:
-alias workflow='source ~/projects/token-controller/scripts/workflow.sh'
-# 4.c.  Save the file and refresh your terminal session:
-source ~/.bashrc
-
-# 5. (
-
-Optional) Remove installed Python virtual environments if resetting optional tools
-rm -rf ~/.venvs/headroom ~/.venvs/memstack
-```
-
-#### One-Liner to Launch a Container
-
-Run this from your `token-controller` project root directory:
-
-Bash
-
-```bash
-docker run --rm -it -v "$PWD":/workspace -w /workspace ubuntu:24.04 bash
-```
+---
 
 ## Scenario matrix
 
-Use this table when you are unsure which mode to choose. It describes the policy requested from an agent or connected tool, not behavior the controller independently enforces.
+It describes the policy requested from an agent or connected tool, not behavior the controller enforces by itself.
 
 | Scenario                            | Command                      | Requested policy                                 | Evidence requested complete                                 |
 | ----------------------------------- | ---------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
@@ -313,16 +235,9 @@ Use this table when you are unsure which mode to choose. It describes the policy
 | Maximum fidelity                    | `workflow raw`             | Disable compression                              | Everything                                                  |
 | Disable optimizers                  | `workflow off`             | Turn optional optimization modes off             | Normal shell output                                         |
 
-Aliases kept for compatibility:
-
-```bash
-workflow plan   # same as workflow architect
-workflow ci     # same as workflow cicd
-```
+Aliases: `workflow plan` is `architect`, and `workflow ci` is `cicd`.
 
 ## Policy rules in plain language
-
-These rules are written into the active profile and agent instructions. Their execution depends on the agent and any connected context tool; the `wx` wrapper does not inspect output to verify them.
 
 * Correctness is more important than saving tokens.
 * `raw`, `security`, `db`, `migration`, and `release` use raw or lossless context.
@@ -334,210 +249,80 @@ These rules are written into the active profile and agent instructions. Their ex
 
 ## What `workflow init` adds
 
-The reusable template is stored at:
+`workflow init` creates `AGENTS.md` from [templates/AGENTS_base.md](templates/AGENTS_base.md), or appends a managed block to the one you have. It tells agents to:
 
-```text
-templates/AGENTS_base.md
-```
-
-The injected rules tell agents to:
-
-* check `~/.config/ai-workflow/active_mode.env` before working;
+* read `~/.config/ai-workflow/active_mode.env` before working;
 * follow the selected risk and fidelity policy;
 * preserve failures and high-risk evidence;
-* avoid assuming optional tools are installed;
-* keep project-specific instructions intact.
+* not assume optional tools are installed;
+* keep your own instructions intact.
 
-Managed markers make the operation repeatable. If an existing managed block is incomplete, or `AGENTS.md` is a symbolic link, `workflow init` stops instead of making a risky change.
+Running it again adds nothing twice. If the managed block is incomplete, or `AGENTS.md` is a symbolic link, it stops instead of making a risky change. Commit `AGENTS.md` if you want your team to use the same rules.
 
-## Optional global editor setup
+Optional: `workflow setup` adds the same rule to global Copilot, Gemini Code Assist, and Claude Code instruction files. Existing settings are kept. It needs a strict JSON `settings.json` (no comments or trailing commas).
 
-Project-local `AGENTS.md` files are the main distribution method. You can also add the same rule to supported global VS Code and agent settings:
+## How it works (technical)
 
-```bash
-workflow setup
-```
+* **Profile control:** `workflow <mode>` exports policy variables and writes `~/.config/ai-workflow/active_mode.env`.
+* **Project guidance:** `workflow init` writes the agent rules.
+* **Capture:** `wx <command>` runs the command once, saves raw stdout, stderr, and the exit code, applies only conservative reduction, and records byte counts. The only built-in reduction collapses consecutive identical lines for successful, allow-listed commands. RTK output replaces it only when it is smaller and keeps every error and warning line.
+* **RTK:** `wx` runs `rtk pipe -f <filter>` on the saved stdout, only in modes that allow it and only for commands that have a `pipe` entry in `command_policy.rtk_commands`. It never re-runs your command and never runs `rtk init`. The list of commands and the measured results are in [docs/integrations/RTK.md](docs/integrations/RTK.md).
+* **LeanCTX adapter:** `workflow leanctx` reads the mode and `leanctx_policy`, refuses off and protected modes, refuses a lean-ctx binary that is inside the project or a Windows one under WSL, and runs only bounded `read`, `grep`, and `ls` calls. It does not run `lean-ctx status`, `setup`, `wrap`, `init`, a shell, or `wx`. See [docs/integrations/LEAN-CTX.md](docs/integrations/LEAN-CTX.md).
+* **Three layers:** policy (profiles, variables, agent rules), mechanical (`wx` capture and the adapters), and measurement (byte counts and benchmarks). Only the second and third are code.
 
-This command is optional. It updates supported Copilot settings and instruction files, and adds rules for detected Gemini Code Assist or Claude Code installations. Existing settings are preserved, and the same rule is not added twice.
-
-The VS Code settings updater expects a strict JSON `settings.json`. It stops without replacing files that contain JSON comments or trailing commas.
-
-## Optional context tools
-
-RTK, Headroom, LeanCTX, and Caveman are not required to use this controller. The `wx` capture layer invokes only RTK, and only as described below (a prototype); outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
-
-To inspect what is installed:
-
-```bash
-bash ~/tools/token-controller/scripts/check-tools.sh
-```
-
-The optional installer installs base prerequisites and then prints tool-specific commands for review:
-
-```bash
-bash ~/tools/token-controller/scripts/show-optional-tools.sh
-```
-
-If you choose to install the Python tools using those printed commands, their virtual environments are:
-
-* Headroom: `~/.venvs/headroom`
-* MemStack: `~/.venvs/memstack`
-
-## Important note on context tools
-
-Token savings are significantly increased when using context tools such as RTK, Headroom, LeanCTX and caveman. Or at least when the tools are used separately. However this separation, configuring and different options make using all the tools quite complicated. This token-controller should give you less things to worry about and easy to use method for users with different skills. Beginner and advanced developer included.
-
-I advise always installing these tools. I cannot promise significant improvements without them.
-
-Roughly the idea with those tools are:
-
-**RTK:**
-  terminal-output noise reduction through wx raw capture + rtk pipe
-**LeanCTX:**
-  codebase exploration, file reads, search, tree/map, signatures, context composition
-**Caveman:**
-  assistant response/output brevity only
-**Headroom:**
-  more advanced "rtk" with MCP, multiagent coding and affects to RAG pipeline aswell
-
-## Mechanical `wx` layer and optional integrations
-
-The built-in mechanical boundary is explicit: `wx <command>` runs the command, captures raw stdout and stderr under `.ai-context/raw/`, preserves the exit code, emits either lossless or deterministic exact-repeat output, prints a raw-log pointer, and appends byte measurements to `.ai-context/session.jsonl`.
-
-Compression is conservative. A successful command is compressed only when it matches `noisy_success_can_compress` in `config/workflow_settings.json`. Nonzero exits and profiles or commands classified as security, database, release, migration, or `preserve_raw_or_lossless` remain lossless.
-
-Optional integrations may increase `wx` coverage, but are not installed automatically:
-
-* **Claude Code hook example:** [`integrations/claude-code/README.md`](integrations/claude-code/README.md) documents an opt-in `PreToolUse` hook. It blocks selected direct test, build, install, and Docker commands and tells the agent to retry as `wx <command>`; it does not silently mutate commands.
-* **RTK (prototype, post-capture filter):** `wx` runs your command once and saves the raw output first. If `rtk` is installed, the mode allows it, and the command has a `pipe` entry in `command_policy.rtk_commands` (today `cargo test`, `pytest`, `go test`, `go build`, `tsc`, `vitest`), `wx` runs `rtk pipe -f <filter>` on the saved stdout. It shows the RTK output only if it is smaller and keeps every error and warning line of the raw output. Otherwise it shows the raw output and records why in `.ai-context/session.jsonl`. RTK never re-runs your command, `rtk init` is never run, and protected profiles never use RTK. Other RTK commands are recognized or refused in the config, not enabled. This is not support for RTK's whole command surface. If RTK has installed its own command hook, `workflow doctor` warns, because hooked commands skip `wx` capture. Only byte counts are recorded, and no savings claim is made for RTK.
-* **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools. MemStack support is legacy and under review.
-* **Caveman:** The controller exports a compatibility variable, disabled by the current profiles; no automatic invocation is implemented.
-
-There is no universal interception layer. Commands run directly remain outside `wx` unless a separately configured hook or host integration enforces wrapper usage. The included Claude Code hook is an example for that host only, not proof that other agents, IDEs, terminals, or MCP clients will route commands through `wx`.
-
-## Controlling Changes (Validation Matrix)
-
-`docs/VALIDATION_MATRIX.md` records validation evidence for `wx` behavior. It becomes the required record for every mode or policy change once external tools are integrated and measurable.
-
-The ledger includes paired raw/visible/emitted byte measurements for deterministic fixtures. These measurements validate the wrapper behavior but do not prove tokenizer-measured or universal savings for the controller as a whole.
-
-Run the WSL2/Ubuntu benchmark from the repository root:
-
-```bash
-bash benchmarks/run-benchmark.sh
-```
-
-To retain its copy-ready Markdown summary:
-
-```bash
-bash benchmarks/run-benchmark.sh > /tmp/token-controller-benchmark.md
-```
-
-The benchmark compares each fixture through a normal shell and through `wx`, includes the raw-log pointer in emitted-byte totals, and verifies that failure, security, and database evidence stays lossless. See [`benchmarks/README.md`](benchmarks/README.md) for metric definitions.
-
-When testing a change, you must record:
-
-1. The target scenario and the active profile.
-2. The exact commands executed (e.g., `wx build`).
-3. Which optional tools were active versus missing.
-4. The measured raw, visible-command, and total emitted byte counts.
-5. Any separately measured tokenizer counts, including the tokenizer and version; byte reduction alone is not token reduction.
-6. The pass/fail result indicating whether critical evidence, such as a stack trace, was preserved.
-
-## Session reporting and reset
-
-Summarize the current project's `.ai-context/session.jsonl` measurements:
-
-```bash
-workflow report
-```
-
-Archive the current JSONL session and start a new empty session:
-
-```bash
-workflow reset-session
-```
-
-Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is stored under `.ai-context/archive/`.
-
-## Limitations
-
-* Savings depend on command coverage. Token Controller measures only commands run through `wx`; direct commands are unchanged unless an opt-in hook forces a retry through `wx`.
-* Compression is deterministic exact-repeat collapsing, not semantic or AI-generated summarization. Non-repetitive successful output may not become smaller.
-* The mandatory raw-log pointer adds visible bytes. Short or protected commands can therefore emit more bytes than the original command.
-* Reported percentages are byte reductions derived from `.ai-context/session.jsonl`, not universal model-token, latency, quality, or cost guarantees.
-* Raw logs are retained intentionally and may contain sensitive command output. Protect `.ai-context/` appropriately and remove logs only through an explicit user-controlled process.
-* The Claude Code hook is an optional example. It recognizes a conservative command set, does not parse every nested shell form, and does not cover other hosts automatically.
+Optional: a Claude Code hook example that tells the agent to retry selected direct test/build commands as `wx <command>` is in [integrations/claude-code/README.md](integrations/claude-code/README.md). It is an example, not installed behavior.
 
 ## Useful commands
 
-| Command                                       | Purpose                                                                                                                                                                |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workflow init`                             | Create or safely extend the current project's`AGENTS.md`                                                                                                             |
-| `workflow setup`                            | Configure optional global editor instructions                                                                                                                          |
-| `workflow <mode>`                           | Select a context mode                                                                                                                                                  |
-| `workflow status`                           | Show the active mode and policy (`--json` for tools)                                                                                                                 |
-| `workflow doctor`                           | Read-only check of settings, instruction files, and tools (`--json` available)                                                                                       |
-| `wx <command>`                              | Capture, preserve, optionally compress, and measure output                                                                                                             |
-| `workflow report`                           | Summarize command, byte, reduction, and failure counts (`--json` for tools, `--project <dir>`)                                                                     |
-| `workflow reset-session`                    | Archive session metadata without deleting raw logs                                                                                                                     |
-| `workflow off`                              | Select the off policy                                                                                                                                                  |
-| `workflow help`                             | List available commands and modes                                                                                                                                      |
-| `workflow modes`                            | List modes and aliases from the settings file (`--json` for tools)                                                                                                   |
-| `workflow version`                          | Show the CLI version and the JSON schema numbers (`--json` for tools; also `--version`)                                                                            |
-| `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes`active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
+| Command                                       | Purpose                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `workflow init`                             | Create or safely extend the current project's`AGENTS.md`                           |
+| `workflow <mode>`                           | Select a context mode                                                                |
+| `workflow status`                           | Show the active mode and policy (`--json` for tools)                               |
+| `workflow doctor`                           | Read-only check of settings, instruction files, and tools (`--json`)               |
+| `wx <command>`                              | Capture, preserve, optionally shorten, and measure output                            |
+| `workflow report`                           | Summarize commands, bytes, reduction, and failures (`--json`, `--project <dir>`) |
+| `workflow reset-session`                    | Archive session metadata without deleting raw logs                                   |
+| `workflow leanctx status`                   | Show whether the LeanCTX adapter is allowed, and why not (`--json`)                |
+| `workflow leanctx read-exact <file>`        | Print a file through LeanCTX only if it equals the file byte for byte                |
+| `workflow modes`                            | List modes and aliases (`--json`)                                                  |
+| `workflow version`                          | Show the CLI version and JSON schema numbers (`--json`)                            |
+| `workflow setup`                            | Optional global editor instructions                                                  |
+| `workflow off`                              | Turn optional optimization off                                                       |
+| `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. Example:`status --json`            |
 
-JSON output compatibility (the rule is written in `scripts/lib/versions.sh`):
+## Supported environment and limits
 
-* Each JSON output has its own `schema_version`. `workflow version --json` lists all of them.
-* Adding a field does not change the number. A consumer must ignore fields it does not know.
-* Renaming or removing a field, or changing its type or meaning, bumps that number. A consumer checks the number it needs and refuses any other.
-* `cli_version` is for people and logs. It is changed by hand and is not used to decide compatibility.
+* **Tested only on WSL 2 with Ubuntu** (24.04, Bash 5.2, `jq` 1.8), with VS Code connected to the same distro. Native Windows, WSL 1, macOS, native Linux, Dev Containers, SSH remotes, and Codespaces are not verified.
+* Run `workflow` in a WSL Bash terminal. Keep the controller and your projects in the Linux filesystem (for example `~/projects`), not under `/mnt/c`. Keep shell scripts in LF format. Each WSL distro has its own home and its own `active_mode.env`.
+* The `workflow` alias is added to `~/.bashrc`. Other shells are not documented or tested.
+* Savings depend on command coverage. Only commands run through `wx` are captured. There is no universal interception layer.
+* Small outputs can get bigger, because of the raw-log pointer. Reported numbers are bytes, not model tokens, latency, or cost.
+* Raw logs are kept on purpose and may contain secrets. Protect `.ai-context/`. Add it to `.gitignore`.
+* Policy depends on agent compliance. The controller cannot force an agent to follow a mode.
+* Known open items are listed in [docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md).
 
-## Repository layout
+## Uninstall
 
-```text
-token-controller/
-├── AGENTS.md                      # short development rules for this repository
-├── README.md
-├── benchmarks/                    # wx byte-reduction benchmark and fixtures
-├── config/
-│   └── workflow_settings.json     # source of mode policy
-├── docs/
-│   ├── MODE_SWITCHER_AND_ORCHESTRATOR_PLAN.md
-│   ├── WORKFLOW_DOCTOR_DESIGN.md
-│   ├── EXTENSION_ALIGNMENT_DESIGN.md
-│   ├── WX_DETERMINISTIC_WRAPPER_DESIGN.md
-│   ├── USER_SETTINGS_AND_AGENT_CONFIG.md
-│   ├── TECHNICAL_DEBT.md
-│   ├── VALIDATION_MATRIX.md
-│   ├── integrations/              # RTK.md (prototype in wx), CAVEMAN.md (design only)
-│   ├── DRAFTS/                    # non-directive drafts
-│   └── OLD/                       # archived material
-├── extensions/
-│   └── vscode/                    # VS Code status-bar extension (TypeScript)
-├── integrations/                  # opt-in examples: claude-code/, MCP template
-├── prompts/
-│   └── vscode-agent-prompts.md
-├── scripts/
-│   ├── workflow.sh                # sourced: mode switching and commands
-│   ├── workflow-cli.sh            # run, not sourced: entry point for tools and the extension
-│   ├── doctor.sh                  # read-only checks (workflow doctor)
-│   ├── check-tools.sh
-│   ├── show-optional-tools.sh  # prints optional install commands only
-│   └── lib/
-│       ├── wx.sh
-│       ├── wx-compress.sh
-│       ├── versions.sh            # CLI version and JSON schema numbers
-│       └── wx-session.sh
-├── templates/
-│   └── AGENTS_base.md             # block added by workflow init
-└── tests/                         # shell tests and fixtures
+```bash
+# 1. Remove the alias line "alias workflow=..." from ~/.bashrc, then reload
+nano ~/.bashrc && source ~/.bashrc
+# 2. Remove the active-mode cache
+rm -rf ~/.config/ai-workflow
+# 3. Remove the AGENTS.md rules from a project: delete the block between the
+#    "ai-workflow-controller:start" and "ai-workflow-controller:end" comments in AGENTS.md
+# 4. Remove the VS Code extension from the Extensions view (in the WSL window)
+# 5. Only if you ran "workflow setup": remove the Token Controller rules from the global files it edited
+#    (for example ~/.claude/CLAUDE.md or ~/.copilot/instructions/ai-workflow.instructions.md)
+# 6. Delete the clone
+rm -rf ~/projects/token-controller
 ```
 
-## Development checks
+Raw logs stay in each project's `.ai-context/` until you delete that folder.
 
-The controller itself needs only Bash and `jq` for its basic checks:
+## Development
+
+The controller itself needs only Bash and `jq`:
 
 ```bash
 bash -n scripts/workflow.sh
@@ -546,24 +331,43 @@ jq . config/workflow_settings.json >/dev/null
 bash tests/wx-wrapper.test.sh
 bash tests/workflow-session.test.sh
 bash tests/doctor.test.sh
+bash tests/install.test.sh
+AICONTEXT_TEST_SKIP_REAL_LEANCTX=1 bash tests/leanctx.test.sh
 bash benchmarks/run-benchmark.sh
 ```
 
-GitHub Actions runs the Bash checks, the three test files, and the benchmark on pull requests to `main` and on pushes to `main` (`.github/workflows/cli-ci.yml`). It installs no optional tool. The tests use the fake tools in `tests/fixtures`.
+GitHub Actions runs these checks on every branch push and on pull requests to `main` (`.github/workflows/cli-ci.yml`). It installs no optional tool and uses fake tools from `tests/fixtures`. Releasing: [docs/RELEASE.md](docs/RELEASE.md). Validation results: [docs/VALIDATION_MATRIX.md](docs/VALIDATION_MATRIX.md), and how the benchmarks work: [benchmarks/README.md](benchmarks/README.md).
 
-Validate the optional Claude Code example separately:
-
-```bash
-bash -n integrations/claude-code/hooks/pretooluse-bash-policy.sh
-jq . integrations/claude-code/settings.example.json >/dev/null
-```
-
-Build and package the VS Code extension:
+Build the VS Code extension:
 
 ```bash
 cd extensions/vscode
-npm run compile
+npm ci
+npm run package
 npx vsce package
 ```
 
-Detailed validation results live in `docs/VALIDATION_MATRIX.md`.
+### Repository layout
+
+```text
+token-controller/
+├── AGENTS.md                      # short development rules for this repository
+├── README.md, RELEASE_NOTES.md
+├── benchmarks/                    # byte-reduction benchmarks and fixtures
+├── config/workflow_settings.json  # source of mode policy
+├── docs/                          # design notes, RELEASE.md, TECHNICAL_DEBT.md, VALIDATION_MATRIX.md, integrations/
+├── extensions/vscode/             # VS Code status-bar extension (TypeScript)
+├── integrations/                  # opt-in examples (Claude Code hook, MCP template)
+├── scripts/
+│   ├── install-wsl.sh             # WSL setup: prerequisites and the workflow alias, no optional tool
+│   ├── show-optional-tools.sh     # prints the optional tools' install commands
+│   ├── install-tools/             # confirm-first helpers: rtk.sh, leanctx.sh, caveman.sh
+│   ├── check-tools.sh             # shows which tools are installed
+│   ├── workflow.sh                # sourced: mode switching and commands
+│   ├── workflow-cli.sh            # run, not sourced: entry point for tools and the extension
+│   ├── leanctx-cli.sh             # the LeanCTX adapter (workflow leanctx)
+│   ├── doctor.sh                  # read-only checks (workflow doctor)
+│   └── lib/                       # wx, compression, session, version code
+├── templates/AGENTS_base.md       # block added by workflow init
+└── tests/                         # shell tests and fixtures
+```

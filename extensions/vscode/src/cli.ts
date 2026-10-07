@@ -347,6 +347,28 @@ export class WorkflowCli {
         return parseLeanctxStatus(stdout);
     }
 
+    /**
+     * Run "workflow init" in `folder` (it writes AGENTS.md in the current directory, so the process must start there).
+     * The caller checks Workspace Trust and asks the user first. See initializeProject in setup.ts.
+     */
+    async initProject(folder: string): Promise<string> {
+        if (typeof folder !== 'string' || !path.isAbsolute(folder) || folder.includes('\0')) {
+            throw new CliError('The project folder must be an absolute path.', 'failed');
+        }
+        const { stdout } = await runCli(this.cliPath, ['init'], 30000, this.env, folder);
+        return stdout.trim().slice(0, 2000);
+    }
+
+    /** Run check-tools.sh (beside the CLI). It only reports which tools are installed. A missing optional tool is not a failure. */
+    async checkTools(): Promise<string> {
+        const script = path.join(path.dirname(this.cliPath), 'check-tools.sh');
+        if (!fs.existsSync(script)) {
+            throw new CliError(`check-tools.sh was not found beside the CLI (${script}). Update the controller.`, 'unavailable');
+        }
+        const { stdout } = await runCli(script, [], 20000, this.env);
+        return stdout.slice(0, 20000);
+    }
+
     /** Switch the active mode. The id must be a mode from modes(). The CLI writes active_mode.env. */
     async setMode(id: string): Promise<void> {
         if (!isValidModeId(id)) {

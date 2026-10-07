@@ -1,21 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Path: scripts/show-optional-tools.sh
+# Usage: bash scripts/show-optional-tools.sh [--print-only]
+#
+# Installs the basic WSL/Ubuntu prerequisites (apt: jq, git, curl, ca-certificates, python3, pipx, build tools),
+# then prints the install commands of the optional tools for you to read.
+#   --print-only   do not run apt. Only print the commands.
+# It never installs or runs an optional tool: not RTK, LeanCTX, Headroom, Caveman, ccusage, Claude Code, or MemStack.
+# It never runs "rtk init", "lean-ctx setup", "lean-ctx wrap", or "lean-ctx init", and it never installs a hook.
+# (Those commands are shown below only as text, with the reason they are not recommended.)
+# For the basic setup without the optional-tool list, use scripts/install-wsl.sh.
+# To install one optional tool with a confirmation step: scripts/install-tools/rtk.sh, leanctx.sh, or caveman.sh.
+
+_PRINT_ONLY=false
+case "${1:-}" in
+  --print-only) _PRINT_ONLY=true ;;
+  '') ;;
+  -h|--help) sed -n '4,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "Error: unknown option: $1" >&2; exit 2 ;;
+esac
+
 cat <<'INTRO'
-This script installs only basic WSL/Ubuntu prerequisites automatically.
-It then prints optional commands for RTK, Headroom, LeanCTX, Caveman, ccusage, Claude Code, and MemStack (legacy).
-No optional tool command is run automatically.
-Review each optional command before running it.
+Optional tools for Token Controller
+===================================
+Token Controller works without any of them. If one is missing, it falls back to raw output.
+This script does NOT install them. It prints the commands. Read each one before you run it.
 INTRO
 
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y jq git curl ca-certificates bash coreutils python3 python3-pip python3-venv pipx build-essential
+if [ "$_PRINT_ONLY" = true ]; then
+  echo "(--print-only: apt is not run.)"
+else
+  echo "Installing the basic prerequisites with apt (no optional tool)..."
+  _sudo=""
+  [ "$(id -u)" -eq 0 ] || _sudo="sudo"
+  $_sudo apt-get update
+  $_sudo apt-get install -y jq git curl ca-certificates bash coreutils python3 python3-pip python3-venv pipx build-essential
+fi
 
 cat <<'TOOLS'
 
-Optional tool commands
-======================
+Optional tool commands (text only, nothing below is run by this script)
+=======================================================================
 
 RTK:
   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
@@ -42,7 +68,10 @@ LeanCTX (choose one installation method; do not run both):
   cargo install lean-ctx
 
   # OR use the universal installer when Rust is not installed.
-  curl -fsSL https://leanctx.com/install.sh | sh
+  # WARNING: by default the upstream installer runs "lean-ctx onboard" (it edits your agents' MCP config) and appends to ~/.bashrc.
+  # Turn both off:
+  curl -fsSL https://leanctx.com/install.sh | LEAN_CTX_NO_ONBOARD=1 LEAN_CTX_NO_PATH_FIX=1 sh
+  # (scripts/install-tools/leanctx.sh does this for you, after it asks.)
 
   source ~/.bashrc
   lean-ctx doctor
