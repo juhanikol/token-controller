@@ -50,21 +50,37 @@ _wx_rtk_filter_denied() {
   return 1
 }
 
-# Print the RTK filter for a command (argv prefix match against command_policy.rtk_filters).
-# Prints nothing and returns 1 when the command has no filter, or the filter is denied or not a plain name.
-_wx_rtk_filter_for_command() {
+# RTK classes. RTK is a post-capture terminal-output filter. wx runs the original command once, saves the raw
+# output, and only for a "pipe" entry runs: rtk pipe -f <filter> on the captured stdout.
+# One entry per command prefix in command_policy.rtk_commands: {"match": "cargo test", "class": "pipe", "filter": "cargo-test"}.
+#   pipe             use the filter named in "filter" (needs command_policy.rtk_class_enabled.pipe = true)
+#   recognized-only  known to RTK, never used by wx (smart file reading is deferred)
+#   never            never use RTK for this command
+#   rerun            would run the command again through RTK. Rejected: no code path exists, and it is never used.
+# Resolution is strict. The longest matching prefix wins (the first one on a tie). An unknown, empty, or misspelled
+# class, "rerun", a pipe class that is not enabled, and a pipe entry with a missing, malformed, or denied filter
+# all resolve to "never". A command with no entry has no class (return 1) and its output stays raw.
+# Prints: <class> <unit separator> <filter>. The filter is empty unless the class is pipe.
+_wx_rtk_lookup() {
   local _WX_SETTINGS_FILE="$1"
   shift
 
   local -a _WX_COMMAND_ARGV=("$@")
   local -a _WX_KEY_WORDS
+  local _WX_US=$'\x1f'
   local _WX_KEY
+  local _WX_CLASS
   local _WX_FILTER
+  local _WX_PIPE_ENABLED
   local _WX_INDEX
   local _WX_MATCH
+  local _WX_BEST_LEN=0
+  local _WX_BEST_CLASS=""
+  local _WX_BEST_FILTER=""
+  local _WX_BEST_PIPE=false
 
-  while IFS=$'\t' read -r _WX_KEY _WX_FILTER; do
-    [ -n "$_WX_KEY" ] && [ -n "$_WX_FILTER" ] || continue
+  while IFS="$_WX_US" read -r _WX_KEY _WX_CLASS _WX_FILTER _WX_PIPE_ENABLED; do
+    [ -n "$_WX_KEY" ] || continue
     read -r -a _WX_KEY_WORDS <<< "$_WX_KEY"
     [ "${#_WX_KEY_WORDS[@]}" -gt 0 ] || continue
     [ "${#_WX_COMMAND_ARGV[@]}" -ge "${#_WX_KEY_WORDS[@]}" ] || continue
@@ -76,16 +92,61 @@ _wx_rtk_filter_for_command() {
         break
       fi
     done
-    if [ "$_WX_MATCH" = true ]; then
-      case "$_WX_FILTER" in
-        *[!a-z0-9-]*) return 1 ;;
-      esac
-      _wx_rtk_filter_denied "$_WX_FILTER" && return 1
-      printf '%s\n' "$_WX_FILTER"
-      return 0
+    if [ "$_WX_MATCH" = true ] && [ "${#_WX_KEY_WORDS[@]}" -gt "$_WX_BEST_LEN" ]; then
+      _WX_BEST_LEN="${#_WX_KEY_WORDS[@]}"
+      _WX_BEST_CLASS="$_WX_CLASS"
+      _WX_BEST_FILTER="$_WX_FILTER"
+      _WX_BEST_PIPE="$_WX_PIPE_ENABLED"
     fi
-  done < <(jq -r '(.command_policy.rtk_filters // {}) | to_entries[] | "\(.key)\t\(.value)"' "$_WX_SETTINGS_FILE" 2>/dev/null)
+  done < <(jq -r '
+    (.command_policy.rtk_class_enabled.pipe == true) as $pipe_enabled
+    | (.command_policy.rtk_commands // [])
+    | (if type == "array" then .[] else empty end)
+    | select(type == "object")
+    | [(.match | strings // ""), (.class | strings // ""), (.filter | strings // ""), ($pipe_enabled | tostring)]
+    | join("\u001f")' "$_WX_SETTINGS_FILE" 2>/dev/null)
 
+  [ "$_WX_BEST_LEN" -gt 0 ] || return 1
+
+  case "$_WX_BEST_CLASS" in
+    pipe)
+      case "$_WX_BEST_FILTER" in
+        ''|*[!a-z0-9-]*) printf 'never%s\n' "$_WX_US"; return 0 ;;
+      esac
+      if [ "$_WX_BEST_PIPE" = true ] && ! _wx_rtk_filter_denied "$_WX_BEST_FILTER"; then
+        printf 'pipe%s%s\n' "$_WX_US" "$_WX_BEST_FILTER"
+      else
+        printf 'never%s\n' "$_WX_US"
+      fi
+      ;;
+    recognized-only)
+      printf 'recognized-only%s\n' "$_WX_US"
+      ;;
+    *)
+      # never, rerun, and anything unknown
+      printf 'never%s\n' "$_WX_US"
+      ;;
+  esac
+  return 0
+}
+
+# Print the class of a command (pipe, recognized-only, never). Prints nothing when the command has no entry.
+_wx_rtk_class_for_command() {
+  local _WX_RESULT
+  _WX_RESULT="$(_wx_rtk_lookup "$@")" || return 1
+  printf '%s\n' "${_WX_RESULT%%$'\x1f'*}"
+}
+
+# Print the RTK filter for a command. Only a resolved "pipe" class gives a filter. Otherwise prints nothing, returns 1.
+_wx_rtk_filter_for_command() {
+  local _WX_RESULT
+  _WX_RESULT="$(_wx_rtk_lookup "$@")" || return 1
+  case "$_WX_RESULT" in
+    pipe$'\x1f'?*)
+      printf '%s\n' "${_WX_RESULT#pipe$'\x1f'}"
+      return 0
+      ;;
+  esac
   return 1
 }
 
@@ -271,4 +332,4 @@ _wx_compress_exact_repeats() {
   ' "$_WX_INPUT_FILE" > "$_WX_OUTPUT_FILE"
 }
 
-export -f _wx_command_matches_policy _wx_rtk_enabled _wx_rtk_filter_denied _wx_rtk_filter_for_command _wx_evidence_guard _wx_try_rtk _wx_select_output_policy _wx_compress_exact_repeats
+export -f _wx_command_matches_policy _wx_rtk_enabled _wx_rtk_filter_denied _wx_rtk_lookup _wx_rtk_class_for_command _wx_rtk_filter_for_command _wx_evidence_guard _wx_try_rtk _wx_select_output_policy _wx_compress_exact_repeats

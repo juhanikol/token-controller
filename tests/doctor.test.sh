@@ -220,6 +220,34 @@ printf 'not json\n' > "$_PROJECT/.ai-context/session.jsonl"
 rm -rf "$_PROJECT/.ai-context" "$_CAVE"
 printf 'export AICONTEXT_PROFILE="code"\n' > "$AICONTEXT_CONFIG_DIR/active_mode.env"
 
+# 4h. RTK class config. RTK is a post-capture filter. Anything unsupported in the config resolves to never,
+# and doctor says so. Doctor only reads the settings file.
+_BASE_SETTINGS="$_REPO_ROOT/config/workflow_settings.json"
+rtk_cfg() { # jq filter ("." for none). Prints "id:severity" for every RTK config finding, sorted.
+  jq "$1" "$_BASE_SETTINGS" > "$_TEST_ROOT/rtk-cfg.json"
+  AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -r '[.findings[] | select(.id | startswith("rtk.config")) | "\(.id):\(.severity)"] | sort | join(",")'
+}
+[ "$(rtk_cfg .)" = "rtk.config:ok" ] || fail "the repository RTK config should be ok: $(rtk_cfg .)"
+AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "rtk.config") | .message] | .[0] | contains("6 pipe") and contains("5 recognized-only") and contains("7 never") and contains("Rerun is not used")' >/dev/null || fail "RTK config summary is wrong"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "x", "class": "turbo", "filter": "x"}]')" = "rtk.config_invalid_class:warn" ] || fail "an unknown class must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "x", "class": "PIPE", "filter": "x"}]')" = "rtk.config_invalid_class:warn" ] || fail "a class with a different case must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "ls", "class": "rerun"}]')" = "rtk.config_rerun:warn" ] || fail "a rerun entry must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_class_enabled.rerun = true')" = "rtk.config_rerun:warn" ] || fail "rerun enabled must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "y", "class": "pipe", "filter": "grep"}]')" = "rtk.config_bad_filter:warn" ] || fail "a denied filter must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "y", "class": "pipe", "filter": "Bad Filter"}]')" = "rtk.config_bad_filter:warn" ] || fail "a malformed filter must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "y", "class": "pipe"}]')" = "rtk.config_bad_filter:warn" ] || fail "a pipe entry without a filter must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_filters = {"pytest": "pytest"}')" = "rtk.config_legacy:warn" ] || fail "the old rtk_filters key must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_class_enabled.pipe = false')" = "rtk.config:ok,rtk.config_pipe_disabled:info" ] || fail "a disabled pipe class must be an info: $(rtk_cfg '.command_policy.rtk_class_enabled.pipe = false')"
+[ "$(rtk_cfg 'del(.command_policy.rtk_commands)')" = "rtk.config_no_commands:info" ] || fail "no rtk_commands must be an info"
+[ "$(rtk_cfg '.command_policy.rtk_commands = "pytest"')" = "rtk.config_bad_commands:warn" ] || fail "a rtk_commands value that is not a list must be a warn: $(rtk_cfg '.command_policy.rtk_commands = "pytest"')"
+[ "$(rtk_cfg '.command_policy.rtk_commands = {"match": "pytest", "class": "pipe", "filter": "pytest"}')" = "rtk.config_bad_commands:warn" ] || fail "an object instead of a list must be a warn"
+[ "$(rtk_cfg '.command_policy.rtk_commands += ["pytest", null]')" = "rtk.config_skipped_entries:warn" ] || fail "entries that are not objects must be a warn: $(rtk_cfg '.command_policy.rtk_commands += ["pytest", null]')"
+# Warnings do not change the exit code, and doctor does not change the settings file.
+AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --project "$_PROJECT" >/dev/null; [ "$?" -eq 0 ] || fail "RTK config warnings must not change the exit code"
+_RTK_CFG_SUM="$(sha256sum "$_TEST_ROOT/rtk-cfg.json")"
+AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" >/dev/null
+[ "$_RTK_CFG_SUM" = "$(sha256sum "$_TEST_ROOT/rtk-cfg.json")" ] || fail "doctor changed the settings file"
+
 # 4e. Via workflow.sh, doctor says it can create the config directory. Direct run does not.
 AICONTEXT_DOCTOR_VIA_WORKFLOW=1 bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[].id] | index("doctor.config_dir") != null' >/dev/null || fail "missing side effect note via workflow.sh"
 bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[].id] | index("doctor.config_dir") == null' >/dev/null || fail "direct run should not show the note"

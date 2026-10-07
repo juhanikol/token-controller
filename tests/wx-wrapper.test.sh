@@ -178,7 +178,7 @@ for _WX_PAIR in 'pytest|pytest' 'cargo test|cargo-test' 'go test|go-test' 'go bu
 done
 # Raw capture was complete when RTK started, and it is byte-identical to the command output.
 rtk_run raw-first pytest
-grep -Eq '^stdin=([0-9]+) raw=\1$' "$FAKE_RTK_RAW_LOG" || fail "raw capture was not complete when RTK ran: $(cat "$FAKE_RTK_RAW_LOG")"
+grep -Eq '^stdin=([0-9]+) raw=\1 exit=0$' "$FAKE_RTK_RAW_LOG" || fail "raw capture and exit code were not on disk when RTK ran: $(cat "$FAKE_RTK_RAW_LOG")"
 _WX_RAW_PATH="$(rtk_last | jq -r '.stdout.path')"
 cmp -s "$_WX_RAW_PATH" "$_WX_TEST_ROOT/direct.pytest.out" || fail 'stdout.raw differs from the command output'
 [ "$(rtk_last | jq -r '.visible.stdout_path')" != "$_WX_RAW_PATH" ] || fail 'visible path should differ from raw when RTK applied'
@@ -237,7 +237,7 @@ for _WX_EXCLUDED in 'grep -c PASSED direct-file' 'find . -maxdepth 0' 'git statu
   rtk_last | jq -e '.compressor == null and .filter == null' >/dev/null || fail "excluded command was labelled: $_WX_EXCLUDED"
 done
 # A config that maps an excluded filter does not enable it.
-jq '.command_policy.rtk_filters += {"grep": "grep", "git status": "git-status", "find": "find"}' "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/denied-settings.json"
+jq '.command_policy.rtk_commands = [{"match": "grep", "class": "pipe", "filter": "grep"}, {"match": "git status", "class": "pipe", "filter": "git-status"}, {"match": "find", "class": "pipe", "filter": "find"}]' "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/denied-settings.json"
 for _WX_EXCLUDED in 'grep -c PASSED direct-file' 'git status' 'find . -maxdepth 0'; do
   # shellcheck disable=SC2086
   AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/denied-settings.json" rtk_run denied $_WX_EXCLUDED
@@ -369,6 +369,150 @@ FIXTURE_EXIT=1 rtk_run cave-debug pytest
 if grep -Fq 'Caveman' "$_WX_TEST_ROOT/rtk-cave-debug.stderr"; then fail 'the reminder was printed in debug (Caveman is blocked there)'; fi
 rtk_last | jq -e '.caveman_mode == "off"' >/dev/null || fail 'debug should record Caveman off'
 source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+
+# 3g. RTK classes in command_policy.rtk_commands. RTK is a post-capture filter, so wx runs the command once.
+# Only a resolved "pipe" class uses RTK. Unknown or unsupported classes resolve to never (raw output).
+cp "$_WX_TEST_ROOT/direct.pytest.out" direct-file
+class_run() { # case name, settings jq filter, then the command. Prints nothing. Sets _WX_RUN_EXIT.
+  local _WX_CNAME="$1" _WX_CFILTER="$2"
+  shift 2
+  jq "$_WX_CFILTER" "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/class-$_WX_CNAME.json"
+  AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/class-$_WX_CNAME.json" rtk_run "class-$_WX_CNAME" "$@"
+}
+class_expect() { # expected rtk_class (or null), expected output_policy
+  rtk_last | jq -e --arg c "$1" --arg p "$2" '(.rtk_class // "null") == $c and .output_policy == $p and .compressor == null and .filter == null and .visible.stdout_bytes == .raw.stdout_bytes' >/dev/null || fail "class record is invalid (want class $1, policy $2): $(rtk_last)"
+}
+# recognized-only: cat, head, tail (rtk read) are known and never used.
+for _WX_CMD in 'cat direct-file' 'head -n 3 direct-file' 'tail -n 3 direct-file'; do
+  # shellcheck disable=SC2086
+  rtk_run recognized $_WX_CMD
+  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for a recognized-only command: $_WX_CMD"
+  class_expect recognized-only raw-command-not-eligible
+  # shellcheck disable=SC2086
+  $_WX_CMD > "$_WX_TEST_ROOT/direct.recognized.out"
+  cmp -s "$_WX_TEST_ROOT/rtk-recognized.stdout" "$_WX_TEST_ROOT/direct.recognized.out" || fail "output of a recognized-only command was changed: $_WX_CMD"
+done
+# rtk read / rtk smart run as ordinary commands. wx only classifies them. Its own RTK calls (--version, pipe) must not appear.
+for _WX_RTKCMD in 'read direct-file' 'smart direct-file'; do
+  FAKE_RTK_LOG="$_WX_TEST_ROOT/rtk-usercmd.log"
+  export FAKE_RTK_LOG
+  : > "$FAKE_RTK_LOG"
+  # shellcheck disable=SC2086
+  wx rtk $_WX_RTKCMD >/dev/null 2>&1
+  [ "$(cat "$FAKE_RTK_LOG")" = "$_WX_RTKCMD" ] || fail "wx called RTK itself for: rtk $_WX_RTKCMD ($(cat "$FAKE_RTK_LOG"))"
+  rtk_last | jq -e '.rtk_class == "recognized-only" and .compressor == null and .filter == null' >/dev/null || fail "rtk $_WX_RTKCMD is not recognized-only: $(rtk_last)"
+done
+# never: explicit entries.
+for _WX_CMD in 'grep -c PASSED direct-file' 'git status'; do
+  # shellcheck disable=SC2086
+  rtk_run never $_WX_CMD
+  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for a never command: $_WX_CMD"
+  class_expect never raw-command-not-eligible
+done
+# No entry: no class, raw output.
+rtk_run noentry ls
+[ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for a command with no entry'
+class_expect null raw-command-not-eligible
+# Unknown, empty, or misspelled classes, a class that is not a string, and rerun all resolve to never.
+for _WX_CLASS in turbo PIPE Pipe '' ' pipe' 'pipe ' 'pipe,never' rerun direct rtk recognized_only; do
+  jq --arg v "$_WX_CLASS" '.command_policy.rtk_commands = [{"match": "pytest", "class": $v, "filter": "pytest"}]' "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/class-bad.json"
+  AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/class-bad.json" rtk_run class-bad pytest
+  [ "$_WX_RUN_EXIT" -eq 0 ] || fail "pytest exit code changed with class '$_WX_CLASS'"
+  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for the unsupported class '$_WX_CLASS'"
+  class_expect never raw-command-not-eligible
+  cmp -s "$_WX_TEST_ROOT/rtk-class-bad.stdout" "$_WX_TEST_ROOT/direct.pytest.out" || fail "output changed for the unsupported class '$_WX_CLASS'"
+done
+for _WX_BAD in '[{"match": "pytest", "filter": "pytest"}]' '[{"match": "pytest", "class": 5, "filter": "pytest"}]' '[{"match": "pytest", "class": null, "filter": "pytest"}]' '["pytest"]' '[null]' '{"match": "pytest", "class": "pipe", "filter": "pytest"}' '"pytest"' '7'; do
+  class_run shape ".command_policy.rtk_commands = $_WX_BAD" pytest
+  [ "$_WX_RUN_EXIT" -eq 0 ] || fail "pytest exit code changed for the config shape $_WX_BAD"
+  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called for the config shape $_WX_BAD"
+  rtk_last | jq -e '.compressor == null and .filter == null and .output_policy == "raw-command-not-eligible"' >/dev/null || fail "config shape $_WX_BAD was not raw: $(rtk_last)"
+done
+class_run nokey 'del(.command_policy.rtk_commands)' pytest
+[ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called without command_policy.rtk_commands'
+class_expect null raw-command-not-eligible
+class_run legacy '.command_policy.rtk_filters = {"pytest": "pytest"} | del(.command_policy.rtk_commands)' pytest
+[ "$(rtk_calls)" -eq 0 ] || fail 'the old rtk_filters key was still used'
+# rerun is rejected even when it is enabled in the config. There is no code for it.
+class_run rerun '.command_policy.rtk_class_enabled.rerun = true | .command_policy.rtk_commands += [{"match": "ls", "class": "rerun", "rtk": "ls"}, {"match": "pytest", "class": "rerun"}]' ls
+[ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for a rerun entry'
+class_expect never raw-command-not-eligible
+class_run rerun2 '.command_policy.rtk_class_enabled.rerun = true | .command_policy.rtk_commands = [{"match": "pytest", "class": "rerun"}]' pytest
+[ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for rerun on a mapped command'
+class_expect never raw-command-not-eligible
+# The pipe class must be enabled. A missing switch means disabled.
+class_run pipeoff '.command_policy.rtk_class_enabled.pipe = false' pytest
+[ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called with the pipe class disabled'
+class_expect never raw-command-not-eligible
+class_run pipemissing 'del(.command_policy.rtk_class_enabled)' pytest
+[ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called without rtk_class_enabled'
+class_expect never raw-command-not-eligible
+class_run pipestring '.command_policy.rtk_class_enabled.pipe = "true"' pytest
+[ "$(rtk_calls)" -eq 0 ] || fail 'a string "true" enabled the pipe class'
+# A pipe entry needs a plain filter name that is not denied.
+for _WX_FILTER in '' 'Py Test' 'pytest; touch PIPE_INJECTED' '$(touch PIPE_INJECTED)' 'grep' 'git-diff' 'rg'; do
+  jq --arg f "$_WX_FILTER" '.command_policy.rtk_commands = [{"match": "pytest", "class": "pipe", "filter": $f}]' "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/class-filter.json"
+  AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/class-filter.json" rtk_run class-filter pytest
+  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called with the filter '$_WX_FILTER'"
+  class_expect never raw-command-not-eligible
+done
+[ ! -e PIPE_INJECTED ] || fail 'a filter name was executed'
+class_run nofilter '.command_policy.rtk_commands = [{"match": "pytest", "class": "pipe"}]' pytest
+[ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for a pipe entry without a filter'
+# The longest matching prefix wins, in any order.
+for _WX_ORDER in '[{"match": "cargo", "class": "never"}, {"match": "cargo test", "class": "pipe", "filter": "cargo-test"}]' '[{"match": "cargo test", "class": "pipe", "filter": "cargo-test"}, {"match": "cargo", "class": "never"}]'; do
+  class_run longest ".command_policy.rtk_commands = $_WX_ORDER" cargo test
+  rtk_last | jq -e '.rtk_class == "pipe" and .compressor == "rtk" and .filter == "cargo-test"' >/dev/null || fail "the longer prefix did not win for cargo test: $(rtk_last)"
+  class_run longest2 ".command_policy.rtk_commands = $_WX_ORDER" cargo build
+  [ "$(rtk_calls)" -eq 0 ] || fail 'RTK was called for cargo build, which matches only the never entry'
+  rtk_last | jq -e '.rtk_class == "never" and .compressor == null' >/dev/null || fail "cargo build should resolve to never: $(rtk_last)"
+done
+# Protected profiles bypass RTK even when every class is enabled and pytest is a pipe command.
+jq '.command_policy.rtk_class_enabled = {"pipe": true, "rerun": true, "recognized-only": true, "never": true}' "$AICONTEXT_SETTINGS_FILE" > "$_WX_TEST_ROOT/class-all.json"
+for _WX_PROFILE in raw security db migration release; do
+  source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" "$_WX_PROFILE" >/dev/null 2>&1
+  AICONTEXT_SETTINGS_FILE="$_WX_TEST_ROOT/class-all.json" rtk_run class-protected pytest
+  [ "$(rtk_calls)" -eq 0 ] || fail "RTK was called in the $_WX_PROFILE profile with every class enabled"
+  rtk_last | jq -e '.output_policy == "raw-protected-profile" and .compressor == null and .filter == null' >/dev/null || fail "$_WX_PROFILE record is invalid with every class enabled: $(rtk_last)"
+  cmp -s "$_WX_TEST_ROOT/rtk-class-protected.stdout" "$_WX_TEST_ROOT/direct.pytest.out" || fail "$_WX_PROFILE output changed with every class enabled"
+done
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+
+# 3h. The exit code is written to the run directory right after the command ends, before RTK runs.
+FIXTURE_EXIT=3 rtk_run exitcode pytest
+[ "$_WX_RUN_EXIT" -eq 3 ] || fail 'exit code 3 was not returned'
+[ "$(cat "$(dirname "$(rtk_last | jq -r '.stdout.path')")/exit_code.raw")" = 3 ] || fail 'exit_code.raw does not hold the exit code of a failing run'
+rtk_run exitcode-ok pytest
+[ "$(cat "$(dirname "$(rtk_last | jq -r '.stdout.path')")/exit_code.raw")" = 0 ] || fail 'exit_code.raw does not hold 0 after a successful run'
+# Kill wx while RTK is running. The raw output and the exit code must already be on disk. No session record exists yet.
+_WX_KILL_DIR="$_WX_TEST_ROOT/kill-proj"
+mkdir -p "$_WX_KILL_DIR"
+export FAKE_RTK_LOG="$_WX_TEST_ROOT/rtk-kill.log" FAKE_RTK_RAW_LOG="$_WX_TEST_ROOT/rtk-kill.raw.log" FAKE_RTK_MODE=hang AICONTEXT_RTK_TIMEOUT=60
+: > "$FAKE_RTK_LOG"
+: > "$FAKE_RTK_RAW_LOG"
+setsid bash -c 'cd "$1" && wx pytest >/dev/null 2>&1' _ "$_WX_KILL_DIR" &
+_WX_KILL_PID=$!
+for _WX_WAIT in $(seq 1 60); do
+  grep -q '^pipe ' "$FAKE_RTK_LOG" 2>/dev/null && break
+  sleep 0.2
+done
+grep -q '^pipe ' "$FAKE_RTK_LOG" || fail 'the kill test never reached the RTK step'
+kill -9 -- "-$_WX_KILL_PID" 2>/dev/null
+wait "$_WX_KILL_PID" 2>/dev/null
+unset FAKE_RTK_LOG FAKE_RTK_RAW_LOG FAKE_RTK_MODE AICONTEXT_RTK_TIMEOUT
+_WX_KILL_RUN="$(ls -d "$_WX_KILL_DIR"/.ai-context/raw/*/ | head -n 1)"
+[ "$(cat "${_WX_KILL_RUN}exit_code.raw")" = 0 ] || fail 'exit_code.raw is missing after wx was killed during RTK'
+cmp -s "${_WX_KILL_RUN}stdout.raw" "$_WX_TEST_ROOT/direct.pytest.out" || fail 'stdout.raw is incomplete after wx was killed during RTK'
+[ ! -s "$_WX_KILL_DIR/.ai-context/session.jsonl" ] || fail 'a session record exists for a run that was killed'
+grep -q '^stdin=\([0-9]*\) raw=\1 exit=0$' "$_WX_TEST_ROOT/rtk-kill.raw.log" || fail "RTK did not see the raw output and the exit code: $(cat "$_WX_TEST_ROOT/rtk-kill.raw.log")"
+
+# 3i. No path runs RTK except "rtk --version" and "rtk pipe -f". There is no re-run or direct path.
+# The resolved RTK path appears in a check (-x), the version call, and the pipe call. Nothing else.
+_WX_RTK_USES="$(grep -n '"\$_WX_RESOLVED"' "$_WX_REPOSITORY_ROOT/scripts/lib/wx-compress.sh" | grep -v -e '-x "\$_WX_RESOLVED"')"
+[ "$(printf '%s\n' "$_WX_RTK_USES" | grep -c .)" -eq 2 ] || fail "wx-compress.sh runs RTK in more than the two known places: $_WX_RTK_USES"
+printf '%s\n' "$_WX_RTK_USES" | grep -q -e '--version' || fail 'the version call is missing from the RTK uses'
+printf '%s\n' "$_WX_RTK_USES" | grep -q 'pipe -f' || fail 'the pipe call is missing from the RTK uses'
+if grep -n '_WX_RESOLVED\|_WX_BIN' "$_WX_REPOSITORY_ROOT/scripts/lib/wx.sh" "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" | grep -q .; then fail 'RTK is run outside wx-compress.sh'; fi
 
 # 5. Token Controller never runs "rtk init" (or anything except --version and pipe -f <mapped filter>).
 if grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | grep -q .; then

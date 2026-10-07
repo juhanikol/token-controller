@@ -356,13 +356,104 @@
       "dotnet test",
       "cargo test"
     ],
-    "rtk_filters": {
-      "cargo test": "cargo-test",
-      "pytest": "pytest",
-      "go test": "go-test",
-      "go build": "go-build",
-      "tsc": "tsc",
-      "vitest": "vitest"
-    }
+    "rtk_class_enabled": {
+      "pipe": true,
+      "rerun": false
+    },
+    "rtk_commands": [
+      {
+        "match": "cargo test",
+        "class": "pipe",
+        "filter": "cargo-test"
+      },
+      {
+        "match": "pytest",
+        "class": "pipe",
+        "filter": "pytest"
+      },
+      {
+        "match": "go test",
+        "class": "pipe",
+        "filter": "go-test"
+      },
+      {
+        "match": "go build",
+        "class": "pipe",
+        "filter": "go-build"
+      },
+      {
+        "match": "tsc",
+        "class": "pipe",
+        "filter": "tsc"
+      },
+      {
+        "match": "vitest",
+        "class": "pipe",
+        "filter": "vitest"
+      },
+      {
+        "match": "cat",
+        "class": "recognized-only",
+        "rtk": "read",
+        "note": "Smart file reading is deferred to a LeanCTX or Headroom decision."
+      },
+      {
+        "match": "head",
+        "class": "recognized-only",
+        "rtk": "read",
+        "note": "Smart file reading is deferred to a LeanCTX or Headroom decision."
+      },
+      {
+        "match": "tail",
+        "class": "recognized-only",
+        "rtk": "read",
+        "note": "Smart file reading is deferred to a LeanCTX or Headroom decision."
+      },
+      {
+        "match": "rtk read",
+        "class": "recognized-only",
+        "note": "Smart file reading is deferred."
+      },
+      {
+        "match": "rtk smart",
+        "class": "recognized-only",
+        "note": "Summaries replace content. Deferred."
+      },
+      {
+        "match": "grep",
+        "class": "never",
+        "note": "Search output is evidence. RTK has a pipe filter, but the evidence guard is not proven for it."
+      },
+      {
+        "match": "rg",
+        "class": "never",
+        "note": "Search output is evidence."
+      },
+      {
+        "match": "find",
+        "class": "never",
+        "note": "File lists are evidence."
+      },
+      {
+        "match": "fd",
+        "class": "never",
+        "note": "File lists are evidence."
+      },
+      {
+        "match": "git status",
+        "class": "never",
+        "note": "Repository state is evidence."
+      },
+      {
+        "match": "git diff",
+        "class": "never",
+        "note": "Diffs are evidence."
+      },
+      {
+        "match": "git log",
+        "class": "never",
+        "note": "History is evidence."
+      }
+    ]
   }
 }

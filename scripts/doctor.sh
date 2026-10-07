@@ -365,6 +365,81 @@ if [ "${#_rtk_hook_paths[@]}" -gt 0 ]; then
   fi
 fi
 
+# ---------- RTK class config ----------
+# Read only. RTK is a post-capture filter: wx runs the command once, and only a "pipe" entry in
+# command_policy.rtk_commands uses it. Anything else in the config resolves to never (raw output).
+if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
+  _rtk_cfg="$(jq -r '
+    def valid: ["pipe", "rerun", "recognized-only", "never"];
+    def denied: ["grep", "rg", "find", "fd", "git-diff", "git-status", "git-log"];
+    (.command_policy // {}) as $c
+    | ((($c.rtk_commands // []) | if type == "array" then . else [] end) | map(select(type == "object"))) as $e
+    | [
+        "count\t\($e | length)\t\([$e[] | select(.class == "pipe")] | length)\t\([$e[] | select(.class == "recognized-only")] | length)\t\([$e[] | select(.class == "never")] | length)",
+        ($e[] | select((.class | type) != "string" or ((.class as $k | valid | index($k)) == null)) | "invalid_class\t\(.match // "?")\t\(.class // "?" | tostring)"),
+        ($e[] | select(.class == "rerun") | "rerun_entry\t\(.match // "?")"),
+        ($e[] | select(.class == "pipe") | select((.filter | type) != "string" or ((.filter | test("^[a-z0-9-]+$")) | not) or ((.filter as $f | denied | index($f)) != null)) | "bad_filter\t\(.match // "?")\t\(.filter // "?" | tostring)"),
+        (if $c.rtk_class_enabled.rerun == true then "rerun_enabled" else empty end),
+        (if $c.rtk_class_enabled.pipe == true then empty else "pipe_disabled" end),
+        (if $c.rtk_filters != null then "legacy_filters" else empty end),
+        (if $c.rtk_commands == null then "no_commands" else empty end),
+        (if ($c.rtk_commands != null) and (($c.rtk_commands | type) != "array") then "bad_commands" else empty end),
+        ((($c.rtk_commands // []) | if type == "array" then map(select(type != "object")) | length else 0 end) as $skipped
+          | if $skipped > 0 then "skipped_entries\t\($skipped)" else empty end)
+      ] | .[]' "$_SETTINGS_FILE" 2>/dev/null)"
+  _rtk_problems=0
+  _rtk_total=0
+  _rtk_counts=""
+  _rtk_invalid=""
+  _rtk_rerun=""
+  _rtk_badf=""
+  while IFS=$'\t' read -r _k _a _b _c _d; do
+    case "$_k" in
+      count)
+        _rtk_total="$_a"
+        _rtk_counts="$_a commands: $_b pipe, $_c recognized-only, $_d never"
+        ;;
+      bad_commands)
+        _rtk_problems=1
+        add "RTK config" warn rtk.config_bad_commands "command_policy.rtk_commands is not a list. wx never uses RTK." "$(pl "$_SETTINGS_FILE" "")" "Use a list of {match, class, filter} objects."
+        ;;
+      skipped_entries)
+        _rtk_problems=1
+        add "RTK config" warn rtk.config_skipped_entries "$_a entries in command_policy.rtk_commands are not objects and are ignored." "$(pl "$_SETTINGS_FILE" "")"
+        ;;
+      invalid_class) _rtk_invalid="${_rtk_invalid:+$_rtk_invalid, }'$_a' (class $_b)" ;;
+      rerun_entry) _rtk_rerun="${_rtk_rerun:+$_rtk_rerun, }'$_a'" ;;
+      rerun_enabled) _rtk_rerun="${_rtk_rerun:+$_rtk_rerun, }rtk_class_enabled.rerun" ;;
+      bad_filter) _rtk_badf="${_rtk_badf:+$_rtk_badf, }'$_a' (filter $_b)" ;;
+      legacy_filters)
+        _rtk_problems=1
+        add "RTK config" warn rtk.config_legacy "command_policy.rtk_filters is no longer read. Use command_policy.rtk_commands." "$(pl "$_SETTINGS_FILE" "")"
+        ;;
+      pipe_disabled)
+        add "RTK config" info rtk.config_pipe_disabled "The pipe class is not enabled (command_policy.rtk_class_enabled.pipe). wx never uses RTK." "$(pl "$_SETTINGS_FILE" "")"
+        ;;
+      no_commands)
+        add "RTK config" info rtk.config_no_commands "No command_policy.rtk_commands in the config. wx never uses RTK." "$(pl "$_SETTINGS_FILE" "")"
+        ;;
+    esac
+  done <<< "$_rtk_cfg"
+  if [ -n "$_rtk_invalid" ]; then
+    _rtk_problems=1
+    add "RTK config" warn rtk.config_invalid_class "RTK class not supported: $_rtk_invalid. It resolves to never (raw output)." "$(pl "$_SETTINGS_FILE" "")" "Use pipe, recognized-only, or never."
+  fi
+  if [ -n "$_rtk_rerun" ]; then
+    _rtk_problems=1
+    add "RTK config" warn rtk.config_rerun "Rerun is in the config: $_rtk_rerun. Re-running a command through RTK is rejected and has no code. It resolves to never." "$(pl "$_SETTINGS_FILE" "")" "Remove the rerun entries and keep rtk_class_enabled.rerun false."
+  fi
+  if [ -n "$_rtk_badf" ]; then
+    _rtk_problems=1
+    add "RTK config" warn rtk.config_bad_filter "A pipe entry has a missing, malformed, or denied filter: $_rtk_badf. It resolves to never." "$(pl "$_SETTINGS_FILE" "")" "Denied filters: grep, rg, find, fd, git-diff, git-status, git-log."
+  fi
+  if [ "$_rtk_problems" -eq 0 ] && [ "$_rtk_total" -gt 0 ]; then
+    add "RTK config" ok rtk.config "RTK $_rtk_counts. Rerun is not used." "$(pl "$_SETTINGS_FILE" "")"
+  fi
+fi
+
 # ---------- tools ----------
 # _TOOLS entry: name|found|kind|path|version   (version last, it may contain text)
 for _tool in rtk lean-ctx headroom caveman ccusage; do

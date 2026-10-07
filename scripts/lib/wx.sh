@@ -121,6 +121,7 @@ workflow_run() (
   local _WX_COMPRESSOR_VERSION=""
   local _WX_FILTER=""
   local _WX_FALLBACK_REASON=""
+  local _WX_RTK_CLASS=""
   local _WX_POLICY_AVAILABLE=true
 
   _wx_load_policy_state "$_WX_ACTIVE_ENV_FILE"
@@ -168,6 +169,11 @@ workflow_run() (
   set +e
   command "$@" >"$_WX_STDOUT_FILE" 2>"$_WX_STDERR_FILE"
   _WX_EXIT_CODE=$?
+  # The exit code goes to disk right away, before RTK or any other step. If wx is killed later, the run
+  # directory still holds the raw output and the exit code.
+  if ! printf '%s\n' "$_WX_EXIT_CODE" > "$_WX_RUN_DIR/exit_code.raw"; then
+    printf 'wx: warning: could not write the exit code file in: %s\n' "$_WX_RUN_DIR" >&2
+  fi
   _WX_COMPLETED_AT="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
 
   _WX_STDOUT_BYTES="$(stat -c '%s' "$_WX_STDOUT_FILE")"
@@ -176,6 +182,8 @@ workflow_run() (
   _WX_VISIBLE_STDOUT_FILE="$_WX_STDOUT_FILE"
   _WX_VISIBLE_STDERR_FILE="$_WX_STDERR_FILE"
   if [ "$_WX_POLICY_AVAILABLE" = true ]; then
+    # The class comes from the config. It is a classification, not proof that RTK ran: see output_policy and compressor.
+    _WX_RTK_CLASS="$(_wx_rtk_class_for_command "$_WX_SETTINGS_FILE" "$@" || true)"
     _WX_OUTPUT_POLICY="$(_wx_select_output_policy "$_WX_SETTINGS_FILE" "$_WX_EXIT_CODE" "$@")"
   else
     _WX_OUTPUT_POLICY='raw-policy-unavailable'
@@ -233,6 +241,7 @@ workflow_run() (
       --arg visible_stderr_path "$_WX_VISIBLE_STDERR_FILE" \
       --arg profile "${AICONTEXT_PROFILE:-unset}" \
       --arg output_policy "$_WX_OUTPUT_POLICY" \
+      --arg rtk_class "$_WX_RTK_CLASS" \
       --arg compressor "$_WX_COMPRESSOR" \
       --arg compressor_version "$_WX_COMPRESSOR_VERSION" \
       --arg filter "$_WX_FILTER" \
@@ -254,6 +263,7 @@ workflow_run() (
         command: $command,
         profile: $profile,
         output_policy: $output_policy,
+        rtk_class: (if $rtk_class == "" then null else $rtk_class end),
         compressor: (if $compressor == "" then null else $compressor end),
         compressor_version: (if $compressor_version == "" then null else $compressor_version end),
         filter: (if $filter == "" then null else $filter end),

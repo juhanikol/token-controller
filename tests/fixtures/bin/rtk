@@ -18,8 +18,10 @@ if [ "${1:-}" = pipe ] && [ "${2:-}" = -f ]; then
   # At this moment the raw capture of the current run must be on disk and complete.
   newest="$(ls -1dt .ai-context/raw/*/ 2>/dev/null | head -n 1)"
   raw_bytes=missing
+  exit_file=missing
   [ -n "$newest" ] && [ -f "${newest}stdout.raw" ] && raw_bytes="$(wc -c < "${newest}stdout.raw")"
-  printf 'stdin=%s raw=%s\n' "$(wc -c < "$tmp")" "$raw_bytes" >> "${FAKE_RTK_RAW_LOG:-/dev/null}"
+  [ -n "$newest" ] && [ -f "${newest}exit_code.raw" ] && exit_file="$(cat "${newest}exit_code.raw")"
+  printf 'stdin=%s raw=%s exit=%s\n' "$(wc -c < "$tmp")" "$raw_bytes" "$exit_file" >> "${FAKE_RTK_RAW_LOG:-/dev/null}"
   echo "rtk fake notice" >&2
   case "$mode" in
     fail) rm -f "$tmp"; exit 1 ;;
