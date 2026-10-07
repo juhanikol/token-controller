@@ -739,3 +739,12 @@ Copy this block for each experiment.
 - Side effects of real calls: LeanCTX writes its data directory (stats, sessions) and starts its background daemon. The test stops a daemon that it started. Config is not changed.
 - Interpretation: byte counts, one LeanCTX version, one repository, CLI only (MCP tools not tested). Not token counts.
 - Pass/fail: PASS (the harness hard-checks exit codes, no wx, no config change; evidence results for the real tool are reported as warnings)
+
+### Experiment: LeanCTX adapter (`workflow leanctx`)
+
+- Date: 2026-10-07
+- Command: `bash tests/leanctx.test.sh` (fake lean-ctx with the D-39 behaviors, and the real lean-ctx 3.9.19 against this repository)
+- Result: PASS. Fake: status, refusals in 8 protected profiles and in `off` mode, 7 policy refusals, missing binary, Windows path under WSL (refused, override allowed with a warning), read in 5 modes (full, raw, aggressive refused), search (agree: ok; LeanCTX empty but raw has matches: exit 3, no output), tree, read-exact (exact: ok; lossy: exit 3 with the warning and no output), only `read`, `grep`, `ls`, `--version` reached lean-ctx.
+- Real lean-ctx: `status`, `read --mode signatures`, `tree` exit 0. `search "AICONTEXT" .` exit 3 (raw grep found matches in 20 files, LeanCTX named none). `read-exact README.md` exit 3 (output was not the file). The real tool's config and the repository were unchanged. This confirms D-39 and that the guards work.
+- Interpretation: CLI only, one LeanCTX version. Exact reads through the CLI are not available in this environment, so an agent must use a raw read for exact edits.
+- Pass/fail: PASS

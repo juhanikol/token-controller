@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Fake lean-ctx for tests/leanctx.test.sh. Deterministic. It logs every call to $FAKE_LC_LOG (one line per call).
+# FAKE_LC_FULL=lossy: a full read returns headings and a triage note, not the file (the D-39 behavior of the real CLI).
+# FAKE_LC_GREP=empty: grep returns only notes, no matches (the D-39 false negative). FAKE_LC_GREP=fail: exit 3.
 # It supports only: --version, status, doctor, read <file> [-m mode] [--fresh], grep <pattern> <path>, ls <path>.
 # wrap, setup, init, onboard, -c, and anything else: logged, then exit 9. It never writes anything except the log.
 printf '%s\n' "$*" >> "${FAKE_LC_LOG:-/dev/null}"
@@ -25,12 +27,22 @@ case "${1:-}" in
       exit 2
     fi
     case "$mode" in
-      signatures|map) grep '^#' "$file" ;;
-      *) cat "$file" ;;
+      signatures|map|task|reference|auto) grep '^#' "$file" ;;
+      *)
+        if [ "${FAKE_LC_FULL:-}" = lossy ]; then
+          grep '^#' "$file"
+          echo "[lean-ctx: $(wc -l < "$file" | tr -d ' ') lines filtered by triage (level 2)]"
+        else
+          cat "$file"
+        fi ;;
     esac ;;
   grep)
     shift
-    command grep -rn -- "$@" ;;
+    case "${FAKE_LC_GREP:-}" in
+      empty) echo "(81 files skipped: binary/encoding)"; echo "[lean-ctx: 22 lines filtered by triage (level 2)]" ;;
+      fail) echo "fake lean-ctx: grep failed" >&2; exit 3 ;;
+      *) command grep -rn -- "$@" ;;
+    esac ;;
   ls)
     shift
     command ls -1 -- "$@" ;;
