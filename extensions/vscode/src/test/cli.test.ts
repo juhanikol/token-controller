@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { CliError, isValidModeId, parseModes, parseStatus, resolveCli, runCli, WorkflowCli } from '../cli';
+import { CliError, formatLeanctxStatus, isValidModeId, parseLeanctxStatus, parseModes, parseStatus, resolveCli, runCli, WorkflowCli } from '../cli';
 
 // These tests do not use the vscode module. They also run with plain mocha.
 const REPO_CLI = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'workflow-cli.sh');
@@ -13,6 +13,15 @@ function statusJson(overrides: Record<string, unknown> = {}): string {
 		schema_version: 1, profile: 'code', risk: 'normal', output_style: 'ste-inspired', rtk_mode: 'success-only',
 		leanctx_mode: 'auto', headroom_mode: 'reversible', caveman_mode: 'off', source: 'active_env_file',
 		active_env_file: '/home/u/.config/ai-workflow/active_mode.env', shell_profile: null, stale_shell: false, ...overrides
+	});
+}
+
+function leanctxJson(overrides: Record<string, unknown> = {}): string {
+	return JSON.stringify({
+		schema_version: 1, profile: 'code', leanctx_mode: 'auto', binary: '/home/u/.local/bin/lean-ctx', resolved_path: '/home/u/.local/bin/lean-ctx',
+		platform_path: 'linux', version: 'lean-ctx 3.9.19', allowed: true, reasons: [],
+		policy: { shell_enabled: 'false', shell_owner: 'wx', auto_wrap: 'false', auto_setup: 'false', auto_init: 'false', operations: { read: 'enabled', search: 'enabled', tree: 'enabled' } },
+		status_command: 'not run: lean-ctx status writes a report file', ...overrides
 	});
 }
 
@@ -83,6 +92,60 @@ suite('CLI adapter', () => {
 		assert.throws(() => parseModes(JSON.stringify({ schema_version: 3, modes: [] })), (e: CliError) => e.kind === 'unsupported-schema');
 	});
 
+	test('parseLeanctxStatus reads an allowed status', () => {
+		const status = parseLeanctxStatus(leanctxJson());
+		assert.strictEqual(status.allowed, true);
+		assert.deepStrictEqual(status.reasons, []);
+		assert.strictEqual(status.profile, 'code');
+		assert.strictEqual(status.leanctxMode, 'auto');
+		assert.strictEqual(status.binary, '/home/u/.local/bin/lean-ctx');
+		assert.strictEqual(status.platformPath, 'linux');
+		assert.strictEqual(status.version, 'lean-ctx 3.9.19');
+		assert.strictEqual(status.policy.shellEnabled, 'false');
+		assert.strictEqual(status.policy.shellOwner, 'wx');
+		assert.strictEqual(status.policy.autoWrap, 'false');
+		assert.deepStrictEqual(status.policy.operations, { read: 'enabled', search: 'enabled', tree: 'enabled' });
+		const lines = formatLeanctxStatus(status);
+		assert.strictEqual(lines[0], 'LeanCTX adapter: allowed');
+		assert.ok(lines.some((line) => line.includes('Operations: read=enabled, search=enabled, tree=enabled')));
+		assert.ok(!lines.some((line) => line.includes('Why not')));
+	});
+
+	test('parseLeanctxStatus reads a refused status with reasons', () => {
+		const status = parseLeanctxStatus(leanctxJson({
+			profile: 'security', leanctx_mode: 'off', binary: null, resolved_path: null, platform_path: null, version: null, allowed: false,
+			reasons: ["profile 'security' does not use LeanCTX", 'AICONTEXT_LEANCTX_MODE is off for profile \'security\'']
+		}));
+		assert.strictEqual(status.allowed, false);
+		assert.strictEqual(status.reasons.length, 2);
+		assert.strictEqual(status.binary, null);
+		assert.strictEqual(status.platformPath, null);
+		const lines = formatLeanctxStatus(status);
+		assert.strictEqual(lines[0], 'LeanCTX adapter: refused');
+		assert.ok(lines.includes('  Why not:'));
+		assert.ok(lines.some((line) => line.includes("profile 'security' does not use LeanCTX")));
+		// Odd values are cleaned: control characters are removed, a profile that is not an id becomes "unknown", long text is cut.
+		const odd = parseLeanctxStatus(leanctxJson({ profile: '$(id)', allowed: false, reasons: ['line1\nline2\u001b[31m' + 'x'.repeat(500)], platform_path: 'plan9' }));
+		assert.strictEqual(odd.profile, 'unknown');
+		assert.strictEqual(odd.platformPath, null);
+		assert.ok(!/[\u0000-\u001f]/.test(odd.reasons[0]));
+		assert.ok(odd.reasons[0].length <= 300);
+	});
+
+	test('parseLeanctxStatus rejects bad output and fails closed', () => {
+		assert.throws(() => parseLeanctxStatus('not json'), (e: CliError) => e.kind === 'invalid-output');
+		assert.throws(() => parseLeanctxStatus('[]'), (e: CliError) => e.kind === 'invalid-output');
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ schema_version: 2 })), (e: CliError) => e.kind === 'unsupported-schema');
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ schema_version: undefined })), (e: CliError) => e.kind === 'unsupported-schema');
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ allowed: 'yes' })), (e: CliError) => e.kind === 'invalid-output');
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ reasons: 'no' })), (e: CliError) => e.kind === 'invalid-output');
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ reasons: [1] })), (e: CliError) => e.kind === 'invalid-output');
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ policy: null })), (e: CliError) => e.kind === 'invalid-output');
+		// Allowed with a reason, or refused with no reason, is not trusted.
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ allowed: true, reasons: ['mode is off'] })), (e: CliError) => e.kind === 'invalid-output');
+		assert.throws(() => parseLeanctxStatus(leanctxJson({ allowed: false, reasons: [] })), (e: CliError) => e.kind === 'invalid-output');
+	});
+
 	test('parseModes keeps valid modes and aliases', () => {
 		const result = parseModes(JSON.stringify({
 			schema_version: 1,
@@ -123,6 +186,27 @@ suite('CLI adapter', () => {
 		const cli = new WorkflowCli(cliPath);
 		await assert.rejects(cli.modes(), (e: CliError) => e.kind === 'failed' && /jq is missing/.test(e.message));
 		await assert.rejects(cli.status(), (e: CliError) => e.kind === 'failed');
+	});
+
+	test('WorkflowCli.leanctxStatus calls only "leanctx status --json" and surfaces a CLI failure safely', async function () {
+		if (process.platform === 'win32') {
+			this.skip();
+		}
+		const log = path.join(tempDir, 'calls.txt');
+		const ok = makeController(`printf '%s|' "$@" >> '${log}'\necho '${leanctxJson()}'\n`, 'ok');
+		const status = await new WorkflowCli(ok.cliPath).leanctxStatus();
+		assert.strictEqual(status.allowed, true);
+		assert.strictEqual(fs.readFileSync(log, 'utf8'), 'leanctx|status|--json|');
+		// A failure shows the CLI message (cut to 300 characters), and no status is made up.
+		const bad = makeController('echo "jq is missing" >&2\nexit 1\n', 'bad');
+		await assert.rejects(new WorkflowCli(bad.cliPath).leanctxStatus(), (e: CliError) => e.kind === 'failed' && /jq is missing/.test(e.message));
+		const loud = makeController(`printf 'x%.0s' $(seq 1 1000) >&2\nexit 2\n`, 'loud');
+		await assert.rejects(new WorkflowCli(loud.cliPath).leanctxStatus(), (e: CliError) => e.kind === 'failed' && e.message.length <= 300);
+		// Valid JSON of the wrong schema, or text instead of JSON, is rejected.
+		const wrong = makeController(`echo '${leanctxJson({ schema_version: 9 })}'\n`, 'wrong');
+		await assert.rejects(new WorkflowCli(wrong.cliPath).leanctxStatus(), (e: CliError) => e.kind === 'unsupported-schema');
+		const text = makeController('echo "LeanCTX adapter status"\n', 'text');
+		await assert.rejects(new WorkflowCli(text.cliPath).leanctxStatus(), (e: CliError) => e.kind === 'invalid-output');
 	});
 
 	test('WorkflowCli reads status and modes from CLI output', async function () {
@@ -196,6 +280,27 @@ suite('CLI adapter', () => {
 			assert.strictEqual(stale.profile, 'micro');
 			assert.strictEqual(stale.shellProfile, 'code');
 			assert.strictEqual(stale.staleShell, true);
+		});
+
+		test('leanctx status --json: refused for a protected mode, with reasons, and nothing is read or searched', async () => {
+			const cli = new WorkflowCli(REPO_CLI, { ...env, AICONTEXT_LEANCTX_BIN: '' });
+			assert.strictEqual((await cli.leanctxStatus(tempDir)).allowed, false, 'no mode file');
+			await cli.setMode('security');
+			const refused = await cli.leanctxStatus(tempDir);
+			assert.strictEqual(refused.allowed, false);
+			assert.strictEqual(refused.profile, 'security');
+			assert.strictEqual(refused.leanctxMode, 'off');
+			assert.ok(refused.reasons.some((reason) => reason.includes('security')), refused.reasons.join(' | '));
+			assert.strictEqual(refused.policy.shellEnabled, 'false');
+			assert.strictEqual(refused.policy.shellOwner, 'wx');
+			assert.deepStrictEqual(refused.policy.operations, { read: 'enabled', search: 'enabled', tree: 'enabled' });
+			assert.ok(refused.statusCommand && refused.statusCommand.startsWith('not run'));
+			// An allowed mode with no lean-ctx binary is refused for that reason.
+			await cli.setMode('code');
+			const noBinary = await cli.leanctxStatus(tempDir);
+			assert.strictEqual(noBinary.allowed, false);
+			assert.strictEqual(noBinary.leanctxMode, 'auto');
+			assert.ok(noBinary.reasons.some((reason) => reason.includes('lean-ctx was not found')), noBinary.reasons.join(' | '));
 		});
 
 		test('an unknown mode fails and does not change the active mode', async () => {

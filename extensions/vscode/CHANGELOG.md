@@ -8,6 +8,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 Planned version: 2.0.0 (set in `package.json`, not released or published). The last release is 1.1.0 (git tag `v1.1.0`).
 
+### Added
+- Command **Token Controller: Show LeanCTX Status**: runs `workflow leanctx status --json` and shows the adapter status in the output channel. No LeanCTX read, search, or tree action.
+
 ### Breaking
 - The extension needs a controller that has `scripts/workflow-cli.sh` with `status --json` and `modes --json` (JSON `schema_version` 1). An older controller shows "unavailable".
 - `tokenController.scriptPath` must be an absolute path (or start with `~/`) to a file named `workflow.sh`, with `workflow-cli.sh` in the same folder. It is read from user or machine settings only.

@@ -50,6 +50,29 @@ export interface CliModes {
     aliases: { alias: string; target: string }[];
 }
 
+/** Status of the controller's LeanCTX adapter (workflow leanctx status --json). The adapter runs lean-ctx --version only. */
+export interface LeanctxPolicyStatus {
+    shellEnabled: string | null;
+    shellOwner: string | null;
+    autoWrap: string | null;
+    autoSetup: string | null;
+    autoInit: string | null;
+    operations: { read: string | null; search: string | null; tree: string | null };
+}
+
+export interface LeanctxStatus {
+    profile: string | null;
+    leanctxMode: string | null;
+    binary: string | null;
+    resolvedPath: string | null;
+    platformPath: 'linux' | 'windows' | null;
+    version: string | null;
+    allowed: boolean;
+    reasons: string[];
+    policy: LeanctxPolicyStatus;
+    statusCommand: string | null;
+}
+
 const MODE_ID = /^[a-z0-9][a-z0-9-]*$/;
 const RISK = /^[a-z]{1,16}$/;
 
@@ -104,7 +127,7 @@ interface CliResult {
 }
 
 /** Run "bash <cli> <args...>". Bash runs the file, so the executable bit is not needed. */
-export function runCli(cliPath: string, args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): Promise<CliResult> {
+export function runCli(cliPath: string, args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv, cwd?: string): Promise<CliResult> {
     return new Promise((resolve, reject) => {
         if (process.platform === 'win32') {
             reject(new CliError('The Token Controller CLI needs Linux or WSL. Open the folder in WSL.', 'unavailable'));
@@ -117,7 +140,7 @@ export function runCli(cliPath: string, args: string[], timeoutMs: number, env?:
         execFile(
             'bash',
             [cliPath, ...args],
-            { cwd: path.dirname(cliPath), timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, env: env ?? process.env },
+            { cwd: cwd ?? path.dirname(cliPath), timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, env: env ?? process.env },
             (error, stdout, stderr) => {
                 if (error) {
                     const code = (error as NodeJS.ErrnoException).code;
@@ -188,6 +211,80 @@ export function parseStatus(stdout: string): CliStatus {
     };
 }
 
+// Text from the CLI is shown in an output channel. Control characters are removed and the length is capped.
+function cleanText(value: unknown, max = 300): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+    return text === '' ? null : text;
+}
+
+export function parseLeanctxStatus(stdout: string): LeanctxStatus {
+    const o = parseJson(stdout, 'leanctx status');
+    if (typeof o.allowed !== 'boolean') {
+        throw new CliError('The CLI leanctx status has no allowed value.', 'invalid-output');
+    }
+    if (!Array.isArray(o.reasons) || o.reasons.some((reason) => typeof reason !== 'string')) {
+        throw new CliError('The CLI leanctx status has no valid reasons list.', 'invalid-output');
+    }
+    const reasons = (o.reasons as string[]).map((reason) => cleanText(reason)).filter((reason): reason is string => reason !== null).slice(0, 10);
+    // Fail closed: "allowed" must agree with the reasons. A status that says allowed with a reason is not trusted.
+    if (o.allowed === (o.reasons as string[]).length > 0) {
+        throw new CliError('The CLI leanctx status is inconsistent: allowed and reasons disagree.', 'invalid-output');
+    }
+    const policyRaw = o.policy;
+    if (typeof policyRaw !== 'object' || policyRaw === null || Array.isArray(policyRaw)) {
+        throw new CliError('The CLI leanctx status has no policy.', 'invalid-output');
+    }
+    const p = policyRaw as Record<string, unknown>;
+    const ops = typeof p.operations === 'object' && p.operations !== null && !Array.isArray(p.operations) ? p.operations as Record<string, unknown> : {};
+    const flag = (value: unknown) => (typeof value === 'boolean' ? String(value) : cleanText(value, 40));
+    const profile = o.profile === null || o.profile === undefined ? null : isValidModeId(o.profile) ? o.profile : 'unknown';
+    return {
+        profile,
+        leanctxMode: cleanText(o.leanctx_mode, 40),
+        binary: cleanText(o.binary),
+        resolvedPath: cleanText(o.resolved_path),
+        platformPath: o.platform_path === 'linux' || o.platform_path === 'windows' ? o.platform_path : null,
+        version: cleanText(o.version, 90),
+        allowed: o.allowed,
+        reasons,
+        policy: {
+            shellEnabled: flag(p.shell_enabled),
+            shellOwner: cleanText(p.shell_owner, 40),
+            autoWrap: flag(p.auto_wrap),
+            autoSetup: flag(p.auto_setup),
+            autoInit: flag(p.auto_init),
+            operations: { read: cleanText(ops.read, 40), search: cleanText(ops.search, 40), tree: cleanText(ops.tree, 40) }
+        },
+        statusCommand: cleanText(o.status_command)
+    };
+}
+
+/** The lines shown in the output channel. */
+export function formatLeanctxStatus(status: LeanctxStatus): string[] {
+    const policy = status.policy;
+    const lines = [
+        `LeanCTX adapter: ${status.allowed ? 'allowed' : 'refused'}`,
+        `  Mode: ${status.profile ?? 'none'}, LeanCTX mode: ${status.leanctxMode ?? 'none'}`,
+        `  Binary: ${status.binary ?? 'none'}${status.platformPath ? ` (${status.platformPath})` : ''}`,
+        `  Version: ${status.version ?? 'unknown'}`,
+        `  Policy: shell_enabled=${policy.shellEnabled ?? '?'}, shell_owner=${policy.shellOwner ?? '?'}, auto_wrap=${policy.autoWrap ?? '?'}, auto_setup=${policy.autoSetup ?? '?'}, auto_init=${policy.autoInit ?? '?'}`,
+        `  Operations: read=${policy.operations.read ?? '?'}, search=${policy.operations.search ?? '?'}, tree=${policy.operations.tree ?? '?'}`
+    ];
+    if (status.reasons.length > 0) {
+        lines.push('  Why not:');
+        for (const reason of status.reasons) {
+            lines.push(`    - ${reason}`);
+        }
+    }
+    if (status.statusCommand) {
+        lines.push(`  lean-ctx status: ${status.statusCommand}`);
+    }
+    return lines;
+}
+
 export function parseModes(stdout: string): CliModes {
     const o = parseJson(stdout, 'modes');
     if (!Array.isArray(o.modes) || o.modes.length === 0) {
@@ -239,6 +336,15 @@ export class WorkflowCli {
     async modes(): Promise<CliModes> {
         const { stdout } = await runCli(this.cliPath, ['modes', '--json'], 8000, this.env);
         return parseModes(stdout);
+    }
+
+    /**
+     * Status of the LeanCTX adapter: "workflow leanctx status --json". It reads state and runs lean-ctx --version only.
+     * The extension never runs the adapter's read, search, or tree commands. `cwd` is the project folder the adapter checks the binary against.
+     */
+    async leanctxStatus(cwd?: string): Promise<LeanctxStatus> {
+        const { stdout } = await runCli(this.cliPath, ['leanctx', 'status', '--json'], 10000, this.env, cwd);
+        return parseLeanctxStatus(stdout);
     }
 
     /** Switch the active mode. The id must be a mode from modes(). The CLI writes active_mode.env. */

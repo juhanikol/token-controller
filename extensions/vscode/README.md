@@ -19,8 +19,11 @@ Token Controller is a mode switcher for AI context policy. You select the work m
 | Show the active mode | `workflow-cli.sh status --json` |
 | Fill the mode picker | `workflow-cli.sh modes --json` |
 | Switch mode | `workflow-cli.sh <mode>` |
+| Show LeanCTX status (command **Token Controller: Show LeanCTX Status**) | `workflow-cli.sh leanctx status --json` |
 
 The extension runs `bash <path>/workflow-cli.sh <arguments>` without a shell command string. The path and every argument are passed as separate arguments. A mode id must match `^[a-z0-9][a-z0-9-]*$` and be in the list the CLI just returned. The extension accepts only `schema_version` 1 from the CLI.
+
+The LeanCTX command writes a summary to the **Token Controller** output channel: whether the controller's LeanCTX adapter is allowed, the reasons if not, the binary, the version, and the policy. It runs the adapter's `status` only (it reads state and runs `lean-ctx --version`). The extension never runs the adapter's read, search, or tree commands. After you run it, the tooltip adds one line, `LeanCTX adapter: allowed` or `refused`, while the mode stays the same.
 
 ### Status bar
 
