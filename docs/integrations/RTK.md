@@ -39,11 +39,11 @@ One entry per command prefix: `{"match": "cargo test", "class": "pipe", "filter"
 Resolution is strict. These all resolve to `never` (raw output): an unknown, empty, differently-cased, or non-string class; `rerun`, even when enabled; a `pipe` class that is not enabled (a missing switch means disabled); a `pipe` entry with a missing or malformed filter. A command with no entry has no class and stays raw (or uses the built-in exact-repeat reducer if it is on the existing allowlist). A missing, non-list, or old `rtk_filters` config means RTK is never used.
 
 Entries in the repository config (66):
-- **pipe (20):** one per RTK 0.42.4 pipe filter: `git status`, `git log`, `git diff`, `cargo test`, `vitest`, `tsc`, `prettier`, `pytest` (also `python -m pytest`, `python3 -m pytest`), `ruff check`, `ruff format`, `mypy`, `go test`, `go build`, `grep`, `rg`, `find`, `fd`, `log`.
-- **recognized-only (46):** the other commands in RTK's coverage page (`git show`, `gh ...`, `gt ...`, `cargo build`/`check`/`clippy`/`nextest`, `jest`, `eslint`, `docker ...`, `kubectl ...`, `ls`, `tree`, `diff`, `wc`, `aws`, `psql`, `curl`, ...). Smart file reading stays here: `cat`, `head`, `tail` (`rtk read`), `rtk read`, `rtk smart`.
+- **pipe (16):** 14 of the 18 RTK 0.42.4 pipe filters: `git status`, `git log`, `git diff`, `cargo test`, `vitest`, `pytest` (also `python -m pytest`, `python3 -m pytest`), `ruff check`, `mypy`, `go build`, `grep`, `rg`, `find`, `fd`, `log`. `tsc`, `go test`, `ruff format`, `prettier` and `pytest --collect-only` are `recognized-only`: the matrix showed RTK output that is wrong or loses evidence (D-38).
+- **recognized-only (53):** the other commands in RTK's coverage page (`git show`, `gh ...`, `gt ...`, `cargo build`/`check`/`clippy`/`nextest`, `jest`, `eslint`, `docker ...`, `kubectl ...`, `ls`, `tree`, `diff`, `wc`, `aws`, `psql`, `curl`, ...). Smart file reading stays here: `cat`, `head`, `tail` (`rtk read`), `rtk read`, `rtk smart`.
 - **never (0):** no shipped entry. Use it for an explicitly rejected pattern.
 
-`grep`, `rg`, `find`, `fd`, and `git-*` are enabled without fixtures. Their output is evidence, and the guard is not proven on it (see Open).
+The guard also rejects RTK output that says it omitted something (`+10 more dirs`, `[+24 lines omitted]`) unless raw has that text.
 
 ## When RTK runs
 
@@ -97,7 +97,7 @@ Doctor also checks the RTK class config (`rtk.config*` findings): unsupported cl
 
 ## Open
 
-- **Expansion:** the pipe ceiling is 18 filters, and all are enabled, each with fixtures. The matrix found 12 shown outputs that lose evidence text (`find`/`fd` omit directories, `git log` drops commits, `ruff format`, `prettier --write`, and the D-38 runs). They are pinned, not fixed. `npx` forms and `npm test` have no entry.
+- **Expansion:** 14 of the 18 RTK filters are enabled, each with fixtures. The matrix found 12 shown outputs that lost evidence text. The omission-marker guard and the five demotions fixed them (D-38). `npx` forms and `npm test` have no entry.
 - **Filters that give wrong or lossy output (found with the fixtures, RTK 0.42.4):** `go-test` expects `go test -json` input, so plain `go test` output becomes "Go test: No tests found". `go-build` never applies, because `go build` writes only to stderr and `wx` filters stdout. `tsc` prints nothing on a normal success, so only informational runs (`--listFiles`, `--showConfig`, `--extendedDiagnostics`) reach it, and they become "TypeScript compilation completed". `pytest --collect-only` becomes "Pytest: No tests collected". `go test -bench` and `-cover` become "No tests found". The evidence guard does not catch these. They are accepted today. See debt D-38.
 - **Evidence guard:** a heuristic, tuned with recorded runs and a fake RTK, plus real-RTK checks on 18 of them. Real RTK's `pytest` filter drops `warning:` lines, so the guard falls back to raw for runs that have warnings. No real-output fixtures per tool yet.
 - **Validation:** only byte counts. `docs/VALIDATION_MATRIX.md` has no RTK entry, and the benchmark has no RTK scenario.

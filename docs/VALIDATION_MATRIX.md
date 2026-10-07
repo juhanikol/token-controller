@@ -711,3 +711,12 @@ Copy this block for each experiment.
 - Evidence preserved: raw files, stderr, and exit codes: yes in every row. Marked evidence text in shown output: no in the 12 rows above.
 - Interpretation: byte counts on 59 fixtures, one RTK version, 8 filters with hand-written input. Not token counts, not a general saving. Small outputs often grow under RTK and fall back to raw.
 - Pass/fail: PASS (the 12 losses are pinned in the matrix, so a change of RTK output fails the run; see D-38)
+
+### Experiment: RTK matrix after fixes (bytes)
+
+- Date: 2026-10-07
+- Command: `bash benchmarks/run-rtk-benchmark.sh` (42 `code` rows from `tests/fixtures/rtk/MATRIX`, 18 protected-profile rows), real RTK 0.42.4 through a spy script, fake RTK for the pipeline
+- Changes since the previous matrix entry: guard rejects RTK omission markers; `tsc`, `go test`, `ruff format`, `prettier`, `pytest --collect-only` are `recognized-only` (14 pipe filters left)
+- Result: PASS. Known losses in shown output: 0 (was 12). Real RTK, `code` rows: 11 RTK outputs shown (13728 to 2783 bytes), 7 evidence-guard fallbacks, 10 not-smaller fallbacks, 1 empty RTK output, 9 failing runs and 4 empty-stdout runs raw without an RTK call. Protected profiles raw, no RTK call.
+- Interpretation: byte counts, one RTK version, hand-written input for 7 filters. The guard only sees omission markers, errors, and warnings. No token saving is claimed.
+- Pass/fail: PASS

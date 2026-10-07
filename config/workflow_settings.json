@@ -390,18 +390,38 @@
       },
       {
         "match": "tsc",
-        "class": "pipe",
-        "filter": "tsc"
+        "class": "recognized-only",
+        "rtk": "tsc",
+        "note": "RTK tsc filter: a quiet success prints nothing, informational runs become 'TypeScript compilation completed'."
       },
       {
         "match": "prettier",
-        "class": "pipe",
-        "filter": "prettier"
+        "class": "recognized-only",
+        "rtk": "prettier",
+        "note": "RTK prettier filter loses the names of changed files."
       },
       {
         "match": "pytest",
         "class": "pipe",
         "filter": "pytest"
+      },
+      {
+        "match": "pytest --collect-only",
+        "class": "recognized-only",
+        "rtk": "pytest",
+        "note": "RTK pytest filter turns a collect-only listing into 'No tests collected'."
+      },
+      {
+        "match": "python -m pytest --collect-only",
+        "class": "recognized-only",
+        "rtk": "pytest",
+        "note": "RTK pytest filter turns a collect-only listing into 'No tests collected'."
+      },
+      {
+        "match": "python3 -m pytest --collect-only",
+        "class": "recognized-only",
+        "rtk": "pytest",
+        "note": "RTK pytest filter turns a collect-only listing into 'No tests collected'."
       },
       {
         "match": "python -m pytest",
@@ -420,8 +440,9 @@
       },
       {
         "match": "ruff format",
-        "class": "pipe",
-        "filter": "ruff-format"
+        "class": "recognized-only",
+        "rtk": "ruff",
+        "note": "RTK ruff-format filter replaces '3 files reformatted' with 'All files formatted correctly'."
       },
       {
         "match": "mypy",
@@ -430,8 +451,9 @@
       },
       {
         "match": "go test",
-        "class": "pipe",
-        "filter": "go-test"
+        "class": "recognized-only",
+        "rtk": "go",
+        "note": "RTK go-test filter expects go test -json. Plain output becomes 'No tests found'."
       },
       {
         "match": "go build",

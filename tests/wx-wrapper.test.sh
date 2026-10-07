@@ -158,7 +158,7 @@ rtk_calls() { grep -c . "$FAKE_RTK_LOG"; }
 source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >"$_WX_TEST_ROOT/activation-rtk.out"
 
 # 1. Mapped commands: RTK filter applied, record complete, raw capture complete before RTK ran.
-for _WX_PAIR in 'pytest|pytest' 'cargo test|cargo-test' 'go test|go-test' 'go build|go-build' 'tsc|tsc' 'vitest|vitest'; do
+for _WX_PAIR in 'pytest|pytest' 'cargo test|cargo-test' 'go build|go-build' 'vitest|vitest'; do
   _WX_CMD="${_WX_PAIR%%|*}"
   _WX_FILTER="${_WX_PAIR##*|}"
   _WX_CASE="map-${_WX_FILTER}"
@@ -282,6 +282,19 @@ done
 printf 'errors.py::test_a PASSED\nwarnings summary is below\ntest_error_handling ... ok\n' > "$_WX_TEST_ROOT/g3.raw"
 printf 'summary\n' > "$_WX_TEST_ROOT/g3.out"
 _wx_evidence_guard "$_WX_TEST_ROOT/g3.raw" "$_WX_TEST_ROOT/g3.out" || fail 'guard is too broad: it flagged names that only contain error or warning'
+
+# RTK omission markers: rejected unless raw has the same text.
+printf 'a\nb\nc\n' > "$_WX_TEST_ROOT/g4.raw"
+for _WX_OMIT in '+10 more dirs' '[+24 lines omitted]' '  [+3 lines omitted]' '+1 more file'; do
+  printf 'a\n%s\n' "$_WX_OMIT" > "$_WX_TEST_ROOT/g4.out"
+  if _wx_evidence_guard "$_WX_TEST_ROOT/g4.raw" "$_WX_TEST_ROOT/g4.out"; then fail "guard accepted an RTK omission marker: $_WX_OMIT"; fi
+done
+printf 'a\n+10 more dirs\n' > "$_WX_TEST_ROOT/g4.raw"
+printf '+10 more dirs\n' > "$_WX_TEST_ROOT/g4.out"
+_wx_evidence_guard "$_WX_TEST_ROOT/g4.raw" "$_WX_TEST_ROOT/g4.out" || fail 'guard rejected an omission text that raw has too'
+printf 'a +1 more than b\nx\n' > "$_WX_TEST_ROOT/g4.raw"
+printf 'a +1 more than b\n' > "$_WX_TEST_ROOT/g4.out"
+_wx_evidence_guard "$_WX_TEST_ROOT/g4.raw" "$_WX_TEST_ROOT/g4.out" || fail 'guard rejected ordinary text with +1 more'
 
 # 3b. RTK unavailable in other ways: not on PATH by name, and a file without the execute bit.
 AICONTEXT_RTK_BIN=rtk-is-not-on-the-path-xyz rtk_fallback missing-name filter rtk-not-installed
@@ -478,15 +491,19 @@ jq -e '.command_policy.rtk_commands | type == "array" and length > 0 and all(typ
 jq -e '[.command_policy.rtk_commands[].class] | all(. == "pipe" or . == "recognized-only" or . == "never")' "$_WX_CFG" >/dev/null || fail 'the shipped table has an unknown class, or a rerun entry'
 jq -e '[.command_policy.rtk_commands[].match] | length == (unique | length)' "$_WX_CFG" >/dev/null || fail 'the shipped table has a duplicate match'
 jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe") | .filter] | all(type == "string" and test("^[a-z0-9-]+$"))' "$_WX_CFG" >/dev/null || fail 'a pipe entry has an invalid filter name'
-jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe") | .filter] | unique == ["cargo-test","fd","find","git-diff","git-log","git-status","go-build","go-test","grep","log","mypy","prettier","pytest","rg","ruff-check","ruff-format","tsc","vitest"]' "$_WX_CFG" >/dev/null || fail 'the pipe filters are not the 18 filters of RTK 0.42.4'
+jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe") | .filter] | unique == ["cargo-test","fd","find","git-diff","git-log","git-status","go-build","grep","log","mypy","pytest","rg","ruff-check","vitest"]' "$_WX_CFG" >/dev/null || fail 'the pipe filters are not the 14 kept filters'
 jq -e '[.command_policy.rtk_commands[] | select(.class != "pipe") | select(has("filter") and .filter != null)] | length == 0' "$_WX_CFG" >/dev/null || fail 'a non-pipe entry has a filter'
 # Expected counts. Change them on purpose when an entry is added or removed.
-jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe")] | length == 20' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 20 pipe entries'
-jq -e '[.command_policy.rtk_commands[] | select(.class == "recognized-only")] | length == 46' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 46 recognized-only entries'
+jq -e '[.command_policy.rtk_commands[] | select(.class == "pipe")] | length == 16' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 16 pipe entries'
+jq -e '[.command_policy.rtk_commands[] | select(.class == "recognized-only")] | length == 53' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 53 recognized-only entries'
 jq -e '[.command_policy.rtk_commands[] | select(.class == "never" or .class == "rerun")] | length == 0' "$_WX_CFG" >/dev/null || fail 'the shipped table has a never or rerun entry'
-jq -e '.command_policy.rtk_commands | length == 66' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 66 entries'
+jq -e '.command_policy.rtk_commands | length == 69' "$_WX_CFG" >/dev/null || fail 'the shipped table does not have 69 entries'
 # Smart file reading is recognized-only.
 jq -e '[.command_policy.rtk_commands[] | select(.match | IN("cat", "head", "tail", "rtk read", "rtk smart")) | .class] | length == 5 and all(. == "recognized-only")' "$_WX_CFG" >/dev/null || fail 'a smart-read command is not recognized-only'
+# Demoted after the matrix showed lost or wrong output (D-38): these stay raw.
+for _WX_DEM in 'tsc' 'go test' 'ruff format' 'prettier' 'pytest --collect-only' 'python -m pytest --collect-only' 'python3 -m pytest --collect-only'; do
+  jq -e --arg m "$_WX_DEM" '[.command_policy.rtk_commands[] | select(.match == $m and .class == "recognized-only")] | length == 1' "$_WX_CFG" >/dev/null || fail "'$_WX_DEM' is not recognized-only"
+done
 # The documented commands that must be in the table.
 for _WX_DOC in 'git show' 'git stash list' 'gh pr view' 'gh pr checks' 'gh run list' 'gh issue view' 'gt log' 'gt status' 'cargo nextest' 'cargo build' 'cargo check' 'cargo clippy' 'jest' 'eslint' 'pnpm list' 'pnpm outdated' 'next build' 'prisma migrate' 'playwright test' 'pip install' 'golangci-lint run' 'rspec' 'rubocop' 'rake' 'dotnet build' 'dotnet test' 'dotnet format' 'docker ps' 'docker images' 'docker logs' 'docker compose up' 'kubectl get pods' 'kubectl logs' 'ls' 'tree' 'ast-grep' 'diff' 'wc' 'aws' 'psql' 'curl' 'cat' 'head' 'tail' 'rtk read' 'rtk smart'; do
   jq -e --arg m "$_WX_DOC" '[.command_policy.rtk_commands[] | select(.match == $m and .class == "recognized-only")] | length == 1' "$_WX_CFG" >/dev/null || fail "'$_WX_DOC' is not a recognized-only entry in the shipped table"
@@ -582,7 +599,7 @@ _WX_FIXTURE_TABLE="$(printf '%s\n' "$_WX_MATRIX" | awk '{ print $1, $4 }')"
 # Commands that are not installed here, and the ones that must not be replaced for every call, run through shims.
 _WX_SHIMS="$_WX_TEST_ROOT/shims"
 bash "$_WX_FIXTURES/../link-shims.sh" "$_WX_SHIMS"
-_WX_ALL_FILTERS='cargo-test pytest go-test go-build tsc vitest mypy ruff-check ruff-format prettier grep rg find fd git-log git-status git-diff log'
+_WX_ALL_FILTERS='cargo-test pytest go-build vitest mypy ruff-check grep rg find fd git-log git-status git-diff log'
 # Every fixture folder is in the matrix, and every row is complete.
 _WX_FOUND="$(cd "$_WX_RTK_FIX" && ls -d */*/ | sed 's#/$##' | sort)"
 _WX_LISTED="$(printf '%s\n' "$_WX_MATRIX" | cut -d' ' -f1 | sort)"
@@ -590,10 +607,10 @@ _WX_LISTED="$(printf '%s\n' "$_WX_MATRIX" | cut -d' ' -f1 | sort)"
 [ "$(printf '%s\n' "$_WX_MATRIX" | cut -d' ' -f1 | sort -u | wc -l)" -eq "$(printf '%s\n' "$_WX_MATRIX" | wc -l)" ] || fail 'a fixture is listed twice in the matrix'
 while read -r _WX_MC _WX_MG _WX_MK _WX_MFAKE _WX_MREAL _WX_MEV _WX_MEXTRA; do
   [ -z "${_WX_MEXTRA:-}" ] && [ -n "$_WX_MEV" ] || fail "matrix row is not 6 columns: $_WX_MC"
-  case "$_WX_MG" in A|B|C|D) ;; *) fail "$_WX_MC: unknown group $_WX_MG" ;; esac
+  case "$_WX_MG" in A|B|C|D|X) ;; *) fail "$_WX_MC: unknown group $_WX_MG" ;; esac
   case "$_WX_MK" in success|evidence|nonzero|empty|informational) ;; *) fail "$_WX_MC: unknown kind $_WX_MK" ;; esac
-  case "$_WX_MFAKE" in accepted|guard|smaller|nonzero|empty) ;; *) fail "$_WX_MC: unknown fake outcome $_WX_MFAKE" ;; esac
-  case "$_WX_MREAL" in accepted|guard|smaller|rtk-empty|nonzero|empty) ;; *) fail "$_WX_MC: unknown real outcome $_WX_MREAL" ;; esac
+  case "$_WX_MFAKE" in accepted|guard|smaller|nonzero|empty|recognized) ;; *) fail "$_WX_MC: unknown fake outcome $_WX_MFAKE" ;; esac
+  case "$_WX_MREAL" in accepted|guard|smaller|rtk-empty|nonzero|empty|recognized) ;; *) fail "$_WX_MC: unknown real outcome $_WX_MREAL" ;; esac
   case "$_WX_MEV" in yes|no|n/a) ;; *) fail "$_WX_MC: unknown real_evidence $_WX_MEV" ;; esac
   for _WX_MFILE in cmd exit stdout; do [ -f "$_WX_RTK_FIX/$_WX_MC/$_WX_MFILE" ] || fail "$_WX_MC: missing $_WX_MFILE"; done
   # The kind and the recorded exit code agree, and every marker is in the raw stdout.
@@ -604,25 +621,30 @@ while read -r _WX_MC _WX_MG _WX_MK _WX_MFAKE _WX_MREAL _WX_MEV _WX_MEXTRA; do
     while IFS= read -r _WX_MARK; do
       grep -Fq -- "$_WX_MARK" "$_WX_RTK_FIX/$_WX_MC/stdout" || fail "$_WX_MC: marker '$_WX_MARK' is not in the recorded stdout"
     done < "$_WX_RTK_FIX/$_WX_MC/markers"
-    [ "$_WX_MEV" != n/a ] || fail "$_WX_MC: has markers, so real_evidence cannot be n/a"
+    [ "$_WX_MEV" != n/a ] || [ "$_WX_MG" = X ] || fail "$_WX_MC: has markers, so real_evidence cannot be n/a"
   else
     [ "$_WX_MEV" = n/a ] || fail "$_WX_MC: no markers file, so real_evidence must be n/a"
   fi
+  if [ "$_WX_MG" = X ]; then [ "$_WX_MFAKE" = recognized ] && [ "$_WX_MREAL" = recognized ] || fail "$_WX_MC: group X rows must be recognized"; else [ "$_WX_MFAKE" != recognized ] && [ "$_WX_MREAL" != recognized ] || fail "$_WX_MC: only group X rows can be recognized"; fi
   # Known loss only where the real RTK output is shown.
   [ "$_WX_MEV" != no ] || [ "$_WX_MREAL" = accepted ] || fail "$_WX_MC: real_evidence no needs a shown RTK output"
 done <<< "$_WX_MATRIX"
 # Every pipe filter in the config is in the matrix, in exactly one group, with a success case and an evidence or failing case.
 [ "$(jq -r '[.command_policy.rtk_commands[] | select(.class == "pipe") | .filter] | unique | join(" ")' "$AICONTEXT_SETTINGS_FILE")" = "$(printf '%s\n' $_WX_ALL_FILTERS | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')" ] || fail 'the matrix filter list and the config pipe filters differ'
 for _WX_F in $_WX_ALL_FILTERS; do
-  printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f) print $2 }' | sort -u | wc -l | grep -qx 1 || fail "$_WX_F is not in exactly one group"
+  printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f && $2 != "X") print $2 }' | sort -u | wc -l | grep -qx 1 || fail "$_WX_F is not in exactly one group"
   printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f && $3 == "success") n++ } END { exit !n }' || fail "no success fixture for $_WX_F"
   printf '%s\n' "$_WX_MATRIX" | awk -v f="$_WX_F" '{ split($1, a, "/"); if (a[1] == f && ($3 == "evidence" || $3 == "nonzero")) n++ } END { exit !n }' || fail "no evidence or failing fixture for $_WX_F"
   jq -e --arg f "$_WX_F" '[.command_policy.rtk_commands[] | select(.class == "pipe" and .filter == $f)] | length >= 1' "$AICONTEXT_SETTINGS_FILE" >/dev/null || fail "$_WX_F is not an enabled pipe filter in the config"
 done
 # The recorded command resolves to its own filter through the config.
-while read -r _WX_MC _WX_REST; do
+while read -r _WX_MC _WX_MG _WX_REST; do
   read -r -a _WX_ARGV < "$_WX_RTK_FIX/$_WX_MC/cmd"
-  [ "$(_wx_rtk_filter_for_command "$AICONTEXT_SETTINGS_FILE" "${_WX_ARGV[@]}")" = "${_WX_MC%%/*}" ] || fail "$_WX_MC: the recorded command does not resolve to filter ${_WX_MC%%/*}"
+  if [ "$_WX_MG" = X ]; then
+    [ "$(_wx_rtk_class_for_command "$AICONTEXT_SETTINGS_FILE" "${_WX_ARGV[@]}")" = recognized-only ] || fail "$_WX_MC: the demoted command is not recognized-only"
+  else
+    [ "$(_wx_rtk_filter_for_command "$AICONTEXT_SETTINGS_FILE" "${_WX_ARGV[@]}")" = "${_WX_MC%%/*}" ] || fail "$_WX_MC: the recorded command does not resolve to filter ${_WX_MC%%/*}"
+  fi
 done <<< "$_WX_MATRIX"
 
 fixture_case() { # filter case outcome. Replays the recorded command through wx with the fake RTK and checks everything.
@@ -657,8 +679,8 @@ fixture_case() { # filter case outcome. Replays the recorded command through wx 
     jq -e '.raw.stdout_bytes == 0' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: go build wrote to stdout: $_WX_FREC"
   fi
   # 4. Record fields that hold for every outcome.
-  jq -e --arg f "$_WX_FF" --argjson c "$_WX_FCODE" --argjson ob "$(wc -c < "$_WX_FD/stdout")" --argjson eb "$(wc -c < "$_WX_FSTDERR")" '
-    .rtk_class == "pipe" and .exit_code == $c and .raw.stdout_bytes == $ob and .raw.stderr_bytes == $eb and .visible.stderr_bytes == $eb
+  jq -e --arg f "$_WX_FF" --arg w "$_WX_FW" --argjson c "$_WX_FCODE" --argjson ob "$(wc -c < "$_WX_FD/stdout")" --argjson eb "$(wc -c < "$_WX_FSTDERR")" '
+    .rtk_class == (if $w == "recognized" then "recognized-only" else "pipe" end) and .exit_code == $c and .raw.stdout_bytes == $ob and .raw.stderr_bytes == $eb and .visible.stderr_bytes == $eb
   ' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: record fields are wrong: $_WX_FREC"
   # 5. RTK is called only as: --version, then pipe -f <filter>, and only when it can apply.
   case "$_WX_FW" in
@@ -687,6 +709,10 @@ fixture_case() { # filter case outcome. Replays the recorded command through wx 
       jq -e --arg f "$_WX_FF" '.output_policy == "raw-rtk-fallback" and .compressor == null and .fallback_reason == "rtk-not-smaller" and .filter == $f and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: not-smaller record is wrong: $_WX_FREC"
       cmp -s "$_WX_TEST_ROOT/rtk-$_WX_FNAME.stdout" "$_WX_FD/stdout" || fail "$_WX_FNAME: raw output was not shown when RTK was not smaller"
       [ "$(wc -c < "$_WX_FRUNDIR/rtk.rejected.stdout")" -ge "$(wc -c < "$_WX_FD/stdout")" ] || fail "$_WX_FNAME: the rejected output was smaller than raw"
+      ;;
+    recognized)
+      jq -e '.compressor == null and .filter == null and .fallback_reason == null and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: recognized-only record is wrong: $_WX_FREC"
+      cmp -s "$_WX_TEST_ROOT/rtk-$_WX_FNAME.stdout" "$_WX_FD/stdout" || fail "$_WX_FNAME: output of a recognized-only command was changed"
       ;;
     nonzero)
       jq -e '.output_policy == "raw-nonzero-exit" and .compressor == null and .filter == null and .fallback_reason == null and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: failing-run record is wrong: $_WX_FREC"
@@ -788,7 +814,7 @@ if [ -n "$_WX_REAL_RTK_FX" ] && [ "$_WX_REAL_RTK_FX" != "$_WX_FIXTURES/rtk" ]; t
   }
   # Every recording that exits 0. Failing recordings never reach RTK, so they are not repeated here.
   while read -r _WX_RCASE _WX_RGROUP _WX_RKIND _WX_RFAKE _WX_RWANT _WX_REVWANT; do
-    [ "$_WX_RKIND" != nonzero ] || continue
+    [ "$_WX_RKIND" != nonzero ] && [ "$_WX_RGROUP" != X ] || continue
     real_case "$_WX_RCASE" "$_WX_RWANT" "$_WX_REVWANT"
   done <<< "$_WX_MATRIX"
   printf 'NOTE: real RTK %s checked on %s recorded runs of %s filters, %s with a known loss of evidence in the shown output\n' "$_WX_REAL_VERSION" "$_WX_REAL_COUNT" "$(printf '%s\n' $_WX_ALL_FILTERS | wc -l)" "$_WX_REAL_LOSS"

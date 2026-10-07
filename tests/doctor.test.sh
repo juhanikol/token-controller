@@ -228,7 +228,7 @@ rtk_cfg() { # jq filter ("." for none). Prints "id:severity" for every RTK confi
   AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -r '[.findings[] | select(.id | startswith("rtk.config")) | "\(.id):\(.severity)"] | sort | join(",")'
 }
 [ "$(rtk_cfg .)" = "rtk.config:ok" ] || fail "the repository RTK config should be ok: $(rtk_cfg .)"
-AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "rtk.config") | .message] | .[0] | contains("20 pipe") and contains("46 recognized-only") and contains("0 never") and contains("Rerun is not used")' >/dev/null || fail "RTK config summary is wrong"
+AICONTEXT_SETTINGS_FILE="$_TEST_ROOT/rtk-cfg.json" bash "$_DOCTOR" --json --project "$_PROJECT" | jq -e '[.findings[] | select(.id == "rtk.config") | .message] | .[0] | contains("16 pipe") and contains("53 recognized-only") and contains("0 never") and contains("Rerun is not used")' >/dev/null || fail "RTK config summary is wrong"
 [ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "x", "class": "turbo", "filter": "x"}]')" = "rtk.config_invalid_class:warn" ] || fail "an unknown class must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "x", "class": "PIPE", "filter": "x"}]')" = "rtk.config_invalid_class:warn" ] || fail "a class with a different case must be a warn"
 [ "$(rtk_cfg '.command_policy.rtk_commands += [{"match": "zzz", "class": "rerun"}]')" = "rtk.config_rerun:warn" ] || fail "a rerun entry must be a warn"

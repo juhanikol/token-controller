@@ -57,8 +57,8 @@ source "$_RB_ROOT/scripts/lib/wx-compress.sh"
 bash "$_RB_FIX/link-shims.sh" "$_RB_TMP/shims"
 
 # Matrix rows: fixture group kind fake real real_evidence
-_RB_MATRIX="$(grep -v '^#' "$_RB_REC/MATRIX" | grep .)"
-_RB_FILTERS='cargo-test pytest go-test go-build tsc vitest mypy ruff-check ruff-format prettier grep rg find fd git-log git-status git-diff log'
+_RB_MATRIX="$(grep -v '^#' "$_RB_REC/MATRIX" | grep . | awk '$2 != "X"')"
+_RB_FILTERS='cargo-test pytest go-build vitest mypy ruff-check grep rg find fd git-log git-status git-diff log'
 
 outcome_policy() { # matrix outcome -> "output_policy|fallback_reason"
   case "$1" in

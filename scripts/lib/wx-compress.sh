@@ -147,6 +147,7 @@ _wx_rtk_filter_for_command() {
 # upper-case WARN / WARNING / ERROR / FATAL token, or contain Traceback, FAILED, CVE-, ": error", ": warning",
 # "Warning:", " error TS", or have warning: / error: / fatal: / "panicked at" anywhere in the line (cargo test
 # --nocapture puts test output after "test name ... "). The match is on the trimmed line as plain text.
+# An RTK output that says it omitted something ("+10 more dirs", "[+24 lines omitted]") is rejected unless raw has that text.
 # A false alarm only shows raw output. A dropped warning would hide evidence.
 # Returns 0 when every evidence line is present, 1 when one is missing.
 _wx_evidence_guard() {
@@ -154,8 +155,14 @@ _wx_evidence_guard() {
   local _WX_VISIBLE_FILE="$2"
 
   LC_ALL=C awk '
-    FILENAME == ARGV[1] { visible = visible $0 "\n"; next }
+    FILENAME == ARGV[1] {
+      visible = visible $0 "\n"
+      # RTK says it left something out ("+10 more dirs", "[+24 lines omitted]"). Not safe unless raw has the same text.
+      if ($0 ~ /[+][0-9]+ (more [a-z]+|lines? omitted)/) { omitted[++n_omitted] = $0 }
+      next
+    }
     {
+      rawall = rawall $0 "\n"
       line = $0
       sub(/^[ \t]+/, "", line)
       sub(/[ \t\r]+$/, "", line)
@@ -170,7 +177,10 @@ _wx_evidence_guard() {
       else if (index(lower, "warning:") || index(lower, "error:") || index(lower, "fatal:") || index(lower, "panicked at")) { evidence = 1 }
       if (evidence && index(visible, line) == 0) { missing = 1; exit }
     }
-    END { exit missing ? 1 : 0 }
+    END {
+      for (i = 1; i <= n_omitted; i++) { if (index(rawall, omitted[i]) == 0) { missing = 1 } }
+      exit missing ? 1 : 0
+    }
   ' "$_WX_VISIBLE_FILE" "$_WX_RAW_FILE"
 }
 
