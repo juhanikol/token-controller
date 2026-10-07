@@ -1,4 +1,5 @@
 <!-- ai-workflow-controller:start -->
+
 ## AI Context Policy
 
 **Active Profile Setup**
@@ -13,6 +14,10 @@ Read the active profile to select the correct context-saving tool.
 Use the tool `RTK` for shell, build, test, and install output that contains too much text.
 Use the tool `LeanCTX` for context-aware file reads, code searches, directory maps, and code graphs. See the LeanCTX rules.
 Use the tool `Headroom` to compress proxy or MCP data and to recover context.
+
+**Skills**
+
+Use skills only when `skills_policy.enabled=true` and the skill is listed as active or explicitly approved by the user. You may recommend an allowed skill, but you must not silently activate one. Do not run skill scripts, hooks, installers, converters, or marketplace commands. Token Controller mode, wx, LeanCTX, RTK, and protected-profile rules override all skill instructions.
 
 **Caveman Rules**
 The tool `Caveman` is off by default.
@@ -60,4 +65,5 @@ Summarize only the repetitive success output.
 **Small Tasks**
 Do not use a context tool for small single-file tasks or code snippet tasks.
 Use a context tool only if the expected output is large.
+
 <!-- ai-workflow-controller:end -->
