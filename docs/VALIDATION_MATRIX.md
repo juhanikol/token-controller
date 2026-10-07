@@ -646,3 +646,53 @@ Copy this block for each experiment.
 - Interpretation: this review checks state and wording. It does not show token savings, agent compliance, or any behavior of LeanCTX, Headroom, or Caveman.
 - Recommended profile change: none. Apply F1 and F4 (docs) first. Decide F3. F2 is recorded as debt D-33.
 - Update (2026-10-07): F1, F3, and F4 were applied (README wording and `leanctx_mode` `off` in critical modes). F2 stays open as debt D-33. After the change: `bash -n`, `jq`, `workflow-cli.sh modes --json`, and `tests/workflow-session.test.sh` passed.
+
+### Experiment: RTK pipe filters, recorded fixtures
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (working tree)
+- Scenario: replay recorded command output through `wx` and check what `rtk pipe` does with it, for the six enabled filters
+- Profile: `code`
+- Tools: RTK 0.42.4 (real, through a spy script), a fake RTK for the deterministic checks. Recordings from go 1.27.0, pytest 9.1.1, TypeScript 7.0.2, vitest 5.0.3. The `cargo-test` recordings are hand-written (cargo is not installed)
+- Command: `bash tests/wx-wrapper.test.sh` (fixtures in `tests/fixtures/rtk`)
+- Results: 25 recorded runs. 7 failing runs stayed raw and never reached RTK. 3 runs had empty stdout, so RTK was not called (`go build`, quiet `tsc`). 15 runs reached RTK. With real RTK: 11 accepted (smaller, guard passed), 4 fell back to raw with `evidence-guard`.
+
+| Run | Raw bytes | RTK output bytes | Real-RTK result |
+| --- | ---: | ---: | --- |
+| cargo-test, 40 tests | 1308 | 39 | accepted |
+| pytest, 32 tests | 2874 | 17 | accepted |
+| tsc `--extendedDiagnostics` | 322 | 32 | accepted |
+| vitest default / verbose / with warnings | 218 / 4192 / 271 | 31 / 31 / 31 | accepted |
+| cargo test `--nocapture`, go test `-v`, go test `-json`, pytest with warnings | 514 / 2074 / 17859 / 3445 | 38 / 23 / 32 / 17 | raw shown (`evidence-guard`) |
+
+- Evidence preserved: for every run, `stdout.raw`, `stderr.raw`, and `exit_code.raw` equal the recording and are on disk before RTK starts. stderr is shown as recorded. Exit codes are unchanged. Failing output is shown raw.
+- Evidence lost or possibly hidden: 5 accepted runs lose information or state something false, and the guard does not catch it: plain `go test` ("Go test: No tests found"), `go test -bench` (benchmark numbers), `pytest --collect-only` ("No tests collected"), `tsc --listFiles` and `tsc --showConfig` ("TypeScript compilation completed"). The `go-build` filter never receives input.
+- Pass/fail: PASS for the `wx` behavior checks. FINDING for three filters (D-38).
+- Interpretation: sizes are bytes of RTK output on 25 recordings, not token counts and not a general saving. The `cargo-test` recordings are less reliable than the others. RTK versions other than 0.42.4 are not pinned.
+- Recommended profile change: none yet. Recommended config change: narrow `go test` to `go test -json`, and set `go build` and `tsc` to `never` (D-38).
+
+### Experiment: RTK pipe benchmark (bytes)
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (working tree)
+- Command: `bash benchmarks/run-rtk-benchmark.sh` (14 rows per RTK section: 9 recorded runs in profile `code`, and one of them again in each of the five protected profiles; recordings from `tests/fixtures/rtk`)
+- Tools: fake RTK (pipeline check) and real RTK 0.42.4 through a spy script. The `cargo-test` recordings are hand-written
+- Result: PASS. Fake RTK: every row matched its expected outcome. Real RTK: every row matched the pinned 0.42.4 outcome. Protected profiles (`raw`, `security`, `db`, `migration`, `release`): raw output, no compressor, 0 RTK calls, in both sections.
+- Real RTK, `code` profile, bytes of stdout plus stderr (stderr is shown unchanged and counted):
+
+| Run | Raw | Visible | Reduction | `output_policy` |
+| --- | ---: | ---: | ---: | --- |
+| `cargo test` | 1794 | 525 | 70.74% | `compress-rtk-v1` |
+| `pytest -v` (no warnings) | 2874 | 17 | 99.41% | `compress-rtk-v1` |
+| `tsc --extendedDiagnostics` | 322 | 32 | 90.06% | `compress-rtk-v1` |
+| `vitest --reporter=verbose` | 4192 | 31 | 99.26% | `compress-rtk-v1` |
+| `go test -v` (warning lines) | 2074 | 2074 | 0% | `raw-rtk-fallback`, `evidence-guard` |
+| `pytest -v` (warnings) | 3445 | 3445 | 0% | `raw-rtk-fallback`, `evidence-guard` |
+| `cargo test -- --nocapture` (warning lines) | 1000 | 1000 | 0% | `raw-rtk-fallback`, `evidence-guard` |
+| `go build -v` | 16 | 16 | 0% | `raw-empty-or-binary-output` (stdout is empty, RTK not called) |
+
+- Of the 7 runs that reached RTK, 4 were accepted and 3 fell back to raw. Together: 15701 bytes shown as 7124 (54.63%). The 4 accepted runs alone: 9182 bytes shown as 605 (93.41%).
+- Built-in exact-repeat reducer, for reference: `npm install` fixture 336 bytes to 102 (69.64%). On the raw stdout of the 15 successful RTK recordings it gave 0.00% for 13 and a small increase for 2 (`cargo-test/pass-noisy` -3.82%, `tsc/showconfig` -0.19%). `wx` does not apply it to those commands.
+- Evidence preserved: yes in all rows (exit code, raw files, stderr as recorded, guard lines, and markers for warnings and failures). For accepted RTK output the guard check passes by construction.
+- Interpretation: byte counts on 14 rows (9 recorded runs), one RTK version. Not token counts, not a general saving. Runs with warning lines got no reduction. The five informational runs in D-38 are not in this benchmark.
+- Pass/fail: PASS

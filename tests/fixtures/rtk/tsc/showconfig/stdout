@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "noEmit": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "target": "es2022",
+        "types": []
+    },
+    "files": [
+        "./src/main.ts",
+        "./src/util1.ts",
+        "./src/util2.ts",
+        "./src/util3.ts",
+        "./src/util4.ts",
+        "./src/util5.ts",
+        "./src/util6.ts",
+        "./src/util7.ts",
+        "./src/util8.ts"
+    ],
+    "include": [
+        "src"
+    ]
+}

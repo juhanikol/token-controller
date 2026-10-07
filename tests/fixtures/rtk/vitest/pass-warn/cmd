@@ -1,0 +1,1 @@
+vitest run tests/math.test.ts tests/warn.test.ts

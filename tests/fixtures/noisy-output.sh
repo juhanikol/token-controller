@@ -4,6 +4,10 @@
 # Environment: FIXTURE_EXIT (exit code, default 0), FIXTURE_STDERR=1 (write one stderr line),
 #              FIXTURE_NO_WARNING=1 (leave out the warning line),
 #              FIXTURE_EVIDENCE="text" (add one more line, for example a warning in another format).
+# With FIXTURE_CASE set, replay a recorded output from tests/fixtures/rtk instead (see replay-case.sh).
+if [ -n "${FIXTURE_CASE:-}" ]; then
+  exec bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/replay-case.sh" "$@"
+fi
 tool="${1:-tool}"
 echo "============ ${tool} session starts ============"
 echo "collected 40 items"

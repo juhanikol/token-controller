@@ -1,0 +1,1 @@
+pytest --collect-only -q tests/test_math.py

@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/venv/bin/python3
+rootdir: /home/user/proj
+collecting ... collected 32 items
+
+tests/test_math.py::test_square[0] PASSED                                [  3%]
+tests/test_math.py::test_square[1] PASSED                                [  6%]
+tests/test_math.py::test_square[2] PASSED                                [  9%]
+tests/test_math.py::test_square[3] PASSED                                [ 12%]
+tests/test_math.py::test_square[4] PASSED                                [ 15%]
+tests/test_math.py::test_square[5] PASSED                                [ 18%]
+tests/test_math.py::test_square[6] PASSED                                [ 21%]
+tests/test_math.py::test_square[7] PASSED                                [ 25%]
+tests/test_math.py::test_square[8] PASSED                                [ 28%]
+tests/test_math.py::test_square[9] PASSED                                [ 31%]
+tests/test_math.py::test_square[10] PASSED                               [ 34%]
+tests/test_math.py::test_square[11] PASSED                               [ 37%]
+tests/test_math.py::test_square[12] PASSED                               [ 40%]
+tests/test_math.py::test_square[13] PASSED                               [ 43%]
+tests/test_math.py::test_square[14] PASSED                               [ 46%]
+tests/test_math.py::test_square[15] PASSED                               [ 50%]
+tests/test_math.py::test_square[16] PASSED                               [ 53%]
+tests/test_math.py::test_square[17] PASSED                               [ 56%]
+tests/test_math.py::test_square[18] PASSED                               [ 59%]
+tests/test_math.py::test_square[19] PASSED                               [ 62%]
+tests/test_math.py::test_square[20] PASSED                               [ 65%]
+tests/test_math.py::test_square[21] PASSED                               [ 68%]
+tests/test_math.py::test_square[22] PASSED                               [ 71%]
+tests/test_math.py::test_square[23] PASSED                               [ 75%]
+tests/test_math.py::test_square[24] PASSED                               [ 78%]
+tests/test_math.py::test_square[25] PASSED                               [ 81%]
+tests/test_math.py::test_square[26] PASSED                               [ 84%]
+tests/test_math.py::test_square[27] PASSED                               [ 87%]
+tests/test_math.py::test_square[28] PASSED                               [ 90%]
+tests/test_math.py::test_square[29] PASSED                               [ 93%]
+tests/test_math.py::test_deprecated_api PASSED                           [ 96%]
+tests/test_math.py::test_user_warning PASSED                             [100%]
+
+=============================== warnings summary ===============================
+tests/test_math.py::test_deprecated_api
+  /home/user/proj/tests/test_math.py:12: DeprecationWarning: old_api() is deprecated, use new_api()
+    warnings.warn("old_api() is deprecated, use new_api()", DeprecationWarning)
+
+tests/test_math.py::test_user_warning
+  /home/user/proj/tests/test_math.py:17: UserWarning: cache is cold, results may be slow
+    warnings.warn("cache is cold, results may be slow", UserWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 32 passed, 2 warnings in 0.03s ========================

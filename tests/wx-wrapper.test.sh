@@ -281,7 +281,7 @@ _wx_evidence_guard "$_WX_TEST_ROOT/g.raw" "$_WX_TEST_ROOT/g.keep" || fail 'guard
 if _wx_evidence_guard "$_WX_TEST_ROOT/g.raw" "$_WX_TEST_ROOT/g.drop"; then fail 'guard accepted output without the error line'; fi
 : > "$_WX_TEST_ROOT/g.empty"
 if _wx_evidence_guard "$_WX_TEST_ROOT/g.raw" "$_WX_TEST_ROOT/g.empty"; then fail 'guard accepted empty output with evidence in raw'; fi
-for _WX_EVIDENCE in 'Warning: low disk' 'src/a.ts(3,5): error TS2322: bad' 'x.py:3: DeprecationWarning: old' 'panic: runtime error' 'Traceback (most recent call last):' 'tests/x FAILED' 'CVE-2099-1' 'warning[W1]: x' '  error[E0308]: mismatched'; do
+for _WX_EVIDENCE in 'Warning: low disk' 'src/a.ts(3,5): error TS2322: bad' 'x.py:3: DeprecationWarning: old' 'panic: runtime error' 'Traceback (most recent call last):' 'tests/x FAILED' 'CVE-2099-1' 'warning[W1]: x' '  error[E0308]: mismatched' 'test tests::slow_path ... warning: slow path' "thread 'tests::t' panicked at src/lib.rs:21:9:" '    calc_test.go:27: warning: cache miss'; do
   printf 'ok\n%s\nok2\n' "$_WX_EVIDENCE" > "$_WX_TEST_ROOT/g2.raw"
   printf 'summary\n' > "$_WX_TEST_ROOT/g2.out"
   if _wx_evidence_guard "$_WX_TEST_ROOT/g2.raw" "$_WX_TEST_ROOT/g2.out"; then fail "guard missed evidence line: $_WX_EVIDENCE"; fi
@@ -513,6 +513,202 @@ _WX_RTK_USES="$(grep -n '"\$_WX_RESOLVED"' "$_WX_REPOSITORY_ROOT/scripts/lib/wx-
 printf '%s\n' "$_WX_RTK_USES" | grep -q -e '--version' || fail 'the version call is missing from the RTK uses'
 printf '%s\n' "$_WX_RTK_USES" | grep -q 'pipe -f' || fail 'the pipe call is missing from the RTK uses'
 if grep -n '_WX_RESOLVED\|_WX_BIN' "$_WX_REPOSITORY_ROOT/scripts/lib/wx.sh" "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" | grep -q .; then fail 'RTK is run outside wx-compress.sh'; fi
+
+# 3j. Recorded outputs of the six enabled filters, replayed through wx (tests/fixtures/rtk, see PROVENANCE.txt).
+# The fake RTK keeps lines that start with warning/error/panic and the last line. The real-RTK block follows.
+_WX_RTK_FIX="$_WX_REPOSITORY_ROOT/tests/fixtures/rtk"
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
+_WX_FIXTURE_TABLE='cargo-test/pass-noisy accepted
+cargo-test/pass-nocapture guard
+cargo-test/fail nonzero
+go-test/pass-noisy guard
+go-test/pass-quiet smaller
+go-test/pass-json guard
+go-test/bench accepted
+go-test/fail nonzero
+go-test/build-error nonzero
+go-build/verbose empty
+go-build/quiet empty
+go-build/fail nonzero
+pytest/pass-noisy accepted
+pytest/pass-warnings guard
+pytest/collect-only accepted
+pytest/fail nonzero
+tsc/pass-noisy accepted
+tsc/pass-listfiles accepted
+tsc/showconfig accepted
+tsc/pass-quiet empty
+tsc/fail nonzero
+vitest/pass-default accepted
+vitest/pass-verbose accepted
+vitest/pass-warn accepted
+vitest/fail nonzero'
+# Every fixture folder is in the table, and every filter has at least a success, a warning-like or failing case.
+_WX_FOUND="$(cd "$_WX_RTK_FIX" && ls -d */*/ | sed 's#/$##' | sort)"
+_WX_LISTED="$(printf '%s\n' "$_WX_FIXTURE_TABLE" | cut -d' ' -f1 | sort)"
+[ "$_WX_FOUND" = "$_WX_LISTED" ] || fail "fixture folders and the test table differ: $(diff <(printf '%s\n' "$_WX_FOUND") <(printf '%s\n' "$_WX_LISTED") | head -4)"
+for _WX_F in cargo-test go-test go-build pytest tsc vitest; do
+  printf '%s\n' "$_WX_FOUND" | grep -q "^$_WX_F/" || fail "no fixture for $_WX_F"
+  jq -e --arg f "$_WX_F" '[.command_policy.rtk_commands[] | select(.class == "pipe" and .filter == $f)] | length == 1' "$AICONTEXT_SETTINGS_FILE" >/dev/null || fail "$_WX_F is not an enabled pipe filter in the config"
+done
+
+fixture_case() { # filter case outcome. Replays the recorded command through wx with the fake RTK and checks everything.
+  local _WX_FF="$1" _WX_FC="$2" _WX_FW="$3"
+  local _WX_FD="$_WX_RTK_FIX/$_WX_FF/$_WX_FC"
+  local -a _WX_FARGV
+  local _WX_FCODE _WX_FRUNLOG _WX_FREC _WX_FRUNDIR _WX_FNAME _WX_FWXERR _WX_FCALLS _WX_FSTDERR
+  read -r -a _WX_FARGV < "$_WX_FD/cmd"
+  _WX_FCODE="$(cat "$_WX_FD/exit")"
+  _WX_FNAME="fx-$_WX_FF-$_WX_FC"
+  _WX_FRUNLOG="$_WX_TEST_ROOT/$_WX_FNAME.runlog"
+  : > "$_WX_FRUNLOG"
+  FIXTURE_CASE="$_WX_FF/$_WX_FC" FIXTURE_RUN_LOG="$_WX_FRUNLOG" rtk_run "$_WX_FNAME" "${_WX_FARGV[@]}"
+  _WX_FWXERR="$_WX_TEST_ROOT/rtk-$_WX_FNAME.stderr"
+  _WX_FCALLS="$_WX_TEST_ROOT/rtk-$_WX_FNAME.log"
+  _WX_FSTDERR="$_WX_FD/stderr"
+  [ -f "$_WX_FSTDERR" ] || _WX_FSTDERR=/dev/null
+  # 1. The original command ran once, with the recorded arguments, and wx returned its exit code.
+  [ "$(wc -l < "$_WX_FRUNLOG")" -eq 1 ] && [ "$(cat "$_WX_FRUNLOG")" = "${_WX_FARGV[*]}" ] || fail "$_WX_FNAME: the command did not run exactly once: $(cat "$_WX_FRUNLOG")"
+  [ "$_WX_RUN_EXIT" -eq "$_WX_FCODE" ] || fail "$_WX_FNAME: exit code $_WX_RUN_EXIT, expected $_WX_FCODE"
+  # 2. Raw files: stdout.raw, stderr.raw, and exit_code.raw hold the original output.
+  _WX_FREC="$(rtk_last)"
+  _WX_FRUNDIR="$(dirname "$(jq -r '.stdout.path' <<< "$_WX_FREC")")"
+  cmp -s "$_WX_FRUNDIR/stdout.raw" "$_WX_FD/stdout" || fail "$_WX_FNAME: stdout.raw differs from the recorded stdout"
+  cmp -s "$_WX_FRUNDIR/stderr.raw" "$_WX_FSTDERR" || fail "$_WX_FNAME: stderr.raw differs from the recorded stderr"
+  [ "$(cat "$_WX_FRUNDIR/exit_code.raw")" = "$_WX_FCODE" ] || fail "$_WX_FNAME: exit_code.raw is wrong"
+  # 3. stderr is shown as it was: the recorded stderr plus the raw-log pointer line.
+  sed '$d' "$_WX_FWXERR" | cmp -s - "$_WX_FSTDERR" || fail "$_WX_FNAME: visible stderr is not the recorded stderr plus the pointer"
+  tail -n 1 "$_WX_FWXERR" | grep -q '^\[wx\] raw logs: ' || fail "$_WX_FNAME: the raw-log pointer line is missing"
+  # go build writes only to stderr, so the go-build filter never gets any input through wx.
+  if [ "$_WX_FF" = go-build ]; then
+    jq -e '.raw.stdout_bytes == 0' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: go build wrote to stdout: $_WX_FREC"
+  fi
+  # 4. Record fields that hold for every outcome.
+  jq -e --arg f "$_WX_FF" --argjson c "$_WX_FCODE" --argjson ob "$(wc -c < "$_WX_FD/stdout")" --argjson eb "$(wc -c < "$_WX_FSTDERR")" '
+    .rtk_class == "pipe" and .exit_code == $c and .raw.stdout_bytes == $ob and .raw.stderr_bytes == $eb and .visible.stderr_bytes == $eb
+  ' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: record fields are wrong: $_WX_FREC"
+  # 5. RTK is called only as: --version, then pipe -f <filter>, and only when it can apply.
+  case "$_WX_FW" in
+    accepted|guard|smaller)
+      [ "$(cat "$_WX_FCALLS")" = "$(printf -- '--version\npipe -f %s' "$_WX_FF")" ] || fail "$_WX_FNAME: unexpected RTK calls: $(cat "$_WX_FCALLS")"
+      grep -Eq "^stdin=([0-9]+) raw=\1 exit=$_WX_FCODE\$" "$_WX_TEST_ROOT/rtk-$_WX_FNAME.raw.log" || fail "$_WX_FNAME: raw output and exit code were not on disk when RTK ran: $(cat "$_WX_TEST_ROOT/rtk-$_WX_FNAME.raw.log")"
+      ;;
+    *)
+      [ ! -s "$_WX_FCALLS" ] || fail "$_WX_FNAME: RTK was called ($(cat "$_WX_FCALLS")) but should not be"
+      ;;
+  esac
+  # 6. Outcome.
+  case "$_WX_FW" in
+    accepted)
+      jq -e --arg f "$_WX_FF" '.output_policy == "compress-rtk-v1" and .compressor == "rtk" and .compressor_version == "9.9.9" and .filter == $f and .fallback_reason == null and .visible.stdout_bytes < .raw.stdout_bytes' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: not accepted: $_WX_FREC"
+      grep -Fq "[fake-rtk:$_WX_FF]" "$_WX_TEST_ROOT/rtk-$_WX_FNAME.stdout" || fail "$_WX_FNAME: the RTK output is not shown"
+      _wx_evidence_guard "$_WX_FD/stdout" "$_WX_TEST_ROOT/rtk-$_WX_FNAME.stdout" || fail "$_WX_FNAME: accepted output does not pass the evidence guard"
+      ;;
+    guard)
+      jq -e --arg f "$_WX_FF" '.output_policy == "raw-rtk-fallback" and .compressor == null and .fallback_reason == "evidence-guard" and .filter == $f and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: guard fallback record is wrong: $_WX_FREC"
+      cmp -s "$_WX_TEST_ROOT/rtk-$_WX_FNAME.stdout" "$_WX_FD/stdout" || fail "$_WX_FNAME: raw output was not shown after the guard failed"
+      [ -f "$_WX_FRUNDIR/rtk.rejected.stdout" ] || fail "$_WX_FNAME: the rejected RTK output was not kept"
+      if _wx_evidence_guard "$_WX_FD/stdout" "$_WX_FRUNDIR/rtk.rejected.stdout"; then fail "$_WX_FNAME: the rejected output passes the guard"; fi
+      ;;
+    smaller)
+      jq -e --arg f "$_WX_FF" '.output_policy == "raw-rtk-fallback" and .compressor == null and .fallback_reason == "rtk-not-smaller" and .filter == $f and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: not-smaller record is wrong: $_WX_FREC"
+      cmp -s "$_WX_TEST_ROOT/rtk-$_WX_FNAME.stdout" "$_WX_FD/stdout" || fail "$_WX_FNAME: raw output was not shown when RTK was not smaller"
+      [ "$(wc -c < "$_WX_FRUNDIR/rtk.rejected.stdout")" -ge "$(wc -c < "$_WX_FD/stdout")" ] || fail "$_WX_FNAME: the rejected output was smaller than raw"
+      ;;
+    nonzero)
+      jq -e '.output_policy == "raw-nonzero-exit" and .compressor == null and .filter == null and .fallback_reason == null and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: failing-run record is wrong: $_WX_FREC"
+      cmp -s "$_WX_TEST_ROOT/rtk-$_WX_FNAME.stdout" "$_WX_FD/stdout" || fail "$_WX_FNAME: failing output was changed"
+      ;;
+    empty)
+      jq -e '.output_policy == "raw-empty-or-binary-output" and .compressor == null and .filter == null and .fallback_reason == null and .raw.stdout_bytes == 0' <<< "$_WX_FREC" >/dev/null || fail "$_WX_FNAME: empty-stdout record is wrong: $_WX_FREC"
+      ;;
+    *) fail "$_WX_FNAME: unknown outcome $_WX_FW" ;;
+  esac
+}
+while read -r _WX_FCASE _WX_FWANT; do
+  fixture_case "${_WX_FCASE%%/*}" "${_WX_FCASE#*/}" "$_WX_FWANT"
+done <<< "$_WX_FIXTURE_TABLE"
+# The warning in vitest stays visible: it is on stderr, so RTK never sees it.
+assert_file_contains "$_WX_TEST_ROOT/rtk-fx-vitest-pass-warn.stderr" 'Warning: cache is cold, results may be slow'
+
+# 3k. Real RTK on the same recordings. A missing RTK is a SKIP. A spy script logs every call and runs the real RTK.
+_WX_REAL_RTK_FX="$(PATH="${PATH#"$_WX_FIXTURES:"}" command -v rtk 2>/dev/null || true)"
+if [ -n "$_WX_REAL_RTK_FX" ] && [ "$_WX_REAL_RTK_FX" != "$_WX_FIXTURES/rtk" ]; then
+  _WX_SPY="$_WX_TEST_ROOT/spy-rtk"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$SPY_LOG"\nexec "%s" "$@"\n' "$_WX_REAL_RTK_FX" > "$_WX_SPY"
+  chmod +x "$_WX_SPY"
+  _WX_REAL_VERSION="$("$_WX_REAL_RTK_FX" --version 2>/dev/null | head -n 1)"
+  # Pinned outcomes for RTK 0.42.4. Cases where real RTK gives a wrong or lossy summary are warned about, not pinned.
+  _WX_PINNED='cargo-test/pass-noisy accepted
+cargo-test/pass-nocapture guard
+go-test/pass-noisy guard
+go-test/pass-json guard
+pytest/pass-noisy accepted
+pytest/pass-warnings guard
+tsc/pass-noisy accepted
+vitest/pass-default accepted
+vitest/pass-verbose accepted
+vitest/pass-warn accepted'
+  _WX_REAL_COUNT=0
+  real_case() { # case, outcome from the fake table (accepted, guard, smaller, empty)
+    local _WX_RC="$1" _WX_RW="$2" _WX_RF="${1%%/*}" _WX_RD _WX_RLOG _WX_RREC _WX_RRUN _WX_REXIT _WX_RPIN _WX_RRES
+    local -a _WX_RARGV
+    _WX_RD="$_WX_RTK_FIX/$_WX_RC"
+    read -r -a _WX_RARGV < "$_WX_RD/cmd"
+    _WX_RLOG="$_WX_TEST_ROOT/real-${_WX_RC//\//-}.spy"
+    : > "$_WX_RLOG"
+    SPY_LOG="$_WX_RLOG" AICONTEXT_RTK_BIN="$_WX_SPY" FIXTURE_CASE="$_WX_RC" FIXTURE_RUN_LOG="$_WX_TEST_ROOT/real-run.log" \
+      wx "${_WX_RARGV[@]}" >"$_WX_TEST_ROOT/real-out" 2>"$_WX_TEST_ROOT/real-err"
+    _WX_REXIT=$?
+    _WX_RREC="$(jq -c -s '.[-1]' .ai-context/session.jsonl)"
+    _WX_RRUN="$(dirname "$(jq -r '.stdout.path' <<< "$_WX_RREC")")"
+    [ "$_WX_REXIT" -eq 0 ] || fail "real RTK $_WX_RC: exit code $_WX_REXIT"
+    cmp -s "$_WX_RRUN/stdout.raw" "$_WX_RD/stdout" || fail "real RTK $_WX_RC: stdout.raw differs from the recording"
+    [ "$(cat "$_WX_RRUN/exit_code.raw")" = 0 ] || fail "real RTK $_WX_RC: exit_code.raw is wrong"
+    if [ -f "$_WX_RD/stderr" ]; then cmp -s "$_WX_RRUN/stderr.raw" "$_WX_RD/stderr" || fail "real RTK $_WX_RC: stderr.raw differs"; fi
+    jq -e '.rtk_class == "pipe"' <<< "$_WX_RREC" >/dev/null || fail "real RTK $_WX_RC: wrong class"
+    if [ "$_WX_RW" = empty ]; then
+      [ ! -s "$_WX_RLOG" ] || fail "real RTK $_WX_RC: RTK was called for empty stdout: $(cat "$_WX_RLOG")"
+      printf 'NOTE: real RTK %s: no stdout, RTK not called\n' "$_WX_RC"
+    else
+      [ "$(cat "$_WX_RLOG")" = "$(printf -- '--version\npipe -f %s' "$_WX_RF")" ] || fail "real RTK $_WX_RC: unexpected RTK calls: $(cat "$_WX_RLOG")"
+      # Either the real RTK output is shown (smaller, guard passes), or raw is shown with a valid reason.
+      if jq -e '.compressor == "rtk"' <<< "$_WX_RREC" >/dev/null; then
+        jq -e '.output_policy == "compress-rtk-v1" and .compressor_version != null and .fallback_reason == null and .visible.stdout_bytes < .raw.stdout_bytes' <<< "$_WX_RREC" >/dev/null || fail "real RTK $_WX_RC: accepted record is inconsistent: $_WX_RREC"
+        _wx_evidence_guard "$_WX_RD/stdout" "$_WX_TEST_ROOT/real-out" || fail "real RTK $_WX_RC: accepted output fails the evidence guard"
+        _WX_RRES=accepted
+      else
+        jq -e '.output_policy == "raw-rtk-fallback" and .compressor == null and (.fallback_reason | IN("evidence-guard", "rtk-not-smaller", "rtk-empty-output", "rtk-nonzero-exit", "rtk-timeout")) and .visible.stdout_bytes == .raw.stdout_bytes' <<< "$_WX_RREC" >/dev/null || fail "real RTK $_WX_RC: fallback record is inconsistent: $_WX_RREC"
+        cmp -s "$_WX_TEST_ROOT/real-out" "$_WX_RD/stdout" || fail "real RTK $_WX_RC: raw output was not shown after a fallback"
+        _WX_RRES="$(jq -r '.fallback_reason' <<< "$_WX_RREC")"
+        [ "$_WX_RRES" = evidence-guard ] && _WX_RRES=guard
+      fi
+      _WX_RPIN="$(printf '%s\n' "$_WX_PINNED" | awk -v c="$_WX_RC" '$1 == c { print $2 }')"
+      case "$_WX_REAL_VERSION" in
+        *0.42.4*)
+          if [ -n "$_WX_RPIN" ]; then
+            [ "$_WX_RRES" = "$_WX_RPIN" ] || fail "real RTK $_WX_RC: expected $_WX_RPIN, got $_WX_RRES"
+          elif [ "$_WX_RRES" = accepted ]; then
+            printf 'WARN: real RTK %s accepted %s: %s raw bytes became %s bytes: "%s"\n' "$_WX_REAL_VERSION" "$_WX_RC" "$(jq -r '.raw.stdout_bytes' <<< "$_WX_RREC")" "$(jq -r '.visible.stdout_bytes' <<< "$_WX_RREC")" "$(head -n 1 "$_WX_TEST_ROOT/real-out" | cut -c1-60)"
+          fi
+          ;;
+        *) printf 'NOTE: real RTK %s on %s: %s (outcomes are pinned for 0.42.4 only)\n' "$_WX_REAL_VERSION" "$_WX_RC" "$_WX_RRES" ;;
+      esac
+    fi
+    _WX_REAL_COUNT=$((_WX_REAL_COUNT + 1))
+  }
+  # Every success case and every empty-stdout case. Failing cases never reach RTK, so they are not repeated here.
+  while read -r _WX_RCASE _WX_RWANT; do
+    case "$_WX_RWANT" in accepted|guard|smaller|empty) real_case "$_WX_RCASE" "$_WX_RWANT" ;; esac
+  done <<< "$_WX_FIXTURE_TABLE"
+  for _WX_F in cargo-test go-test go-build pytest tsc vitest; do
+    printf '%s\n' "$_WX_FIXTURE_TABLE" | grep -q "^$_WX_F/" || fail "no real-RTK check for $_WX_F"
+  done
+  printf 'NOTE: real RTK %s checked on %s recorded runs (cargo-test, go-test, go-build, pytest, tsc, vitest)\n' "$_WX_REAL_VERSION" "$_WX_REAL_COUNT"
+else
+  printf 'SKIP: real RTK is not installed. The 6 real-RTK filter checks were skipped. The fake RTK matrix ran.\n'
+fi
+source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" code >/dev/null 2>&1
 
 # 5. Token Controller never runs "rtk init" (or anything except --version and pipe -f <mapped filter>).
 if grep -Ev '^(--version|pipe -f (cargo-test|pytest|go-test|go-build|tsc|vitest))$' "$_WX_RTK_ALL_LOG" | grep -q .; then
