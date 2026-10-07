@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Fake lean-ctx for tests/leanctx.test.sh. Deterministic. It logs every call to $FAKE_LC_LOG (one line per call).
+# It supports only: --version, status, doctor, read <file> [-m mode] [--fresh], grep <pattern> <path>, ls <path>.
+# wrap, setup, init, onboard, -c, and anything else: logged, then exit 9. It never writes anything except the log.
+printf '%s\n' "$*" >> "${FAKE_LC_LOG:-/dev/null}"
+case "${1:-}" in
+  --version) echo "lean-ctx 9.9.9 (fake)" ;;
+  status)
+    echo "lean-ctx status  v9.9.9"
+    echo "  shadow_mode: active"
+    echo "  doctor: 2/2" ;;
+  doctor)
+    echo "lean-ctx doctor  diagnostics"
+    echo "  ✓  lean-ctx in PATH"
+    echo "  ✓  data dir  exists" ;;
+  read)
+    file="${2:-}"; mode=full
+    shift 2 2>/dev/null
+    while [ $# -gt 0 ]; do
+      case "$1" in -m) mode="${2:-full}"; shift ;; esac
+      shift
+    done
+    if [ ! -f "$file" ]; then
+      echo "lean-ctx: cannot read $file: no such file" >&2
+      exit 2
+    fi
+    case "$mode" in
+      signatures|map) grep '^#' "$file" ;;
+      *) cat "$file" ;;
+    esac ;;
+  grep)
+    shift
+    command grep -rn -- "$@" ;;
+  ls)
+    shift
+    command ls -1 -- "$@" ;;
+  *)
+    echo "fake lean-ctx: not supported: $*" >&2
+    exit 9 ;;
+esac

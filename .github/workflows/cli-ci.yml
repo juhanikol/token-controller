@@ -39,7 +39,7 @@ jobs:
         # The tests run these files directly. Git must keep the execute bit.
         run: |
           missing=0
-          for f in scripts/workflow-cli.sh tests/fixtures/bin/*; do
+          for f in scripts/workflow-cli.sh tests/fixtures/bin/* tests/fixtures/leanctx/lean-ctx tests/fixtures/shim-command.sh; do
             if [ ! -x "$f" ]; then echo "not executable: $f"; missing=1; fi
           done
           exit "$missing"
@@ -63,6 +63,9 @@ jobs:
 
       - name: Doctor tests
         run: bash tests/doctor.test.sh
+
+      - name: LeanCTX CLI harness (fake lean-ctx, real one skipped)
+        run: bash tests/leanctx.test.sh
 
       - name: Benchmark
         # Exits 1 if failure, security, or database evidence is not preserved.

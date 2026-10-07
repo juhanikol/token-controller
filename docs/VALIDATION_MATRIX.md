@@ -720,3 +720,22 @@ Copy this block for each experiment.
 - Result: PASS. Known losses in shown output: 0 (was 12). Real RTK, `code` rows: 11 RTK outputs shown (13728 to 2783 bytes), 7 evidence-guard fallbacks, 10 not-smaller fallbacks, 1 empty RTK output, 9 failing runs and 4 empty-stdout runs raw without an RTK call. Protected profiles raw, no RTK call.
 - Interpretation: byte counts, one RTK version, hand-written input for 7 filters. The guard only sees omission markers, errors, and warnings. No token saving is claimed.
 - Pass/fail: PASS
+
+### Experiment: LeanCTX CLI harness (bytes)
+
+- Date: 2026-10-07
+- Command: `bash tests/leanctx.test.sh` (fake `tests/fixtures/leanctx/lean-ctx`, and the real lean-ctx 3.9.19 against this repository). Called directly, never through `wx`.
+- Result: PASS. Fake: `--version`, `status`, `doctor`, `read -m signatures`, `read -m full --fresh` (identical bytes), `grep`, `ls`, a failing read (exit 2, message visible), only these 8 calls logged, no wrap/setup/init, no wx files. Real: 4 commands exit 0, LeanCTX config directory and the repository unchanged.
+- Real lean-ctx on README.md (31175 bytes) and this repository, bytes shown on stdout:
+
+| Command | Raw | LeanCTX | Reduction | Evidence preserved |
+| --- | ---: | ---: | ---: | --- |
+| `read README.md -m signatures` | 31175 | 2193 | 92.97% | yes (all headings) |
+| `read README.md -m full --fresh` | 31175 | 2032 | 93.48% | no (not the file) |
+| `grep "AICONTEXT" .` | 68215 | 125 | 99.82% | no (matches missing) |
+| `ls .` | 113 | 192 | -69.91% | no |
+
+- Evidence lost or possibly hidden: in this agent environment real `read -m full --fresh` and `-m raw` return headings and "526 lines filtered by triage"; in a clean environment (`env -i`) the same call returned 44 bytes. `grep` over the repository returned a cache note, not the matches. Output depends on LeanCTX cache and triage state, and an exact read is not guaranteed through the CLI. See D-39.
+- Side effects of real calls: LeanCTX writes its data directory (stats, sessions) and starts its background daemon. The test stops a daemon that it started. Config is not changed.
+- Interpretation: byte counts, one LeanCTX version, one repository, CLI only (MCP tools not tested). Not token counts.
+- Pass/fail: PASS (the harness hard-checks exit codes, no wx, no config change; evidence results for the real tool are reported as warnings)

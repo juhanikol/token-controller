@@ -11,7 +11,7 @@ The `wx` tool reads `active_mode.env` by default.
 **Tool Selection**
 Read the active profile to select the correct context-saving tool.
 Use the tool `RTK` for shell, build, test, and install output that contains too much text.
-Use the tool `LeanCTX` for context-aware file reads, code searches, directory maps, and code graphs.
+Use the tool `LeanCTX` for context-aware file reads, code searches, directory maps, and code graphs. See the LeanCTX rules.
 Use the tool `Headroom` to compress proxy or MCP data and to recover context.
 
 **Caveman Rules**
@@ -22,14 +22,13 @@ Do not use `Caveman` to record the first failure.
 Do not use `Caveman` to write instructions for a human user.
 
 **LeanCTX Rules**
-Use `LeanCTX` only when `AICONTEXT_LEANCTX_MODE` in `active_mode.env` is not `off`.
-Use the MCP tools first: `ctx_read` to read files, `ctx_search` to search code, `ctx_tree` to show directories, `ctx_compose` to combine context, and `ctx_graph`, `ctx_repomap`, or `ctx_overview` for code structure.
-Use the CLI commands `lean-ctx read`, `lean-ctx grep`, `lean-ctx ls`, and `lean-ctx find` only when an MCP tool is not available.
-Do not use `ctx_shell` or `lean-ctx -c`. The tool `wx` owns shell output.
-Do not run `lean-ctx wrap`, `setup`, `init`, `onboard`, or `doctor --fix`.
-Do not change the LeanCTX configuration, the MCP configuration, or the shell hooks.
-Do not use the LeanCTX edit and memory tools. They are not approved yet.
-Read the exact file when you must quote code or find an error.
+Use `LeanCTX` only when `AICONTEXT_LEANCTX_MODE` in `active_mode.env` is not `off` and the LeanCTX MCP tools are available.
+Use `ctx_tree`, `ctx_search`, `ctx_read`, and `ctx_compose` to explore the code and to read files.
+Use the `map`, `signatures`, or `task` read modes first.
+Use a fresh `full` or raw read before an exact edit.
+Do not use `ctx_shell`. Use `wx` for terminal commands.
+Do not use `LeanCTX` in the `raw`, `security`, `db`, `migration`, or `release` profiles, unless the active profile allows it.
+Do not run `lean-ctx wrap`, `setup`, or `init`.
 
 **Output Style**
 Read the `AICONTEXT_OUTPUT_STYLE` value from `active_mode.env`.

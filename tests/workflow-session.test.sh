@@ -503,4 +503,60 @@ printf '{"exit_code":0,"raw":{"stdout_bytes":0,"stderr_bytes":0},"visible":{"std
 (cd "$_WX_RP_MIX" && "$_WX_CLI" report --json | jq -e '.command_count == 3' >/dev/null) || fail 'report --json without --project should use the current directory'
 [ "$(jq -r '.report_schema_version' "$_WX_TEST_ROOT/version.json")" = "$(jq -r '.schema_version' "$_WX_TEST_ROOT/rp-mix.json")" ] || fail 'report_schema_version differs from report --json'
 
+# LeanCTX mode mapping. The expected values are written here on purpose: a change in the config must change this table.
+# Critical modes and the light modes are off. The rest allow LeanCTX with a non-off mode. Nothing here starts LeanCTX.
+_WX_LEAN_MAP='raw off
+security off
+db off
+migration off
+release off
+micro off
+snippet off
+off off
+scope context-read
+architect graph-read
+decisions graph-read
+code auto
+test diagnostic
+test-full diagnostic
+debug diagnostic
+docs context-read
+review graph-read
+cicd diagnostic
+rapid-prototype diagnostic
+agent auto
+data-analysis diagnostic
+perf diagnostic'
+[ "$(printf '%s\n' "$_WX_LEAN_MAP" | wc -l)" -eq 22 ] || fail 'the LeanCTX mode table does not have 22 modes'
+[ "$(jq -r '.modes | keys | sort | join(" ")' "$_WX_REPOSITORY_ROOT/config/workflow_settings.json")" = "$(printf '%s\n' "$_WX_LEAN_MAP" | cut -d' ' -f1 | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')" ] || fail 'the LeanCTX mode table and the config modes differ'
+jq -e '.modes | to_entries | all(.value.leanctx_mode | IN("off", "auto", "context-read", "graph-read", "diagnostic", "guarded"))' "$_WX_REPOSITORY_ROOT/config/workflow_settings.json" >/dev/null || fail 'a mode has an unknown leanctx_mode'
+"$_WX_CLI" modes --json >"$_WX_TEST_ROOT/lean-modes.json" || fail 'modes --json failed'
+while read -r _WX_LM _WX_LV; do
+  "$_WX_CLI" "$_WX_LM" >/dev/null 2>&1 || fail "activating $_WX_LM failed"
+  # active_mode.env
+  grep -qx "export AICONTEXT_LEANCTX_MODE=\"$_WX_LV\"" "$AICONTEXT_CONFIG_DIR/active_mode.env" || fail "$_WX_LM: active_mode.env does not hold AICONTEXT_LEANCTX_MODE=$_WX_LV"
+  # status --json
+  [ "$("$_WX_CLI" status --json | jq -r '.profile + " " + .leanctx_mode')" = "$_WX_LM $_WX_LV" ] || fail "$_WX_LM: status --json leanctx_mode is not $_WX_LV"
+  # modes --json
+  [ "$(jq -r --arg m "$_WX_LM" '.modes[] | select(.name == $m) | .leanctx_mode' "$_WX_TEST_ROOT/lean-modes.json")" = "$_WX_LV" ] || fail "$_WX_LM: modes --json leanctx_mode is not $_WX_LV"
+  # the exported variable of a sourced activation
+  [ "$(unset AICONTEXT_LEANCTX_MODE; source "$_WX_REPOSITORY_ROOT/scripts/workflow.sh" "$_WX_LM" >/dev/null 2>&1; printf '%s' "${AICONTEXT_LEANCTX_MODE:-unset}")" = "$_WX_LV" ] || fail "$_WX_LM: AICONTEXT_LEANCTX_MODE is not exported as $_WX_LV"
+  # critical and light modes are off, the others are not
+  case "$_WX_LM" in
+    raw|security|db|migration|release|micro|snippet|off) [ "$_WX_LV" = off ] || fail "$_WX_LM must be off" ;;
+  esac
+  case "$_WX_LM" in
+    scope|architect|decisions|code|test|debug|docs|review) [ "$_WX_LV" != off ] || fail "$_WX_LM must allow LeanCTX" ;;
+  esac
+done <<< "$_WX_LEAN_MAP"
+# Every critical-risk mode is off, whatever its name.
+jq -e '[.modes | to_entries[] | select(.value.risk == "critical") | .value.leanctx_mode] | length == 5 and all(. == "off")' "$_WX_REPOSITORY_ROOT/config/workflow_settings.json" >/dev/null || fail 'a critical-risk mode allows LeanCTX'
+# Aliases resolve to the mapped mode.
+for _WX_AL in 'plan architect graph-read' 'ci cicd diagnostic'; do
+  read -r _WX_A _WX_AM _WX_AV <<< "$_WX_AL"
+  "$_WX_CLI" "$_WX_A" >/dev/null 2>&1 || fail "alias $_WX_A failed"
+  [ "$("$_WX_CLI" status --json | jq -r '.profile + " " + .leanctx_mode')" = "$_WX_AM $_WX_AV" ] || fail "alias $_WX_A does not give $_WX_AM $_WX_AV"
+done
+rm -f "$AICONTEXT_CONFIG_DIR/active_mode.env"
+
 printf '%s\n' 'PASS: workflow report and reset-session'
