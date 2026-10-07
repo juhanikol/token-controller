@@ -8,7 +8,7 @@ Maybe you are exploring a large codebase. Maybe your agent just dumped a wall of
 
 You may have tried token-saving tools before. They help, but each one has its own setup, commands, hooks, flags, and risks. Then another promising tool appears next week, and now you have one more thing to configure and remember.
 
-**Token Controller exists to remove that cognitive load.**
+**Token Controller exists to remove that cognitive load.** This tool with its accompanied tools could reduce token usage even 50% or more depending on settings and project maturity, and agent instructions. (no warranty - please be kind and report me your findings)
 
 ## **VS Code control**
 
