@@ -11,6 +11,7 @@ set -euo pipefail
 # It never runs "rtk init", "lean-ctx setup", "lean-ctx wrap", or "lean-ctx init", and it never installs a hook.
 # (Those commands are shown below only as text, with the reason they are not recommended.)
 # For the basic setup without the optional-tool list, use scripts/install-wsl.sh.
+# To install one optional tool with a confirmation step: scripts/install-tools/rtk.sh, leanctx.sh, or caveman.sh.
 
 _PRINT_ONLY=false
 case "${1:-}" in
@@ -67,7 +68,10 @@ LeanCTX (choose one installation method; do not run both):
   cargo install lean-ctx
 
   # OR use the universal installer when Rust is not installed.
-  curl -fsSL https://leanctx.com/install.sh | sh
+  # WARNING: by default the upstream installer runs "lean-ctx onboard" (it edits your agents' MCP config) and appends to ~/.bashrc.
+  # Turn both off:
+  curl -fsSL https://leanctx.com/install.sh | LEAN_CTX_NO_ONBOARD=1 LEAN_CTX_NO_PATH_FIX=1 sh
+  # (scripts/install-tools/leanctx.sh does this for you, after it asks.)
 
   source ~/.bashrc
   lean-ctx doctor

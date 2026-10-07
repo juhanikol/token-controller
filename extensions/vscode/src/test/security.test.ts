@@ -107,6 +107,28 @@ suite('Security model', () => {
 		assert.ok(/execFile\(\s*'bash',\s*\[cliPath, \.\.\.args\]/.test(cli));
 	});
 
+	test('source: only cli.ts starts processes, and the setup code has no shell string, no bash -c, and no install command', function () {
+		const srcDir = path.join(EXTENSION_ROOT, 'src');
+		if (!fs.existsSync(srcDir)) {
+			this.skip();
+		}
+		for (const name of fs.readdirSync(srcDir).filter((file) => file.endsWith('.ts'))) {
+			const text = fs.readFileSync(path.join(srcDir, name), 'utf8');
+			if (name !== 'cli.ts') {
+				assert.ok(!/child_process/.test(text), `${name}: starts processes outside cli.ts`);
+			}
+			// The extension never installs a tool or edits agent or MCP settings. The words may appear in texts that explain this.
+			assert.ok(!/['"`](rtk|lean-ctx|caveman)['"`]\s*,\s*['"`](init|setup|wrap|onboard|install)['"`]/.test(text), `${name}: runs an optional tool command`);
+			assert.ok(!/mcp\.json|writeFileSync|appendFileSync/.test(text), `${name}: writes files or touches MCP config`);
+		}
+		const manifest = JSON.parse(fs.readFileSync(path.join(EXTENSION_ROOT, 'package.json'), 'utf8'));
+		const ids = manifest.contributes.commands.map((command: { command: string }) => command.command);
+		for (const id of ['tokenController.setupHelp', 'tokenController.initProject', 'tokenController.checkTools']) {
+			assert.ok(ids.includes(id), id);
+		}
+		assert.strictEqual(manifest.contributes.configuration.properties['tokenController.promptToInitialize'].default, true);
+	});
+
 	test('source: the only LeanCTX call is "leanctx status --json" (no read, read-exact, search, or tree)', function () {
 		const srcDir = path.join(EXTENSION_ROOT, 'src');
 		if (!fs.existsSync(srcDir)) {

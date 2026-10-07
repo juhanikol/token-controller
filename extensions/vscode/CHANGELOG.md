@@ -9,6 +9,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 Planned version: 2.0.0 (set in `package.json`, not released or published). The last release is 1.1.0 (git tag `v1.1.0`).
 
 ### Added
+- First-run setup: status `AI Context: setup needed` with *Open setup guide*, *Copy install command*, and *Select workflow.sh*; project initialization state; commands **Token Controller: Initialize Current Project** (trusted workspaces, asks first) and **Token Controller: Check Optional Tools**; setting `tokenController.promptToInitialize`.
 
 - Command **Token Controller: Show LeanCTX Status**: runs `workflow leanctx status --json` and shows the adapter status in the output channel. No LeanCTX read, search, or tree action.
 

@@ -2,7 +2,7 @@
 
 **Stop burning tokens on noise. Pick the work mode, let the controller guide the tools, and keep the important evidence safe.**
 
-Are your AI-coding tokens disappearing faster than expected?
+Are your AI-coding context disappearing faster than expected?
 
 Maybe you are exploring a large codebase. Maybe your agent just dumped a wall of test output into the context. Maybe you already have a good `AGENTS.md` or `SKILLS.md`, but the context still fills up with logs, file listings, repeated success output, and tool chatter.
 
@@ -16,7 +16,7 @@ The Status Bar dropdown provides another way to select a profile.
 
 ![select context](assets/20260824_212040_image.png)
 
-	Impressed already? Looking for quick install? Jump to: [releases](https://github.com/juhanikol/token-controller/releases) and download
+Impressed already? Looking for quick install? **Jump to:** [releases](https://github.com/juhanikol/token-controller/releases) and download
 
 It also gives you one simple workflow in CLI for choosing the task you are doing:
 
@@ -31,12 +31,12 @@ The controller then publishes that mode to your shell, your project instructions
 
 Token Controller does not try to replace your tools. It orchestrates them.
 
-* **RTK** reduces noisy terminal output after raw output has been captured.
-* **LeanCTX** helps with controlled codebase exploration, file reads, search, and tree views.
-* **Caveman** can reduce assistant response verbosity when explicitly allowed.
-* **wx** is the safety layer that keeps raw command output, stderr, and exit codes available.
+1. **RTK** reduces noisy terminal output after raw output has been captured.
+2. **LeanCTX** helps with controlled codebase exploration, file reads, search, and tree views.
+3. **Caveman** can reduce assistant response verbosity when explicitly allowed.
+4. **wx** is the token controller's safety layer that keeps raw command output, stderr, and exit codes available.
 
-These are all community praised and respected solutions! Thousands have already tested these! So you know that the tools used are already proven and you might have even used them. Token-controller just orchestrates them so you do not need to worry about them.
+The first three are all community praised and respected solutions! Thousands have already tested these! So you know that the tools used are already proven and you might have even used them. Token-controller just orchestrates them so you do not need to worry about them.
 
 The goal is simple: **save context where it is safe**, and keep full evidence where correctness matters.
 
@@ -54,6 +54,8 @@ Install once. Initialize each project once. Then select the work mode from the t
 ## Install (WSL 2 + Ubuntu)
 
 Token Controller is tested on **WSL 2 with Ubuntu**, with VS Code connected to the same WSL distro. Native Windows is not supported yet.
+
+**The release flow in short:** download the release (the `token-controller-ui-x.x.x.vsix` extension file, plus this repository). Then run `scripts/install-wsl.sh` in WSL, which install the VSIX into the WSL VS Code, and open your project. The extension tells you what is missing and offers to run `workflow init` for you.
 
 1. **Get it.** In a WSL terminal:
 
@@ -82,20 +84,31 @@ Token Controller is tested on **WSL 2 with Ubuntu**, with VS Code connected to t
    ```
 5. **Optional: install the VS Code extension** for the status-bar mode switcher (next section).
 
-That is all. For daily use, remember `workflow init` and `workflow <mode>`.
+That is all. For daily use, remember `workflow init` and `workflow <mode>`. (With the extension you can run **Token Controller: Initialize Current Project** instead of `workflow init`.)
 
 ## VS Code extension (optional)
 
 The extension shows the active mode in the status bar and lets you switch it. It does not compress anything itself.
 
-1. Get `token-controller-ui-2.0.0.vsix` from the [GitHub release](https://github.com/juhanikol/token-controller/releases), or build it ([extensions/vscode/README.md](extensions/vscode/README.md)).
+1. Get `token-controller-ui-x.x.x.vsix` from the [GitHub release](https://github.com/juhanikol/token-controller/releases), or build it ([extensions/vscode/README.md](extensions/vscode/README.md)).
 2. Open your project in VS Code **connected to WSL** (the window shows `WSL: Ubuntu` at the bottom left). Run `code .` from a WSL terminal.
-3. Open the Extensions view, click `…`, choose **Install from VSIX…**, and pick the file. Or, in a WSL terminal inside that window:
+3. Open the Extensions view, click `…`, choose **Install from VSIX…**, and pick the file
+
+![1791410318765](image/README/1791410318765.png)
+
+1. Or, in a WSL terminal inside that window:
 
    ```bash
    code --install-extension token-controller-ui-2.0.0.vsix
    ```
-4. Reload the window. The status bar shows `AI Context: <mode>`. Click it to switch.
+
+**Reload the window.** The status bar shows `AI Context: <mode>`. Click it to switch.
+
+### What the extension tells you on first run:
+
+* **`AI Context: setup needed`**: the Token Controller CLI was not found (not installed yet, or in another folder). Click it for three actions: *Open setup guide*, *Copy install command* (paste it in a WSL terminal), and *Select workflow.sh*.
+* **Project not initialized**: the tooltip says so when `AGENTS.md` has no Token Controller block, and the extension asks once per session if you want to initialize it. The command **Token Controller: Initialize Current Project** asks for confirmation, runs `workflow init` in your project folder (trusted workspaces only), and shows the result.
+* **Token Controller: Check Optional Tools** shows which tools are installed in the output channel. A missing optional tool is only a note.
 
 Install it in the **WSL extension host** ("Install in WSL: Ubuntu"), not only in local Windows VS Code. If you cloned the controller somewhere other than `~/projects/token-controller`, set `tokenController.scriptPath` in your user settings.
 
@@ -145,6 +158,16 @@ To see how to install them, read the commands (nothing is installed for you):
 
 ```bash
 bash ~/projects/token-controller/scripts/show-optional-tools.sh --print-only
+```
+
+Missing tools degrade safely: without RTK you see the raw output, without LeanCTX `workflow leanctx` says it is not available, and without Caveman nothing changes. The install script never installs any of them.
+
+When you want one, a helper script shows the upstream source, says it may be out of date, and asks you to confirm before it installs anything (one tool per helper):
+
+```bash
+bash ~/projects/token-controller/scripts/install-tools/rtk.sh
+bash ~/projects/token-controller/scripts/install-tools/leanctx.sh
+bash ~/projects/token-controller/scripts/install-tools/caveman.sh
 ```
 
 Do not run `rtk init` or `lean-ctx setup/wrap/init` casually. They edit agent or MCP settings and can add hooks that skip `wx` capture. Token Controller never runs them, and `workflow doctor` warns if it finds such a hook.
@@ -338,6 +361,7 @@ token-controller/
 ├── scripts/
 │   ├── install-wsl.sh             # WSL setup: prerequisites and the workflow alias, no optional tool
 │   ├── show-optional-tools.sh     # prints the optional tools' install commands
+│   ├── install-tools/             # confirm-first helpers: rtk.sh, leanctx.sh, caveman.sh
 │   ├── check-tools.sh             # shows which tools are installed
 │   ├── workflow.sh                # sourced: mode switching and commands
 │   ├── workflow-cli.sh            # run, not sourced: entry point for tools and the extension

@@ -108,6 +108,9 @@ cat <<NEXT
 6. Read-only health check:       workflow doctor
 
 RTK, LeanCTX, Caveman and the other tools are optional. Token Controller works without them and falls back to raw output.
-This script installed none of them. To see the commands, read them first, then run what you want:
-  bash $_ROOT/scripts/show-optional-tools.sh --print-only
+This script installed none of them. When you want one, run its helper (it shows the upstream source and asks first):
+  bash $_ROOT/scripts/install-tools/rtk.sh
+  bash $_ROOT/scripts/install-tools/leanctx.sh
+  bash $_ROOT/scripts/install-tools/caveman.sh
+Or read all the commands first:  bash $_ROOT/scripts/show-optional-tools.sh --print-only
 NEXT

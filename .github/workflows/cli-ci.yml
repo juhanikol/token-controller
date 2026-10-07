@@ -59,7 +59,7 @@ jobs:
           bash -n scripts/workflow.sh
           bash -n scripts/workflow-cli.sh
           bash -n scripts/leanctx-cli.sh
-          for f in scripts/*.sh scripts/lib/*.sh tests/*.sh tests/fixtures/*.sh tests/fixtures/bin/* tests/fixtures/leanctx/lean-ctx benchmarks/*.sh benchmarks/fixtures/*.sh; do
+          for f in scripts/*.sh scripts/lib/*.sh scripts/install-tools/*.sh tests/*.sh tests/fixtures/*.sh tests/fixtures/bin/* tests/fixtures/leanctx/lean-ctx benchmarks/*.sh benchmarks/fixtures/*.sh; do
             [ -e "$f" ] || { echo "missing: $f"; bad=1; continue; }
             bash -n "$f" || { echo "syntax error: $f"; bad=1; }
           done
