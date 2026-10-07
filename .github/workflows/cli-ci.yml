@@ -2,12 +2,16 @@ name: CLI CI
 
 # Bash CLI checks and tests. No optional tool (RTK, LeanCTX, Headroom, Caveman, ccusage) is installed or needed.
 # The tests use fake tools from tests/fixtures. If a real RTK happens to be on the runner, one test also uses it.
+# A real lean-ctx is never used in CI: the LeanCTX harness runs with the fake and skips the real part.
 
+# Push: every branch, so an integration branch is tested before it opens a pull request. Pull request: main only.
+# A pull request branch can run twice (push and pull_request). That is accepted. workflow_dispatch runs it by hand.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "**" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,21 +40,31 @@ jobs:
           done
 
       - name: Check executable bits
-        # The tests run these files directly. Git must keep the execute bit.
+        # These files are run directly (by the tests, by wx, or as a command). Git must keep the execute bit.
+        # scripts/leanctx-cli.sh is called through "bash" (workflow leanctx), and is listed because it is meant for direct use too.
         run: |
           missing=0
-          for f in scripts/workflow-cli.sh tests/fixtures/bin/* tests/fixtures/leanctx/lean-ctx tests/fixtures/shim-command.sh; do
+          for f in scripts/workflow-cli.sh scripts/leanctx-cli.sh \
+            tests/fixtures/bin/* tests/fixtures/leanctx/lean-ctx tests/fixtures/shim-command.sh tests/fixtures/failing-stack.sh \
+            benchmarks/fixtures/*.sh; do
+            if [ ! -e "$f" ]; then echo "missing: $f"; missing=1; continue; fi
             if [ ! -x "$f" ]; then echo "not executable: $f"; missing=1; fi
           done
           exit "$missing"
 
       - name: Bash syntax
+        # Every shell script: scripts, scripts/lib, tests, benchmarks, and the fixture commands.
         run: |
+          bad=0
           bash -n scripts/workflow.sh
           bash -n scripts/workflow-cli.sh
-          for f in scripts/lib/*.sh; do bash -n "$f"; done
-          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
-          for f in tests/*.sh benchmarks/*.sh; do bash -n "$f"; done
+          bash -n scripts/leanctx-cli.sh
+          for f in scripts/*.sh scripts/lib/*.sh tests/*.sh tests/fixtures/*.sh tests/fixtures/bin/* tests/fixtures/leanctx/lean-ctx benchmarks/*.sh benchmarks/fixtures/*.sh; do
+            [ -e "$f" ] || { echo "missing: $f"; bad=1; continue; }
+            bash -n "$f" || { echo "syntax error: $f"; bad=1; }
+          done
+          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n || bad=1
+          exit "$bad"
 
       - name: Config is valid JSON
         run: jq . config/workflow_settings.json >/dev/null
@@ -65,6 +79,8 @@ jobs:
         run: bash tests/doctor.test.sh
 
       - name: LeanCTX CLI harness (fake lean-ctx, real one skipped)
+        env:
+          AICONTEXT_TEST_SKIP_REAL_LEANCTX: "1"
         run: bash tests/leanctx.test.sh
 
       - name: Benchmark

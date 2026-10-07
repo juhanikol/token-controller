@@ -340,6 +340,31 @@ grep -qx doctor "$_LC_LOG" && fail "doctor ran a Windows lean-ctx"
 out="$(WSL_DISTRO_NAME=Ubuntu lc_json)"
 jq -e '[.findings[] | select(.id == "leanctx.linux_binary" and .severity == "ok")] | length == 1' <<< "$out" >/dev/null || fail "WSL with a Linux path must be ok"
 [ "$(lc_ids <<< "$out")" = "leanctx.doctor:ok,leanctx.status:info" ] || fail "WSL with a Linux path: $(lc_ids <<< "$out")"
+# A lean-ctx inside the project: warn, and do not run it (neither --version nor doctor). Both a PATH lookup and the test hook.
+mkdir -p "$_PROJECT/bin"
+cp "$_LC_FAKE" "$_PROJECT/bin/lean-ctx"
+: > "$_LC_LOG"
+out="$(env -u AICONTEXT_LEANCTX_BIN FAKE_LC_LOG="$_LC_LOG" PATH="$_PROJECT/bin:$PATH" bash "$_DOCTOR" --json --project "$_PROJECT")"
+[ "$(lc_ids <<< "$out")" = "leanctx.doctor_skipped:info,leanctx.project_binary:warn" ] || fail "project-local lean-ctx on PATH: $(lc_ids <<< "$out")"
+jq -e '.leanctx.platform_path == "project" and .leanctx.version_ok == false and .leanctx.doctor.ran == false' <<< "$out" >/dev/null || fail "project-local lean-ctx JSON: $(jq -c .leanctx <<< "$out")"
+[ ! -s "$_LC_LOG" ] || fail "doctor ran a project-local lean-ctx: $(cat "$_LC_LOG")"
+out="$(LC_BIN="$_PROJECT/bin/lean-ctx" lc_json)"
+lc_ids <<< "$out" | grep -q 'leanctx.project_binary:warn' || fail "project-local lean-ctx (hook path): $(lc_ids <<< "$out")"
+[ ! -s "$_LC_LOG" ] || fail 'doctor ran a project-local lean-ctx given by AICONTEXT_LEANCTX_BIN'
+# A symlink in the project that points outside is project-controlled too.
+ln -sf "$_LC_FAKE" "$_PROJECT/bin/lc-link"
+out="$(LC_BIN="$_PROJECT/bin/lc-link" lc_json)"
+lc_ids <<< "$out" | grep -q 'leanctx.project_binary:warn' || fail 'a symlink inside the project was not reported'
+# An installed lean-ctx outside the project is not reported.
+out="$(lc_json)"
+lc_ids <<< "$out" | grep -q 'project_binary' && fail 'an installed lean-ctx was reported as project-local'
+# A symlink to the Windows mount, under WSL, is reported as a Windows binary.
+mkdir -p "$_TEST_ROOT/links"
+ln -sf "$_TEST_ROOT/mnt/c/Users/dev/lean-ctx" "$_TEST_ROOT/links/lean-ctx"
+out="$(WSL_DISTRO_NAME=Ubuntu AICONTEXT_DOCTOR_MNT_PREFIX="$_TEST_ROOT/mnt/" LC_BIN="$_TEST_ROOT/links/lean-ctx" lc_json)"
+lc_ids <<< "$out" | grep -q 'leanctx.windows_binary:warn' || fail "a symlink to the Windows mount was not reported: $(lc_ids <<< "$out")"
+rm -rf "$_PROJECT/bin"
+
 # Shell hook and MCP markers: found by text, nothing is changed.
 printf '# lean-ctx shell hook — begin\n. "$HOME/.config/lean-ctx/shell-hook.bash"\n# lean-ctx shell hook — end\n' > "$HOME/.bashrc"
 printf '{"mcpServers":{"lean-ctx":{"command":"lean-ctx"}}}\n' > "$HOME/.cursor/mcp.json" 2>/dev/null || { mkdir -p "$HOME/.cursor"; printf '{"mcpServers":{"lean-ctx":{"command":"lean-ctx"}}}\n' > "$HOME/.cursor/mcp.json"; }

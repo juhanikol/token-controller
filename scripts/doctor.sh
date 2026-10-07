@@ -481,11 +481,35 @@ if [ -r "$_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
 fi
 
 # ---------- tools ----------
+# A lean-ctx inside the project (or the current directory) is project-controlled code. Doctor does not run it.
+_lc_in_project() { # path. True if the path as given, or its real path, is inside the project or the current directory.
+  local _p _r _d
+  case "$1" in /*) ;; *) set -- "$PWD/$1" ;; esac
+  _r="$(readlink -f -- "$1" 2>/dev/null || true)"
+  for _p in "$1" "$_r"; do
+    [ -n "$_p" ] || continue
+    for _d in "$_PROJECT" "$PWD"; do
+      [ -n "$_d" ] || continue
+      # The home directory and / are not a project. An installed binary under ~/.local/bin is fine.
+      [ "$_d" = "$HOME" ] || [ "$_d" = / ] || case "$_p" in "$_d"|"$_d"/*) return 0 ;; esac
+      _d="$(readlink -f -- "$_d" 2>/dev/null || true)"
+      [ -n "$_d" ] || continue
+      [ "$_d" = "$(readlink -f -- "$HOME" 2>/dev/null)" ] || [ "$_d" = / ] || case "$_p" in "$_d"|"$_d"/*) return 0 ;; esac
+    done
+  done
+  return 1
+}
+
 # _TOOLS entry: name|found|kind|path|version   (version last, it may contain text)
 for _tool in rtk lean-ctx headroom caveman ccusage; do
   _tpath="$(command -v "$_tool" 2>/dev/null || true)"
   # Test hook: AICONTEXT_LEANCTX_BIN (set, possibly empty) replaces the lean-ctx lookup.
   if [ "$_tool" = lean-ctx ] && [ "${AICONTEXT_LEANCTX_BIN+set}" = set ]; then _tpath="$AICONTEXT_LEANCTX_BIN"; fi
+  if [ "$_tool" = lean-ctx ] && [ -n "$_tpath" ] && [ -x "$_tpath" ] && _lc_in_project "$_tpath"; then
+    _TOOLS+=("$_tool|true|command|$_tpath|")
+    add Tools ok "tool.$_tool" "$_tool found inside the project. Not run." "$(pl "$_tpath" "")"
+    continue
+  fi
   if [ -n "$_tpath" ] && [ -x "$_tpath" ]; then
     # --version only. Short timeout. No input.
     _tver="$(timeout 3 "$_tpath" --version </dev/null 2>&1 | head -n 1 | cut -c1-80)"
@@ -538,10 +562,16 @@ if [ "${AICONTEXT_LEANCTX_BIN+set}" = set ]; then _LC_PATH="$AICONTEXT_LEANCTX_B
 if [ -n "$_LC_PATH" ] && [ -f "$_LC_PATH" ] && [ -x "$_LC_PATH" ]; then
   _LC_FOUND=true
   _LC_MNT="${AICONTEXT_DOCTOR_MNT_PREFIX:-/mnt/}"
-  case "$_LC_PATH" in
-    "$_LC_MNT"[a-zA-Z]/*) _LC_PLATFORM_PATH=windows ;;
-    *) _LC_PLATFORM_PATH=linux ;;
-  esac
+  _LC_REAL="$(readlink -f -- "$_LC_PATH" 2>/dev/null || true)"
+  _LC_PLATFORM_PATH=linux
+  case "$_LC_PATH" in "$_LC_MNT"[a-zA-Z]/*) _LC_PLATFORM_PATH=windows ;; esac
+  case "$_LC_REAL" in "$_LC_MNT"[a-zA-Z]/*) _LC_PLATFORM_PATH=windows ;; esac
+  if _lc_in_project "$_LC_PATH"; then
+    # Project-controlled binary: not run, not trusted. workflow leanctx refuses it too.
+    _LC_PLATFORM_PATH=project
+    add LeanCTX warn leanctx.project_binary "lean-ctx resolves to a path inside the project ($(short "$_LC_PATH")), before any installed lean-ctx in PATH. A project can ship its own binary. Doctor did not run it, and workflow leanctx refuses it." "$(pl "$_LC_PATH" "")" "Remove it from PATH, or install lean-ctx outside the project. Override for workflow leanctx: AICONTEXT_ALLOW_PROJECT_LEANCTX=true."
+    add LeanCTX info leanctx.doctor_skipped "lean-ctx doctor was not run: the binary is inside the project."
+  else
   # Version. Exit code and timeout are checked.
   _lc_out="$(timeout -k 1 3 "$_LC_PATH" --version </dev/null 2>&1; printf '\n@@rc=%s' "$?")"
   _lc_rc="${_lc_out##*@@rc=}"
@@ -586,6 +616,7 @@ if [ -n "$_LC_PATH" ] && [ -f "$_LC_PATH" ] && [ -x "$_LC_PATH" ]; then
     else
       add LeanCTX ok leanctx.doctor "lean-ctx doctor: $_LC_DOC_OK checks ok." "$(pl "$_LC_PATH" "")"
     fi
+  fi
   fi
 else
   add LeanCTX info leanctx.missing "lean-ctx not found. It is optional. The Token Controller LeanCTX policy is not used at run time yet."

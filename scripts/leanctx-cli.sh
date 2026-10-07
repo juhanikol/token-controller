@@ -38,6 +38,7 @@ _LC_PROFILE=""
 _LC_MODE=""
 _LC_REASONS=()   # why LeanCTX operations are not allowed (empty = allowed)
 _LC_BIN=""
+_LC_BIN_REAL=""
 _LC_BIN_KIND=""
 _LC_VERSION=""
 _LC_POLICY_SHELL="" _LC_POLICY_WRAP="" _LC_POLICY_SETUP="" _LC_POLICY_INIT="" _LC_POLICY_OWNER=""
@@ -81,30 +82,66 @@ load_state() {
   fi
 }
 
+# True if path $1 is $2 or inside it.
+# The home directory and / are not a project, so an installed ~/.local/bin/lean-ctx is not "inside the project".
+inside() {
+  local _home_real
+  _home_real="$(readlink -f -- "$HOME" 2>/dev/null || printf '%s' "$HOME")"
+  [ "$2" = "$HOME" ] || [ "$2" = "$_home_real" ] || [ "$2" = / ] && return 1
+  case "$1" in "$2"|"$2"/*) return 0 ;; esac
+  return 1
+}
+
 load_binary() {
   _LC_BIN=""
+  _LC_BIN_REAL=""
+  _LC_BIN_KIND=""
+  local _cand="" _real _proj_pwd _proj_top="" _wsl=false _mnt="${AICONTEXT_MNT_PREFIX:-/mnt/}" _p
   if [ "${AICONTEXT_LEANCTX_BIN+set}" = set ]; then
-    _LC_BIN="$AICONTEXT_LEANCTX_BIN"
+    _cand="$AICONTEXT_LEANCTX_BIN"
+    case "$_cand" in
+      ''|/*) ;;
+      *) _LC_REASONS+=("AICONTEXT_LEANCTX_BIN must be an absolute path ($_cand)"); return ;;
+    esac
   else
-    _LC_BIN="$(command -v lean-ctx 2>/dev/null || true)"
+    _cand="$(command -v lean-ctx 2>/dev/null || true)"
+    # A relative PATH entry (for example ".") gives a relative result. Make it absolute so the project check sees it.
+    case "$_cand" in ''|/*) ;; *) _cand="$PWD/$_cand" ;; esac
   fi
-  if [ -z "$_LC_BIN" ] || [ ! -f "$_LC_BIN" ] || [ ! -x "$_LC_BIN" ]; then
-    _LC_BIN=""
-    _LC_BIN_KIND=""
+  if [ -z "$_cand" ] || [ ! -f "$_cand" ] || [ ! -x "$_cand" ]; then
     _LC_REASONS+=("lean-ctx was not found")
     return
   fi
+  _real="$(readlink -f -- "$_cand" 2>/dev/null || true)"
+  [ -n "$_real" ] || _real="$_cand"
+  _LC_BIN="$_cand"
+  _LC_BIN_REAL="$_real"
   _LC_BIN_KIND=linux
-  local _wsl=false _mnt="${AICONTEXT_MNT_PREFIX:-/mnt/}"
+  # A binary inside the project directory is project-controlled code. Checked for the path as given and the real path.
+  _proj_pwd="$(realpath -e -- "$PWD" 2>/dev/null || printf '%s' "$PWD")"
+  _proj_top="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -z "$_proj_top" ] || _proj_top="$(realpath -e -- "$_proj_top" 2>/dev/null || printf '%s' "$_proj_top")"
+  for _p in "$_cand" "$_real"; do
+    if inside "$_p" "$_proj_pwd" || inside "$_p" "$PWD" || { [ -n "$_proj_top" ] && inside "$_p" "$_proj_top"; }; then
+      if [ "${AICONTEXT_ALLOW_PROJECT_LEANCTX:-}" = true ]; then
+        msg "warning: using a lean-ctx inside the project ($_cand), because AICONTEXT_ALLOW_PROJECT_LEANCTX=true."
+      else
+        _LC_REASONS+=("lean-ctx is inside the project directory ($_cand). A project can ship its own binary. Use an installed lean-ctx, or set AICONTEXT_ALLOW_PROJECT_LEANCTX=true")
+        _LC_BIN=""
+      fi
+      break
+    fi
+  done
+  # A Windows binary under WSL, as given or after resolving a symlink.
   if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then _wsl=true; fi
-  case "$_LC_BIN" in
-    "$_mnt"[a-zA-Z]/*) _LC_BIN_KIND=windows ;;
-  esac
+  case "$_cand" in "$_mnt"[a-zA-Z]/*) _LC_BIN_KIND=windows ;; esac
+  case "$_real" in "$_mnt"[a-zA-Z]/*) _LC_BIN_KIND=windows ;; esac
   if [ "$_wsl" = true ] && [ "$_LC_BIN_KIND" = windows ]; then
     if [ "${AICONTEXT_ALLOW_WINDOWS_LEANCTX:-}" = true ]; then
-      msg "warning: using a Windows lean-ctx under WSL ($_LC_BIN), because AICONTEXT_ALLOW_WINDOWS_LEANCTX=true."
+      msg "warning: using a Windows lean-ctx under WSL ($_cand), because AICONTEXT_ALLOW_WINDOWS_LEANCTX=true."
     else
-      _LC_REASONS+=("lean-ctx resolves to a Windows path under WSL ($_LC_BIN). Install it in WSL, or set AICONTEXT_ALLOW_WINDOWS_LEANCTX=true")
+      _LC_REASONS+=("lean-ctx resolves to a Windows path under WSL ($_real). Install it in WSL, or set AICONTEXT_ALLOW_WINDOWS_LEANCTX=true")
+      _LC_BIN=""
     fi
   fi
 }
@@ -154,6 +191,7 @@ cmd_status() {
   [ "$#" -le 1 ] || usage_error "status takes only --json"
   load_state
   load_binary
+  # The version is read only from a binary that passed the checks (not a project-local or Windows one).
   if [ -n "$_LC_BIN" ]; then
     _LC_TMP="$(mktemp -d /tmp/token-controller-leanctx.XXXXXX)" || exit 4
     if lc_run --version; then _LC_VERSION="$(head -n 1 "$_LC_TMP/out" | cut -c1-90)"; else _LC_VERSION=""; fi
@@ -161,11 +199,11 @@ cmd_status() {
   local _allowed=yes
   [ "${#_LC_REASONS[@]}" -eq 0 ] || _allowed=no
   if [ "$_json" = true ]; then
-    jq -n --arg profile "$_LC_PROFILE" --arg mode "$_LC_MODE" --arg bin "$_LC_BIN" --arg kind "$_LC_BIN_KIND" --arg version "$_LC_VERSION" \
+    jq -n --arg profile "$_LC_PROFILE" --arg mode "$_LC_MODE" --arg bin "$_LC_BIN" --arg real "$_LC_BIN_REAL" --arg kind "$_LC_BIN_KIND" --arg version "$_LC_VERSION" \
       --arg allowed "$_allowed" --arg shell "$_LC_POLICY_SHELL" --arg wrap "$_LC_POLICY_WRAP" --arg setup "$_LC_POLICY_SETUP" --arg init "$_LC_POLICY_INIT" \
       --arg owner "$_LC_POLICY_OWNER" --arg r "$_LC_OP_READ" --arg s "$_LC_OP_SEARCH" --arg t "$_LC_OP_TREE" --arg reasons "$(printf '%s\n' "${_LC_REASONS[@]:-}")" '
       {schema_version: 1, profile: (if $profile == "" then null else $profile end), leanctx_mode: (if $mode == "" then null else $mode end),
-       binary: (if $bin == "" then null else $bin end), platform_path: (if $kind == "" then null else $kind end), version: (if $version == "" then null else $version end),
+       binary: (if $bin == "" then null else $bin end), resolved_path: (if $real == "" then null else $real end), platform_path: (if $kind == "" then null else $kind end), version: (if $version == "" then null else $version end),
        allowed: ($allowed == "yes"), reasons: ($reasons | split("\n") | map(select(. != ""))),
        policy: {shell_enabled: $shell, shell_owner: $owner, auto_wrap: $wrap, auto_setup: $setup, auto_init: $init, operations: {read: $r, search: $s, tree: $t}},
        status_command: "not run: lean-ctx status writes a report file"}'
@@ -243,6 +281,9 @@ cmd_search() {
   [ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage_error "search takes a pattern and an optional path"
   local _pattern="$1" _path="${2:-.}" _real
   case "$_pattern" in -*|'') usage_error "the pattern cannot be empty or start with '-'" ;; esac
+  # No control characters (newline, carriage return, tab, escape, DEL) and at most 512 bytes.
+  case "$(printf '%s' "$_pattern" | LC_ALL=C tr -cd '[:cntrl:]' | wc -c | tr -d ' ')" in 0) ;; *) usage_error "the pattern cannot contain control characters" ;; esac
+  [ "$(printf '%s' "$_pattern" | wc -c | tr -d ' ')" -le 512 ] || usage_error "the pattern is longer than 512 bytes"
   gate search
   _real="$(local_path "$_path")" || exit $?
   lc_run grep "$_pattern" "$_real"
@@ -252,9 +293,10 @@ cmd_search() {
     msg "lean-ctx grep failed (exit $_rc)."
     exit 4
   fi
-  # D-39 guard: a raw grep of the same local path. If it finds files that LeanCTX output never names, LeanCTX missed matches.
+  # D-39 guard: a raw grep of the same local path. LeanCTX grep takes a regex (it accepts a|b), so the check is an extended regex
+  # (grep -E). A pattern that LeanCTX reads differently from POSIX ERE fails closed (exit 3). The raw grep keeps its 10 s timeout. If it finds files that LeanCTX output never names, LeanCTX missed matches.
   local _raw_rc _raw_files _base _seen=false _n=0
-  timeout -k 1 10 grep -rlIE --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.ai-context -- "$_pattern" "$_real" </dev/null 2>/dev/null | head -n 20 > "$_LC_TMP/rawfiles"
+  timeout -k 1 10 grep -rlIE --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.ai-context -e "$_pattern" -- "$_real" </dev/null 2>/dev/null | head -n 20 > "$_LC_TMP/rawfiles"
   _raw_rc="${PIPESTATUS[0]}"
   if [ "$_raw_rc" -gt 1 ]; then
     msg "cannot verify the search: the raw grep failed (is the pattern a valid extended regex?). Use a raw search."

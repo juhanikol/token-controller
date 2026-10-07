@@ -193,6 +193,53 @@ WSL_DISTRO_NAME=Ubuntu AICONTEXT_MNT_PREFIX="$_LT_TMP/mnt/" AICONTEXT_ALLOW_WIND
 [ "$_AD_RC" -eq 0 ] && grep -q 'AICONTEXT_ALLOW_WINDOWS_LEANCTX=true' "$_LT_TMP/adapter.err" || fail "the Windows override did not work, or gave no warning (exit $_AD_RC)"
 : > "$_LT_ALOG"
 
+# Binary hardening: an absolute path is required for AICONTEXT_LEANCTX_BIN, a project-local binary is refused (as given or after
+# resolving a symlink), and so is a symlink that ends under the Windows mount in WSL.
+write_env code auto
+mkdir -p "$_LT_WORK/bin"
+cp "$_LT_FAKE" "$_LT_WORK/bin/lean-ctx"
+: > "$_LT_ALOG"
+adapter_path() { # extra environment words come first (env syntax). PATH lookup: AICONTEXT_LEANCTX_BIN is unset.
+  ( unset AICONTEXT_LEANCTX_BIN
+    export AICONTEXT_CONFIG_DIR="$_LT_ACFG" FAKE_LC_LOG="$_LT_ALOG"
+    export PATH="$1:$PATH"
+    shift
+    bash "$_LT_CLI" leanctx "$@" > "$_LT_TMP/adapter.out" 2> "$_LT_TMP/adapter.err" </dev/null )
+  _AD_RC=$?
+}
+adapter_path "$_LT_WORK/bin" read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'inside the project directory' "$_LT_TMP/adapter.err" || fail "PATH resolving to a project-local lean-ctx was not refused (exit $_AD_RC)"
+adapter_path "bin" read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'inside the project directory' "$_LT_TMP/adapter.err" || fail "a relative PATH entry with a project-local lean-ctx was not refused (exit $_AD_RC)"
+adapter_path "$_LT_WORK/bin" status
+grep -q 'CLI operations allowed: no' "$_LT_TMP/adapter.out" && ! grep -q '^  version: lean-ctx' "$_LT_TMP/adapter.out" || fail 'status trusted or ran a project-local lean-ctx'
+[ "$(ad_calls)" -eq 0 ] || fail "a project-local lean-ctx was run: $(cat "$_LT_ALOG")"
+AICONTEXT_ALLOW_PROJECT_LEANCTX=true adapter_path "$_LT_WORK/bin" read README.md
+[ "$_AD_RC" -eq 0 ] && grep -q 'AICONTEXT_ALLOW_PROJECT_LEANCTX=true' "$_LT_TMP/adapter.err" || fail "the project-local override did not work, or gave no warning (exit $_AD_RC)"
+: > "$_LT_ALOG"
+AD_BIN="bin/lean-ctx" adapter read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'must be an absolute path' "$_LT_TMP/adapter.err" || fail "a relative AICONTEXT_LEANCTX_BIN was not refused (exit $_AD_RC)"
+AD_BIN="lean-ctx" adapter read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'must be an absolute path' "$_LT_TMP/adapter.err" || fail 'a bare AICONTEXT_LEANCTX_BIN name was not refused'
+AD_BIN="$_LT_WORK/bin/lean-ctx" adapter read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'inside the project directory' "$_LT_TMP/adapter.err" || fail 'an absolute project-local AICONTEXT_LEANCTX_BIN was not refused'
+ln -sf "$_LT_FAKE" "$_LT_WORK/link-lc"
+AD_BIN="$_LT_WORK/link-lc" adapter read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'inside the project directory' "$_LT_TMP/adapter.err" || fail 'a symlink inside the project was not refused'
+mkdir -p "$_LT_TMP/outside"
+ln -sf "$_LT_WORK/bin/lean-ctx" "$_LT_TMP/outside/lean-ctx"
+AD_BIN="$_LT_TMP/outside/lean-ctx" adapter read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'inside the project directory' "$_LT_TMP/adapter.err" || fail 'a symlink that points into the project was not refused'
+AD_BIN="$_LT_FAKE" adapter read README.md
+[ "$_AD_RC" -eq 0 ] || fail "an absolute lean-ctx outside the project was refused (exit $_AD_RC)"
+ln -sf "$_LT_WIN" "$_LT_TMP/outside/win-link"
+WSL_DISTRO_NAME=Ubuntu AICONTEXT_MNT_PREFIX="$_LT_TMP/mnt/" AD_BIN="$_LT_TMP/outside/win-link" adapter read README.md
+[ "$_AD_RC" -eq 1 ] && grep -q 'Windows path under WSL' "$_LT_TMP/adapter.err" || fail 'a symlink to the Windows mount was not refused under WSL'
+WSL_DISTRO_NAME=Ubuntu AICONTEXT_MNT_PREFIX="$_LT_TMP/mnt/" AICONTEXT_ALLOW_WINDOWS_LEANCTX=true AD_BIN="$_LT_TMP/outside/win-link" adapter read README.md
+[ "$_AD_RC" -eq 0 ] || fail 'the Windows override did not allow a symlink to the Windows mount'
+grep -Ev '^(--version$|read |grep |ls )' "$_LT_ALOG" | grep -q . && fail 'a refused binary was run'
+: > "$_LT_ALOG"
+
 # read: exploration modes work, other modes are not allowed, paths must stay inside the current directory.
 adapter read README.md --mode signatures
 [ "$_AD_RC" -eq 0 ] && contains_all "$_LT_TMP/headings" "$_LT_TMP/adapter.out" || fail "adapter read signatures: exit $_AD_RC"
@@ -229,7 +276,27 @@ FAKE_LC_GREP=empty adapter search NO_SUCH_TEXT_ANYWHERE_12345 .
 FAKE_LC_GREP=fail adapter search AICONTEXT .
 [ "$_AD_RC" -eq 4 ] || fail "a failing lean-ctx grep should exit 4, got $_AD_RC"
 adapter search '-x' .; [ "$_AD_RC" -eq 2 ] || fail 'a pattern that starts with - was accepted'
-adapter search '(' .; [ "$_AD_RC" -eq 3 ] || fail "an invalid regex should fail closed (3), got $_AD_RC"
+adapter search '(' .; [ "$_AD_RC" -eq 4 ] || fail "an invalid regex is a lean-ctx failure (4) when lean-ctx rejects it, got $_AD_RC"
+
+# Search input hardening: no control characters, at most 512 bytes. Nothing reaches lean-ctx for a rejected pattern.
+_LT_CALLS_BEFORE="$(ad_calls)"
+for _LT_BADPAT in $'AICON\nTEXT' $'AICON\rTEXT' $'AICON\tTEXT' $'AICON\033TEXT' $'AICON\177TEXT' $'\n' "$(printf 'A%.0s' $(seq 1 513))"; do
+  adapter search "$_LT_BADPAT" .
+  [ "$_AD_RC" -eq 2 ] || fail "a bad search pattern was accepted (exit $_AD_RC): $(printf '%s' "$_LT_BADPAT" | head -c 30 | od -c | head -n 1)"
+  [ ! -s "$_LT_TMP/adapter.out" ] || fail 'a rejected search pattern printed output'
+done
+adapter search ''; [ "$_AD_RC" -eq 2 ] || fail 'an empty search pattern was accepted'
+adapter search '--files' .; [ "$_AD_RC" -eq 2 ] || fail 'a pattern that starts with -- was accepted'
+[ "$(ad_calls)" -eq "$_LT_CALLS_BEFORE" ] || fail 'a rejected search pattern reached lean-ctx'
+adapter search "$(printf 'A%.0s' $(seq 1 512))" .
+[ "$_AD_RC" -eq 0 ] || fail "a 512-byte pattern should be accepted, got $_AD_RC"
+adapter search 'é' .; [ "$_AD_RC" -eq 0 ] || fail 'a non-ASCII pattern was rejected as a control character'
+# The raw verifier is an extended regex (grep -E), like LeanCTX grep (it accepts a|b). Alternation works for both.
+adapter search 'AICONTEXT_PROFILE|AICONTEXT_RISK' .
+[ "$_AD_RC" -eq 0 ] && grep -Fq 'env.sh' "$_LT_TMP/adapter.out" || fail "regex alternation search failed: exit $_AD_RC"
+# Limitation: a pattern that is valid regex for LeanCTX but not for POSIX ERE cannot be verified, so it fails closed.
+FAKE_LC_GREP=literal adapter search 'AICONTEXT(' .
+[ "$_AD_RC" -eq 3 ] && grep -q 'cannot verify the search' "$_LT_TMP/adapter.err" || fail "a pattern that grep -E rejects must fail closed (cannot verify), got $_AD_RC"
 
 # tree.
 adapter tree .

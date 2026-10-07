@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fake lean-ctx for tests/leanctx.test.sh. Deterministic. It logs every call to $FAKE_LC_LOG (one line per call).
 # FAKE_LC_FULL=lossy: a full read returns headings and a triage note, not the file (the D-39 behavior of the real CLI).
-# FAKE_LC_GREP=empty: grep returns only notes, no matches (the D-39 false negative). FAKE_LC_GREP=fail: exit 3.
+# FAKE_LC_GREP=empty: grep returns only notes, no matches (the D-39 false negative). FAKE_LC_GREP=fail: exit 3. FAKE_LC_GREP=literal: fixed-string search (accepts patterns that POSIX ERE rejects).
 # It supports only: --version, status, doctor, read <file> [-m mode] [--fresh], grep <pattern> <path>, ls <path>.
 # wrap, setup, init, onboard, -c, and anything else: logged, then exit 9. It never writes anything except the log.
 printf '%s\n' "$*" >> "${FAKE_LC_LOG:-/dev/null}"
@@ -41,7 +41,8 @@ case "${1:-}" in
     case "${FAKE_LC_GREP:-}" in
       empty) echo "(81 files skipped: binary/encoding)"; echo "[lean-ctx: 22 lines filtered by triage (level 2)]" ;;
       fail) echo "fake lean-ctx: grep failed" >&2; exit 3 ;;
-      *) command grep -rn -- "$@" ;;
+      literal) command grep -rnF -- "$@" ;;
+      *) command grep -rnE -- "$@" ;;
     esac ;;
   ls)
     shift
