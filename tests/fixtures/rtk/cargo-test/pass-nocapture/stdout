@@ -1,0 +1,19 @@
+
+running 12 tests
+test tests::case_00 ... ok
+test tests::case_01 ... ok
+test tests::case_02 ... ok
+test tests::case_03 ... ok
+test tests::case_04 ... ok
+test tests::case_05 ... ok
+test tests::case_06 ... ok
+test tests::case_07 ... ok
+test tests::case_08 ... ok
+test tests::slow_path ... warning: slow path taken for large input
+ok
+test tests::cache_ratio ... warning: cache miss ratio 87%
+ok
+test tests::quiet ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

@@ -1,0 +1,1 @@
+ruff check --exit-zero --output-format concise .

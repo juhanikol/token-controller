@@ -1,0 +1,4 @@
+example.com/rec/cmd/app
+# example.com/rec/cmd/app
+cmd/app/main.go:11:14: undefined: missing
+cmd/app/main.go:12:6: declared and not used: unused

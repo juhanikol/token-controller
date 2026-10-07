@@ -1,0 +1,26 @@
+stderr | tests/warn.test.ts > logs a warning but passes
+Warning: cache is cold, results may be slow
+Error: optional plugin failed to load (ignored)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/fail.test.ts > computes the total
+AssertionError: expected 12 to be 13 // Object.is equality
+
+- Expected
++ Received
+
+- 13
++ 12
+
+ ❯ tests/fail.test.ts:5:44
+      3| it("computes the total", () => {
+      4|   const items = [3, 4, 5];
+      5|   expect(items.reduce((a, b) => a + b, 0)).toBe(13);
+       |                                            ^
+      6| });
+      7|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

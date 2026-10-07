@@ -2,7 +2,9 @@
 
 **Choose how agents should handle context, while keeping high-risk evidence visible.**
 
-Token Controller is currently a policy/profile controller plus an explicit `wx` shell wrapper. It records the selected profile, installs project guidance for compatible agents, and captures commands invoked as `wx <command>` without relying on an optional context tool. For successful commands on the configured noisy-success allowlist, `wx` deterministically collapses consecutive identical stdout lines; it does not enforce agent compliance, measure token use, or guarantee token savings.
+Token Controller is a mode switcher for AI context policy. The goal is to orchestrate proven context tools (RTK, LeanCTX, Headroom, Caveman) per work mode. Today it records the selected profile, installs project guidance for compatible agents, and exports policy variables that those tools may act on. It does not yet launch or configure them.
+
+The `wx` wrapper is the safety and measurement layer: it captures raw output, preserves exit codes, and records byte counts for commands run as `wx <command>`. Its only built-in compression collapses consecutive identical stdout lines for successful allowlisted commands. It is a fallback, not the main token-saving mechanism. Token Controller does not enforce agent compliance, measure model tokens, or guarantee token savings.
 
 ## How it works
 
@@ -49,32 +51,6 @@ Environment requirements and assumptions:
 * Keep `~/.config` writable so the active-mode file can be created and updated.
 * Optional context tools are not required. Install them only if you intend to use their features.
 
-For the VS Code button, install the extension into the **WSL extension host**, not only into local Windows VS Code. See the [VS Code extension requirements](extensions/vscode/README.md).
-
-## VS Code Extension Installation (WSL & Remote)
-
-If you use VS Code with WSL, installing the extension via the terminal can sometimes fail to register with the Windows UI. The most reliable method is using the VS Code graphical interface:
-
-**SIMPLE METHOD:** Download the 'extensions/vscode/token-controller-ui-x.x.x.vsix' and install it via VS Code UI
-
-**OR**
-
-## Clone the repository
-
-1. Clone the repository and navigate into it
-2. Build the extension inside your WSL terminal
-
-   ```bash
-   cd extensions/vscode
-   npx vsce package
-   ```
-3. Open VS Code (ensure you are connected to your WSL environment).
-4. Open the Extensions panel (Ctrl + Shift + X).
-5. Click the ... (Views and More Actions) icon at the top right of the Extensions panel.
-6. Select Install from VSIX...
-7. Navigate to the generated .vsix file and select it.
-8. Reload the window (Ctrl + Shift + P -> Developer: Reload Window).
-
 You keep one copy of the controller on your computer. Then, inside each project, you run `workflow init`. That creates or updates the project's local `AGENTS.md` with instructions telling compatible coding agents to check the active workflow mode before they answer or modify files.
 
 The selected policy is saved in:
@@ -101,6 +77,10 @@ For everyday use, remember only two commands:
 workflow init
 workflow code
 ```
+
+## VS Code extension
+
+The extension is optional. It shows the active mode in the status bar and lets you switch modes. Install it into the **WSL extension host**, not only into local Windows VS Code. Install steps, requirements, and limits: [extensions/vscode/README.md](extensions/vscode/README.md).
 
 ## Quick start and dependencies
 
@@ -250,6 +230,7 @@ Use this table when you are unsure which mode to choose. It describes the policy
 | Normal coding                      | `workflow code`            | Keep target files full; summarize dependencies   | Edited files, nearby tests, compiler errors                 |
 | Rapid prototype                    | `workflow rapid-prototype` | Compress successful build noise aggressively     | Backend API errors, migration warnings, raw failure logs    |
 | Small snippet review               | `workflow snippet`         | Use little or no compression                     | The complete snippet, method, or file                       |
+| Very small task (one function/file) | `workflow micro`          | No context tools, no compression                 | The complete target file or snippet                         |
 | Agent-rule work                    | `workflow agent`           | Keep agent instructions stable                   | `AGENTS.md` and dynamic task-state files                    |
 | Data analysis                      | `workflow data-analysis`   | Preserve numeric evidence                        | Numbers, units, statistics, plots, data sources             |
 | Bug fixing                         | `workflow debug`           | Keep the first failure raw                       | Error, stderr, exit code, stack origin, paths, line numbers |
@@ -278,7 +259,8 @@ workflow ci     # same as workflow cicd
 These rules are written into the active profile and agent instructions. Their execution depends on the agent and any connected context tool; the `wx` wrapper does not inspect output to verify them.
 
 * Correctness is more important than saving tokens.
-* `raw`, `security`, `db`, and `release` use raw or lossless context.
+* `raw`, `security`, `db`, `migration`, and `release` use raw or lossless context.
+* Risk levels: `normal` is routine work, `high` is evidence-sensitive work that is not necessarily raw, and `critical` is raw or lossless work with protected evidence.
 * `debug` and `test` keep the first failure, stderr, exit code, paths, and line numbers.
 * Target files being edited should be read in full.
 * Repetitive successful output is the safest content to compress.
@@ -316,7 +298,7 @@ The VS Code settings updater expects a strict JSON `settings.json`. It stops wit
 
 ## Optional context tools
 
-RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The `wx` capture layer does not invoke them; outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
+RTK, Headroom, LeanCTX, MemStack, and Caveman are not required to use this controller. The `wx` capture layer invokes only RTK, and only as described below (a prototype); outside that layer, the controller only exports policy variables that compatible tools may choose to act on.
 
 To inspect what is installed:
 
@@ -344,15 +326,15 @@ Compression is conservative. A successful command is compressed only when it mat
 Optional integrations may increase `wx` coverage, but are not installed automatically:
 
 * **Claude Code hook example:** [`integrations/claude-code/README.md`](integrations/claude-code/README.md) documents an opt-in `PreToolUse` hook. It blocks selected direct test, build, install, and Docker commands and tells the agent to retry as `wx <command>`; it does not silently mutate commands.
-* **RTK:** `wx` no longer delegates command execution to RTK. Any future RTK integration must occur after the wrapper has captured authoritative raw output.
-* **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools.
+* **RTK (prototype, post-capture filter):** `wx` runs your command once and saves the raw output first. If `rtk` is installed, the mode allows it, and the command has a `pipe` entry in `command_policy.rtk_commands` (today `cargo test`, `pytest`, `go test`, `go build`, `tsc`, `vitest`), `wx` runs `rtk pipe -f <filter>` on the saved stdout. It shows the RTK output only if it is smaller and keeps every error and warning line of the raw output. Otherwise it shows the raw output and records why in `.ai-context/session.jsonl`. RTK never re-runs your command, `rtk init` is never run, and protected profiles never use RTK. Other RTK commands are recognized or refused in the config, not enabled. This is not support for RTK's whole command surface. If RTK has installed its own command hook, `workflow doctor` warns, because hooked commands skip `wx` capture. Only byte counts are recorded, and no savings claim is made for RTK.
+* **LeanCTX, Headroom, and MemStack:** The controller exports mode variables for possible integrations, but it does not launch, configure, or verify these tools. MemStack support is legacy and under review.
 * **Caveman:** The controller exports a compatibility variable, disabled by the current profiles; no automatic invocation is implemented.
 
 There is no universal interception layer. Commands run directly remain outside `wx` unless a separately configured hook or host integration enforces wrapper usage. The included Claude Code hook is an example for that host only, not proof that other agents, IDEs, terminals, or MCP clients will route commands through `wx`.
 
 ## Controlling Changes (Validation Matrix)
 
-Whenever a new mode is added or a shell policy is changed, it must be documented to prevent regressions. We maintain a ledger in `docs/VALIDATION_MATRIX.md`.
+`docs/VALIDATION_MATRIX.md` records validation evidence for `wx` behavior. It becomes the required record for every mode or policy change once external tools are integrated and measurable.
 
 The ledger includes paired raw/visible/emitted byte measurements for deterministic fixtures. These measurements validate the wrapper behavior but do not prove tokenizer-measured or universal savings for the controller as a whole.
 
@@ -412,40 +394,63 @@ Resetting a session does not delete `.ai-context/raw/`. The archived JSONL is st
 | `workflow init`   | Create or safely extend the current project's`AGENTS.md` |
 | `workflow setup`  | Configure optional global editor instructions            |
 | `workflow <mode>` | Select a context mode                                    |
-| `workflow status` | Show the active mode and policy                          |
+| `workflow status` | Show the active mode and policy (`--json` for tools)     |
+| `workflow doctor` | Read-only check of settings, instruction files, and tools (`--json` available) |
 | `wx <command>`    | Capture, preserve, optionally compress, and measure output |
-| `workflow report` | Summarize command, byte, reduction, and failure counts   |
+| `workflow report` | Summarize command, byte, reduction, and failure counts (`--json` for tools, `--project <dir>`) |
 | `workflow reset-session` | Archive session metadata without deleting raw logs |
 | `workflow off`    | Select the off policy                                      |
 | `workflow help`   | List available commands and modes                        |
+| `workflow modes`  | List modes and aliases from the settings file (`--json` for tools) |
+| `workflow version` | Show the CLI version and the JSON schema numbers (`--json` for tools; also `--version`) |
+| `scripts/workflow-cli.sh <mode or command>` | Same commands in a separate process, for tools. It does not change the calling shell. It writes `active_mode.env`. Example: `scripts/workflow-cli.sh status --json` |
+
+JSON output compatibility (the rule is written in `scripts/lib/versions.sh`):
+
+* Each JSON output has its own `schema_version`. `workflow version --json` lists all of them.
+* Adding a field does not change the number. A consumer must ignore fields it does not know.
+* Renaming or removing a field, or changing its type or meaning, bumps that number. A consumer checks the number it needs and refuses any other.
+* `cli_version` is for people and logs. It is changed by hand and is not used to decide compatibility.
 
 ## Repository layout
 
 ```text
 token-controller/
+├── AGENTS.md                      # short development rules for this repository
 ├── README.md
-├── benchmarks/
-│   ├── README.md
-│   ├── run-benchmark.sh
-│   └── fixtures/
+├── benchmarks/                    # wx byte-reduction benchmark and fixtures
 ├── config/
-│   └── workflow_settings.json
+│   └── workflow_settings.json     # source of mode policy
 ├── docs/
-│   └── VALIDATION_MATRIX.md
-├── integrations/
-│   └── claude-code/
+│   ├── MODE_SWITCHER_AND_ORCHESTRATOR_PLAN.md
+│   ├── WORKFLOW_DOCTOR_DESIGN.md
+│   ├── EXTENSION_ALIGNMENT_DESIGN.md
+│   ├── WX_DETERMINISTIC_WRAPPER_DESIGN.md
+│   ├── USER_SETTINGS_AND_AGENT_CONFIG.md
+│   ├── TECHNICAL_DEBT.md
+│   ├── VALIDATION_MATRIX.md
+│   ├── integrations/              # RTK.md (prototype in wx), CAVEMAN.md (design only)
+│   ├── DRAFTS/                    # non-directive drafts
+│   └── OLD/                       # archived material
+├── extensions/
+│   └── vscode/                    # VS Code status-bar extension (TypeScript)
+├── integrations/                  # opt-in examples: claude-code/, MCP template
 ├── prompts/
 │   └── vscode-agent-prompts.md
 ├── scripts/
+│   ├── workflow.sh                # sourced: mode switching and commands
+│   ├── workflow-cli.sh            # run, not sourced: entry point for tools and the extension
+│   ├── doctor.sh                  # read-only checks (workflow doctor)
 │   ├── check-tools.sh
-│   ├── install-optional-tools.sh
-│   ├── workflow.sh
+│   ├── install-optional-tools.sh  # prints optional install commands only
 │   └── lib/
 │       ├── wx.sh
 │       ├── wx-compress.sh
+│       ├── versions.sh            # CLI version and JSON schema numbers
 │       └── wx-session.sh
-└── templates/
-    └── AGENTS_base.md
+├── templates/
+│   └── AGENTS_base.md             # block added by workflow init
+└── tests/                         # shell tests and fixtures
 ```
 
 ## Development checks
@@ -458,8 +463,11 @@ find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
 jq . config/workflow_settings.json >/dev/null
 bash tests/wx-wrapper.test.sh
 bash tests/workflow-session.test.sh
+bash tests/doctor.test.sh
 bash benchmarks/run-benchmark.sh
 ```
+
+GitHub Actions runs the Bash checks, the three test files, and the benchmark on pull requests to `main` and on pushes to `main` (`.github/workflows/cli-ci.yml`). It installs no optional tool. The tests use the fake tools in `tests/fixtures`.
 
 Validate the optional Claude Code example separately:
 

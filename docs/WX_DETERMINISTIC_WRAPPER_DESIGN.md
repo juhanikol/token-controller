@@ -4,6 +4,10 @@
 
 The mechanical layer is implemented in `scripts/lib/wx.sh` and `scripts/lib/wx-compress.sh`, exposed as the `wx` function. It stores raw stdout and stderr under `.ai-context/raw/`, appends raw/visible byte measurements to `.ai-context/session.jsonl`, prints the raw-log location, and returns the command's exit code. Successful allowlisted noisy commands may collapse exact consecutive repetitions; failures and protected profiles or commands remain raw.
 
+## Role in the current direction (2026-10-06, branch `mode_switcher_and_orchestrator`)
+
+Token Controller is a mode switcher and orchestrator for proven external context tools. `wx` is the raw-capture, exit-code, measurement, fallback, and protected-evidence layer. It is not the whole token-saving solution. External compressors, RTK first, are expected to process output only after `wx` has captured it. The built-in exact-repeat reducer is the fallback when no external tool is installed or allowed.
+
 ## Proposed behavior
 
 Keep `workflow.sh` responsible for selecting profiles, exporting policy variables, and writing `active_mode.env`. Move `wx` execution into a small runner with this contract:
@@ -15,7 +19,7 @@ Keep `workflow.sh` responsible for selecting profiles, exporting policy variable
 5. Emit either raw output or output from a versioned built-in compressor.
 6. Append one measurement record and return the command's exact exit code.
 
-Compression is post-processing; an optional tool must never replace the authoritative raw capture. The initial implementation should not depend on RTK for its deterministic baseline.
+Compression is post-processing; an external tool must never replace the authoritative raw capture. The built-in baseline does not depend on RTK, so `wx` works when no external tool is installed.
 
 ## File layout
 
@@ -72,11 +76,11 @@ Policy resolution is ordered and first-match wins:
 5. Emit raw output when shell compression is `off` or policy resolution is unknown.
 6. Otherwise, apply only a versioned built-in reducer to stdout. Version 1 collapses consecutive identical lines, including repeated blank lines, and inserts an explicit count marker. It does not truncate unknown content or rewrite numbers, paths, diagnostics, warning/error lines, or command summaries.
 
-Command-specific reducers may be added only with fixtures proving their preserved fields. An optional RTK adapter can remain experimental, but its output and version must be recorded and it must operate only after the direct command output has been captured.
+Command-specific reducers may be added only with fixtures proving their preserved fields. External compressors (RTK first) may run only after the direct command output has been captured, only in modes that allow compression, and with their name and version recorded per run.
 
 ## Measurement format
 
-Append one JSON object per invocation to `.ai-context/measurements.jsonl` using an atomic lock. Suggested schema:
+Implemented today: `wx` appends one `schema_version: 2` object per run to `.ai-context/session.jsonl` (see `scripts/lib/wx.sh`). The schema below is a proposed later format and is not implemented:
 
 ```json
 {
@@ -112,13 +116,23 @@ Byte and line counts are exact. Token fields should be absent or `null` unless a
 - Trap interruption signals, forward them to the child, wait for it, finalize available evidence, and return the child's signal-derived status.
 - Never allow a wrapper error to hide existing raw evidence or replace a command failure with a successful status.
 
+## Policy state precedence
+
+`wx` is the safety layer, so the active mode file wins over shell variables:
+
+1. `active_mode.env` (`$AICONTEXT_CONFIG_DIR` or `~/.config/ai-workflow`) when it is a readable file. Stale `AICONTEXT_*` shell variables are dropped first. The file is parsed, not sourced: only `export AICONTEXT_NAME="plain value"` lines are used. A file without a profile leaves all policy unset, so output stays raw, and `wx` prints a warning.
+2. Shell `AICONTEXT_*` variables, when the file is missing or unreadable.
+3. Escape hatch: `AICONTEXT_USE_SHELL_STATE=true` keeps the shell variables. The file is read only when no profile is set.
+
+Each `session.jsonl` record has `policy_source` (`active_mode.env` or `shell`) and `stale_shell_profile` (the replaced shell profile, or `null`). When a stale shell profile is replaced, `wx` prints one note on stderr. `workflow report` uses the same precedence. `workflow status` prints the shell state and the env-file profile, and warns when they differ.
+
 ## Backward compatibility
 
 - Preserve `wx <command> [args...]`, argument boundaries, working directory, environment, stdout/stderr destinations, and the command's exit status.
 - Keep `workflow <mode>`, `workflow init`, profile names, and `active_mode.env` compatible.
 - Continue reading current `AICONTEXT_*` variables and existing configuration defaults; add only optional wrapper/measurement settings.
 - Output becomes completion-buffered for compressible commands. Raw/lossless profiles may stream through `tee` only if tests prove capture and status fidelity; otherwise document the buffering change.
-- Replace RTK command delegation with the built-in deterministic path. If retained, RTK is an explicit post-capture experimental compressor, not the command executor.
+- RTK never executes the wrapped command. When integrated, it compresses already captured output, and `wx` falls back to raw or the built-in reducer if RTK is missing or fails.
 
 ## Validation commands
 

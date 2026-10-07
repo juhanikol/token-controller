@@ -3,7 +3,7 @@ set -u
 
 printf 'AI Context Workflow tool check\n'
 printf '================================\n'
-printf 'Routing: wx intercepts RTK; LeanCTX, Headroom, and MemStack require IDE/MCP integration plus active AICONTEXT_* policy.\n'
+printf 'Note: workflow <mode> only exports AICONTEXT_* policy. wx captures raw output and does not invoke RTK, LeanCTX, Headroom, MemStack, or Caveman. Each tool needs its own shell/IDE/MCP setup.\n'
 
 check() {
   local name="$1"
@@ -14,6 +14,29 @@ check() {
     "$cmd" --version 2>/dev/null | head -n 1 || true
   else
     printf 'MISSING %s. %s\n' "$name" "$hint"
+  fi
+}
+
+check_caveman() {
+  local claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  local found=""
+  local entry
+
+  if command -v caveman >/dev/null 2>&1; then
+    check caveman caveman 'Optional.'
+    return
+  fi
+  # Caveman is mainly a Claude Code plugin or skill. Look for its state only. Nothing is run.
+  for entry in "$claude_dir"/skills/caveman* "$claude_dir/.caveman-active"; do
+    if [ -e "$entry" ]; then
+      found="$entry"
+      break
+    fi
+  done
+  if [ -n "$found" ]; then
+    printf 'OK      %-12s %s (plugin/skill state; no caveman command on PATH)\n' caveman "$found"
+  else
+    printf 'MISSING caveman. Optional. Off by default in every mode. See scripts/install-optional-tools.sh\n'
   fi
 }
 
@@ -40,6 +63,8 @@ check rtk rtk 'To install: review the RTK commands in scripts/install-optional-t
 check headroom headroom 'To install: create ~/.venvs/headroom, then run pip install "headroom-ai[all]"'
 check lean-ctx lean-ctx 'To install core: cargo install lean-ctx'
 check claude claude 'To install: npm install -g @anthropic-ai/claude-code'
+check_caveman
+# MemStack is a legacy integration. Its status is under review.
 check_python_module MemStack "$HOME/.venvs/memstack/bin/python" memstack_skill_loader 'To install: create ~/.venvs/memstack, then run pip install memstack-skill-loader'
 
 printf '\nActive AI context env cache:\n'

@@ -9,7 +9,80 @@ if [ -z "${AICONTEXT_SETTINGS_FILE:-}" ]; then
 fi
 # shellcheck source=wx-compress.sh
 source "$_WX_LIB_DIR/wx-compress.sh"
+# shellcheck source=versions.sh
+source "$_WX_LIB_DIR/versions.sh"
 unset _WX_LIB_DIR
+
+# Policy state precedence. wx is the safety layer, so the active mode file wins over shell variables.
+#   1. active_mode.env ($AICONTEXT_CONFIG_DIR or ~/.config/ai-workflow) when it is a readable file.
+#      Stale AICONTEXT_* shell variables are dropped first, so an old terminal cannot keep an old profile.
+#   2. Shell AICONTEXT_* variables, when the file is missing or unreadable.
+# Escape hatch: AICONTEXT_USE_SHELL_STATE=true keeps the shell variables. The file is read only when no profile is set.
+# The file is parsed, not sourced. Only lines like: export AICONTEXT_NAME="plain value" are used.
+# Sets _WX_POLICY_SOURCE (active_mode.env or shell) and _WX_STALE_SHELL_PROFILE (the shell profile that was replaced).
+_wx_apply_env_file() {
+  local _WX_FILE="$1"
+  local _WX_LINE
+  local _WX_NAME
+  local _WX_VALUE
+  local _WX_LINE_PATTERN='^export[[:space:]]+(AICONTEXT_[A-Z0-9_]+)="([^"$`\\]*)"[[:space:]]*$'
+
+  while IFS= read -r _WX_LINE || [ -n "$_WX_LINE" ]; do
+    if [[ "$_WX_LINE" =~ $_WX_LINE_PATTERN ]]; then
+      _WX_NAME="${BASH_REMATCH[1]}"
+      _WX_VALUE="${BASH_REMATCH[2]}"
+      case "$_WX_NAME" in
+        AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE|AICONTEXT_RTK_BIN|AICONTEXT_RTK_TIMEOUT) ;;
+        *) export "$_WX_NAME=$_WX_VALUE" ;;
+      esac
+    fi
+  done < "$_WX_FILE"
+}
+
+# Drop every AICONTEXT_* policy variable. Path and override settings stay (config paths, the shell-state
+# switch, and AICONTEXT_RTK_BIN / AICONTEXT_RTK_TIMEOUT, which are tool settings and not policy). Call it only in a subshell
+# or inside wx, never in the caller's own shell.
+_wx_unset_policy_state() {
+  local _WX_NAME
+
+  while IFS= read -r _WX_NAME; do
+    case "$_WX_NAME" in
+      AICONTEXT_SETTINGS_FILE|AICONTEXT_CONFIG_DIR|AICONTEXT_USE_SHELL_STATE|AICONTEXT_RTK_BIN|AICONTEXT_RTK_TIMEOUT) ;;
+      *) unset "$_WX_NAME" ;;
+    esac
+  done < <(compgen -A variable AICONTEXT_)
+}
+
+_wx_load_policy_state() {
+  local _WX_FILE="$1"
+  local _WX_SHELL_PROFILE="${AICONTEXT_PROFILE:-}"
+
+  _WX_POLICY_SOURCE=shell
+  _WX_STALE_SHELL_PROFILE=""
+
+  if [ "${AICONTEXT_USE_SHELL_STATE:-}" = true ]; then
+    if [ -z "$_WX_SHELL_PROFILE" ] && [ -f "$_WX_FILE" ] && [ -r "$_WX_FILE" ]; then
+      _wx_apply_env_file "$_WX_FILE"
+      _WX_POLICY_SOURCE=active_mode.env
+    fi
+    return 0
+  fi
+
+  if [ ! -f "$_WX_FILE" ] || [ ! -r "$_WX_FILE" ]; then
+    return 0
+  fi
+
+  _wx_unset_policy_state
+  _wx_apply_env_file "$_WX_FILE"
+  _WX_POLICY_SOURCE=active_mode.env
+
+  if [ -z "${AICONTEXT_PROFILE:-}" ]; then
+    # No usable profile. All policy variables stay unset, so wx emits raw output.
+    printf 'wx: warning: %s has no profile. Output stays raw.\n' "$_WX_FILE" >&2
+  elif [ -n "$_WX_SHELL_PROFILE" ] && [ "$_WX_SHELL_PROFILE" != "$AICONTEXT_PROFILE" ]; then
+    _WX_STALE_SHELL_PROFILE="$_WX_SHELL_PROFILE"
+  fi
+}
 
 workflow_run() (
   if [ "$#" -eq 0 ]; then
@@ -44,11 +117,18 @@ workflow_run() (
   local _WX_VISIBLE_STDOUT_BYTES
   local _WX_VISIBLE_STDERR_BYTES
   local _WX_OUTPUT_POLICY
+  local _WX_COMPRESSOR=""
+  local _WX_COMPRESSOR_VERSION=""
+  local _WX_FILTER=""
+  local _WX_FALLBACK_REASON=""
+  local _WX_RTK_CLASS=""
   local _WX_POLICY_AVAILABLE=true
 
-  if [ -z "${AICONTEXT_PROFILE:-}" ] && [ -r "$_WX_ACTIVE_ENV_FILE" ]; then
-    # shellcheck source=/dev/null
-    source "$_WX_ACTIVE_ENV_FILE"
+  _wx_load_policy_state "$_WX_ACTIVE_ENV_FILE"
+  # The raw log directory can come from the active mode file, so read it after loading.
+  _WX_RAW_ROOT="${AICONTEXT_RAW_LOG_DIR:-.ai-context/raw}"
+  if [ -n "$_WX_STALE_SHELL_PROFILE" ]; then
+    printf 'wx: note: this shell has profile "%s". Using profile "%s" from active_mode.env.\n' "$_WX_STALE_SHELL_PROFILE" "$AICONTEXT_PROFILE" >&2
   fi
 
   if [ ! -r "$_WX_SETTINGS_FILE" ] ||
@@ -89,6 +169,11 @@ workflow_run() (
   set +e
   command "$@" >"$_WX_STDOUT_FILE" 2>"$_WX_STDERR_FILE"
   _WX_EXIT_CODE=$?
+  # The exit code goes to disk right away, before RTK or any other step. If wx is killed later, the run
+  # directory still holds the raw output and the exit code.
+  if ! printf '%s\n' "$_WX_EXIT_CODE" > "$_WX_RUN_DIR/exit_code.raw"; then
+    printf 'wx: warning: could not write the exit code file in: %s\n' "$_WX_RUN_DIR" >&2
+  fi
   _WX_COMPLETED_AT="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
 
   _WX_STDOUT_BYTES="$(stat -c '%s' "$_WX_STDOUT_FILE")"
@@ -97,9 +182,25 @@ workflow_run() (
   _WX_VISIBLE_STDOUT_FILE="$_WX_STDOUT_FILE"
   _WX_VISIBLE_STDERR_FILE="$_WX_STDERR_FILE"
   if [ "$_WX_POLICY_AVAILABLE" = true ]; then
+    # The class comes from the config. It is a classification, not proof that RTK ran: see output_policy and compressor.
+    _WX_RTK_CLASS="$(_wx_rtk_class_for_command "$_WX_SETTINGS_FILE" "$@" || true)"
     _WX_OUTPUT_POLICY="$(_wx_select_output_policy "$_WX_SETTINGS_FILE" "$_WX_EXIT_CODE" "$@")"
   else
     _WX_OUTPUT_POLICY='raw-policy-unavailable'
+  fi
+
+  # RTK runs only now, after stdout.raw and stderr.raw are complete on disk. The RTK output is shown only if
+  # it is smaller and the evidence guard passes. Otherwise the raw output is shown and the reason is recorded.
+  if [ "$_WX_OUTPUT_POLICY" = 'compress-rtk-v1' ]; then
+    if [ -s "$_WX_STDOUT_FILE" ] && LC_ALL=C grep -Iq . "$_WX_STDOUT_FILE"; then
+      if _wx_try_rtk "$_WX_STDOUT_FILE" "$_WX_RUN_DIR" "$(_wx_rtk_filter_for_command "$_WX_SETTINGS_FILE" "$@")"; then
+        _WX_VISIBLE_STDOUT_FILE="$_WX_RUN_DIR/stdout.visible"
+      else
+        _WX_OUTPUT_POLICY='raw-rtk-fallback'
+      fi
+    else
+      _WX_OUTPUT_POLICY='raw-empty-or-binary-output'
+    fi
   fi
 
   if [ "$_WX_OUTPUT_POLICY" = 'compress-exact-repeats-v1' ]; then
@@ -120,6 +221,11 @@ workflow_run() (
     fi
   fi
 
+  if [ "$_WX_OUTPUT_POLICY" = 'compress-exact-repeats-v1' ]; then
+    _WX_COMPRESSOR='builtin/exact-repeat-v1'
+    _WX_COMPRESSOR_VERSION='1'
+  fi
+
   _WX_VISIBLE_STDOUT_BYTES="$(stat -c '%s' "$_WX_VISIBLE_STDOUT_FILE")"
   _WX_VISIBLE_STDERR_BYTES="$(stat -c '%s' "$_WX_VISIBLE_STDERR_FILE")"
   _WX_COMMAND_JSON="$(jq -cn --args '$ARGS.positional' -- "$@")"
@@ -135,19 +241,36 @@ workflow_run() (
       --arg visible_stderr_path "$_WX_VISIBLE_STDERR_FILE" \
       --arg profile "${AICONTEXT_PROFILE:-unset}" \
       --arg output_policy "$_WX_OUTPUT_POLICY" \
+      --arg rtk_class "$_WX_RTK_CLASS" \
+      --arg compressor "$_WX_COMPRESSOR" \
+      --arg compressor_version "$_WX_COMPRESSOR_VERSION" \
+      --arg filter "$_WX_FILTER" \
+      --arg fallback_reason "$_WX_FALLBACK_REASON" \
+      --arg caveman_mode "${AICONTEXT_CAVEMAN_MODE:-}" \
+      --argjson schema_version "$AIW_SESSION_SCHEMA_VERSION" \
+      --arg policy_source "$_WX_POLICY_SOURCE" \
+      --arg stale_shell_profile "$_WX_STALE_SHELL_PROFILE" \
       --argjson stdout_bytes "$_WX_STDOUT_BYTES" \
       --argjson stderr_bytes "$_WX_STDERR_BYTES" \
       --argjson visible_stdout_bytes "$_WX_VISIBLE_STDOUT_BYTES" \
       --argjson visible_stderr_bytes "$_WX_VISIBLE_STDERR_BYTES" \
       --argjson exit_code "$_WX_EXIT_CODE" \
       '{
-        schema_version: 2,
+        schema_version: $schema_version,
         started_at: $started_at,
         completed_at: $completed_at,
         cwd: $cwd,
         command: $command,
         profile: $profile,
         output_policy: $output_policy,
+        rtk_class: (if $rtk_class == "" then null else $rtk_class end),
+        compressor: (if $compressor == "" then null else $compressor end),
+        compressor_version: (if $compressor_version == "" then null else $compressor_version end),
+        filter: (if $filter == "" then null else $filter end),
+        fallback_reason: (if $fallback_reason == "" then null else $fallback_reason end),
+        caveman_mode: (if $caveman_mode == "" then null else $caveman_mode end),
+        policy_source: $policy_source,
+        stale_shell_profile: (if $stale_shell_profile == "" then null else $stale_shell_profile end),
         stdout: {path: $stdout_path, bytes: $stdout_bytes},
         stderr: {path: $stderr_path, bytes: $stderr_bytes},
         raw: {
@@ -175,6 +298,15 @@ workflow_run() (
   command cat -- "$_WX_VISIBLE_STDOUT_FILE"
   command cat -- "$_WX_VISIBLE_STDERR_FILE" >&2
   printf '[wx] raw logs: %s\n' "$_WX_RUN_DIR" >&2
+  # Failure evidence is never shortened by Caveman. wx cannot change how an agent writes. When Caveman is
+  # on and a run failed, it puts the rule next to the failure output. Nothing is printed when Caveman is off.
+  if [ "$_WX_EXIT_CODE" -ne 0 ]; then
+    case "${AICONTEXT_CAVEMAN_MODE:-off}" in
+      lite|full)
+        printf '[wx] Caveman is %s and this run failed (exit %s). Quote the error, stack trace, paths, and line numbers exactly. Do not shorten them.\n' "$AICONTEXT_CAVEMAN_MODE" "$_WX_EXIT_CODE" >&2
+        ;;
+    esac
+  fi
 
   return "$_WX_EXIT_CODE"
 )
@@ -183,4 +315,4 @@ wx() {
   workflow_run "$@"
 }
 
-export -f workflow_run wx
+export -f _wx_apply_env_file _wx_unset_policy_state _wx_load_policy_state workflow_run wx

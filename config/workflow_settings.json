@@ -11,11 +11,65 @@
     "preserve_first_error": true,
     "preserve_warnings": true,
     "preserve_numbers": true,
+    "default_output_style": "ste-inspired",
+    "caveman_output": false,
+    "caveman_mode": "off",
+    "caveman_max": "off",
+    "caveman_shrink": "off",
     "raw_log_dir": ".ai-context/raw",
     "compressed_log_dir": ".ai-context/compressed"
   },
+  "legacy_notes": {
+    "memstack": "Legacy/open decision. memory_layer and MEMSTACK_ACTIVE are kept until RTK/LeanCTX/Headroom/Caveman orchestration is defined."
+  },
+  "caveman_policy": {
+    "supported_levels": [
+      "lite",
+      "full"
+    ],
+    "unsupported_levels": [
+      "ultra",
+      "wenyan"
+    ],
+    "hard_blocked_profiles": [
+      "raw",
+      "security",
+      "db",
+      "release",
+      "migration",
+      "docs",
+      "debug"
+    ],
+    "prompt_guards": [
+      "detailed",
+      "exact",
+      "exactly",
+      "carefully",
+      "full explanation",
+      "documentation",
+      "README",
+      "instructions",
+      "step-by-step"
+    ],
+    "blocked_tasks": [
+      "documentation",
+      "readme",
+      "user-facing-instructions",
+      "step-by-step-instructions",
+      "release-notes",
+      "legal-compliance",
+      "first-failure-evidence",
+      "file-content"
+    ],
+    "opt_in_required": true
+  },
+  "aliases": {
+    "plan": "architect",
+    "ci": "cicd"
+  },
   "modes": {
     "raw": {
+      "description": "No compression. Highest fidelity.",
       "risk": "critical",
       "compress_shell": "off",
       "compress_files": "off",
@@ -26,6 +80,7 @@
       "rtk_mode": "off"
     },
     "scope": {
+      "description": "Requirements and scope discovery.",
       "risk": "high",
       "compress_shell": "off",
       "compress_files": "safe-summary",
@@ -36,6 +91,7 @@
       "rtk_mode": "off"
     },
     "architect": {
+      "description": "Architecture, structure, and codebase overview.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "interfaces-and-map",
@@ -46,6 +102,7 @@
       "rtk_mode": "off"
     },
     "decisions": {
+      "description": "ADRs, domain models, schemas, and types.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "interfaces-and-schemas",
@@ -56,6 +113,7 @@
       "rtk_mode": "off"
     },
     "code": {
+      "description": "Normal implementation work.",
       "risk": "normal",
       "compress_shell": "safe",
       "compress_files": "target-full-deps-signatures",
@@ -63,9 +121,11 @@
       "memory_layer": "session",
       "headroom_mode": "reversible",
       "leanctx_mode": "auto",
-      "rtk_mode": "noisy-success-only"
+      "rtk_mode": "success-only",
+      "caveman_max": "lite"
     },
     "rapid-prototype": {
+      "description": "Fast prototyping. Compress successful output only. Keep errors raw.",
       "risk": "high",
       "compress_shell": "aggressive-on-successful-builds-preserve-errors-and-warnings",
       "compress_files": "target-full-backend-api-and-migrations-full",
@@ -73,15 +133,17 @@
       "memory_layer": "session",
       "headroom_mode": "safe-reversible",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "aggressive-success-only",
+      "rtk_mode": "success-only",
       "raw_on_fail": true,
       "keep_raw_logs": true,
       "preserve_stderr": true,
       "preserve_exit_code": true,
       "preserve_first_error": true,
-      "preserve_warnings": true
+      "preserve_warnings": true,
+      "caveman_max": "full"
     },
     "snippet": {
+      "description": "Small file, method, or snippet review.",
       "risk": "normal",
       "compress_shell": "off",
       "compress_files": "off-for-target",
@@ -91,7 +153,20 @@
       "leanctx_mode": "off",
       "rtk_mode": "off"
     },
+    "micro": {
+      "description": "Very small task. No context tools. Target file or snippet only.",
+      "risk": "normal",
+      "compress_shell": "off",
+      "compress_files": "off-for-target",
+      "codebase_index": false,
+      "memory_layer": "off",
+      "headroom_mode": "off",
+      "leanctx_mode": "off",
+      "rtk_mode": "off",
+      "caveman_output": false
+    },
     "agent": {
+      "description": "Agent governance and AGENTS.md work.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "stable-prefix",
@@ -103,6 +178,7 @@
       "agents_mutation": "deny"
     },
     "test": {
+      "description": "Unit and integration test runs.",
       "risk": "high",
       "compress_shell": "safe-on-fail-aggressive-on-pass",
       "compress_files": "target-full-tests-full",
@@ -110,9 +186,10 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "tests-safe"
+      "rtk_mode": "success-only"
     },
     "test-full": {
+      "description": "Full application or broad automated test run.",
       "risk": "high",
       "compress_shell": "aggressive-on-success-safe-on-fail",
       "compress_files": "test-map",
@@ -120,9 +197,11 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "aggressive-success-only"
+      "rtk_mode": "success-only",
+      "caveman_max": "lite"
     },
     "debug": {
+      "description": "Failure investigation and bug fixing.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "target-full-related-signatures",
@@ -130,9 +209,10 @@
       "memory_layer": "session",
       "headroom_mode": "safe-reversible",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "off-first-failure"
+      "rtk_mode": "success-only"
     },
     "data-analysis": {
+      "description": "Data analysis, statistics, and visualization.",
       "risk": "high",
       "compress_shell": "preserve-numeric-metrics",
       "compress_files": "target-full",
@@ -144,6 +224,7 @@
       "preserve_numbers": true
     },
     "docs": {
+      "description": "Documentation and README work.",
       "risk": "normal",
       "compress_shell": "safe",
       "compress_files": "source-summary-target-full",
@@ -154,6 +235,7 @@
       "rtk_mode": "off"
     },
     "cicd": {
+      "description": "CI/CD, Docker, package-manager, and runner logs.",
       "risk": "high",
       "compress_shell": "strip-boilerplate-preserve-errors",
       "compress_files": "yaml-and-scripts-full",
@@ -161,9 +243,11 @@
       "memory_layer": "session",
       "headroom_mode": "safe",
       "leanctx_mode": "diagnostic",
-      "rtk_mode": "install-build-noise"
+      "rtk_mode": "success-only",
+      "caveman_max": "lite"
     },
     "review": {
+      "description": "Whole-codebase or pull request review.",
       "risk": "high",
       "compress_shell": "safe",
       "compress_files": "interfaces-and-diffs",
@@ -174,36 +258,40 @@
       "rtk_mode": "off"
     },
     "security": {
+      "description": "Security, auth, secrets, and vulnerability scans.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "off-for-security-critical",
       "codebase_index": true,
       "memory_layer": "session",
       "headroom_mode": "lossless-only",
-      "leanctx_mode": "guarded",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "migration": {
+      "description": "Large refactor or legacy migration.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "target-full-global-map",
       "codebase_index": true,
       "memory_layer": "project",
       "headroom_mode": "lossless-only",
-      "leanctx_mode": "graph-read",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "db": {
+      "description": "Database, schema, and data migration.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "migrations-and-schema-full",
       "codebase_index": true,
       "memory_layer": "session",
       "headroom_mode": "lossless-only",
-      "leanctx_mode": "diagnostic",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "perf": {
+      "description": "Performance profiling and benchmarking.",
       "risk": "high",
       "compress_shell": "preserve-numeric-metrics",
       "compress_files": "target-full",
@@ -215,16 +303,18 @@
       "preserve_numbers": true
     },
     "release": {
+      "description": "Release preparation.",
       "risk": "critical",
       "compress_shell": "off-or-lossless-only",
       "compress_files": "release-files-full",
       "codebase_index": false,
       "memory_layer": "off",
       "headroom_mode": "off",
-      "leanctx_mode": "guarded",
+      "leanctx_mode": "off",
       "rtk_mode": "off"
     },
     "off": {
+      "description": "Disable all optimizers.",
       "risk": "normal",
       "compress_shell": "off",
       "compress_files": "off",
@@ -265,6 +355,372 @@
       "npm test",
       "dotnet test",
       "cargo test"
+    ],
+    "rtk_class_enabled": {
+      "pipe": true,
+      "rerun": false,
+      "recognized-only": false,
+      "never": false
+    },
+    "rtk_commands": [
+      {
+        "match": "git status",
+        "class": "pipe",
+        "filter": "git-status"
+      },
+      {
+        "match": "git log",
+        "class": "pipe",
+        "filter": "git-log"
+      },
+      {
+        "match": "git diff",
+        "class": "pipe",
+        "filter": "git-diff"
+      },
+      {
+        "match": "cargo test",
+        "class": "pipe",
+        "filter": "cargo-test"
+      },
+      {
+        "match": "vitest",
+        "class": "pipe",
+        "filter": "vitest"
+      },
+      {
+        "match": "tsc",
+        "class": "recognized-only",
+        "rtk": "tsc",
+        "note": "RTK tsc filter: a quiet success prints nothing, informational runs become 'TypeScript compilation completed'."
+      },
+      {
+        "match": "prettier",
+        "class": "recognized-only",
+        "rtk": "prettier",
+        "note": "RTK prettier filter loses the names of changed files."
+      },
+      {
+        "match": "pytest",
+        "class": "pipe",
+        "filter": "pytest"
+      },
+      {
+        "match": "pytest --collect-only",
+        "class": "recognized-only",
+        "rtk": "pytest",
+        "note": "RTK pytest filter turns a collect-only listing into 'No tests collected'."
+      },
+      {
+        "match": "python -m pytest --collect-only",
+        "class": "recognized-only",
+        "rtk": "pytest",
+        "note": "RTK pytest filter turns a collect-only listing into 'No tests collected'."
+      },
+      {
+        "match": "python3 -m pytest --collect-only",
+        "class": "recognized-only",
+        "rtk": "pytest",
+        "note": "RTK pytest filter turns a collect-only listing into 'No tests collected'."
+      },
+      {
+        "match": "python -m pytest",
+        "class": "pipe",
+        "filter": "pytest"
+      },
+      {
+        "match": "python3 -m pytest",
+        "class": "pipe",
+        "filter": "pytest"
+      },
+      {
+        "match": "ruff check",
+        "class": "pipe",
+        "filter": "ruff-check"
+      },
+      {
+        "match": "ruff format",
+        "class": "recognized-only",
+        "rtk": "ruff",
+        "note": "RTK ruff-format filter replaces '3 files reformatted' with 'All files formatted correctly'."
+      },
+      {
+        "match": "mypy",
+        "class": "pipe",
+        "filter": "mypy"
+      },
+      {
+        "match": "go test",
+        "class": "recognized-only",
+        "rtk": "go",
+        "note": "RTK go-test filter expects go test -json. Plain output becomes 'No tests found'."
+      },
+      {
+        "match": "go build",
+        "class": "pipe",
+        "filter": "go-build"
+      },
+      {
+        "match": "grep",
+        "class": "pipe",
+        "filter": "grep"
+      },
+      {
+        "match": "rg",
+        "class": "pipe",
+        "filter": "rg"
+      },
+      {
+        "match": "find",
+        "class": "pipe",
+        "filter": "find"
+      },
+      {
+        "match": "fd",
+        "class": "pipe",
+        "filter": "fd"
+      },
+      {
+        "match": "log",
+        "class": "pipe",
+        "filter": "log"
+      },
+      {
+        "match": "git show",
+        "class": "recognized-only",
+        "rtk": "git"
+      },
+      {
+        "match": "git stash list",
+        "class": "recognized-only",
+        "rtk": "git"
+      },
+      {
+        "match": "gh pr view",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gh pr checks",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gh run list",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gh issue view",
+        "class": "recognized-only",
+        "rtk": "gh"
+      },
+      {
+        "match": "gt log",
+        "class": "recognized-only",
+        "rtk": "gt"
+      },
+      {
+        "match": "gt status",
+        "class": "recognized-only",
+        "rtk": "gt"
+      },
+      {
+        "match": "cargo nextest",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "cargo build",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "cargo check",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "cargo clippy",
+        "class": "recognized-only",
+        "rtk": "cargo"
+      },
+      {
+        "match": "jest",
+        "class": "recognized-only",
+        "rtk": "jest"
+      },
+      {
+        "match": "eslint",
+        "class": "recognized-only",
+        "rtk": "lint"
+      },
+      {
+        "match": "pnpm list",
+        "class": "recognized-only",
+        "rtk": "pnpm"
+      },
+      {
+        "match": "pnpm outdated",
+        "class": "recognized-only",
+        "rtk": "pnpm"
+      },
+      {
+        "match": "next build",
+        "class": "recognized-only",
+        "rtk": "next"
+      },
+      {
+        "match": "prisma migrate",
+        "class": "recognized-only",
+        "rtk": "prisma"
+      },
+      {
+        "match": "playwright test",
+        "class": "recognized-only",
+        "rtk": "playwright"
+      },
+      {
+        "match": "pip install",
+        "class": "recognized-only",
+        "rtk": "pip"
+      },
+      {
+        "match": "golangci-lint run",
+        "class": "recognized-only",
+        "rtk": "golangci-lint"
+      },
+      {
+        "match": "rspec",
+        "class": "recognized-only",
+        "rtk": "rspec"
+      },
+      {
+        "match": "rubocop",
+        "class": "recognized-only",
+        "rtk": "rubocop"
+      },
+      {
+        "match": "rake",
+        "class": "recognized-only",
+        "rtk": "rake"
+      },
+      {
+        "match": "dotnet build",
+        "class": "recognized-only",
+        "rtk": "dotnet"
+      },
+      {
+        "match": "dotnet test",
+        "class": "recognized-only",
+        "rtk": "dotnet"
+      },
+      {
+        "match": "dotnet format",
+        "class": "recognized-only",
+        "rtk": "dotnet"
+      },
+      {
+        "match": "docker ps",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "docker images",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "docker logs",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "docker compose up",
+        "class": "recognized-only",
+        "rtk": "docker"
+      },
+      {
+        "match": "kubectl get pods",
+        "class": "recognized-only",
+        "rtk": "kubectl"
+      },
+      {
+        "match": "kubectl logs",
+        "class": "recognized-only",
+        "rtk": "kubectl"
+      },
+      {
+        "match": "ls",
+        "class": "recognized-only",
+        "rtk": "ls"
+      },
+      {
+        "match": "tree",
+        "class": "recognized-only",
+        "rtk": "tree"
+      },
+      {
+        "match": "ast-grep",
+        "class": "recognized-only",
+        "rtk": null,
+        "note": "Listed in RTK's coverage document. Not in the rtk --help of 0.42.4."
+      },
+      {
+        "match": "diff",
+        "class": "recognized-only",
+        "rtk": "diff"
+      },
+      {
+        "match": "wc",
+        "class": "recognized-only",
+        "rtk": "wc"
+      },
+      {
+        "match": "aws",
+        "class": "recognized-only",
+        "rtk": "aws"
+      },
+      {
+        "match": "psql",
+        "class": "recognized-only",
+        "rtk": "psql"
+      },
+      {
+        "match": "curl",
+        "class": "recognized-only",
+        "rtk": "curl"
+      },
+      {
+        "match": "cat",
+        "class": "recognized-only",
+        "rtk": "read",
+        "note": "Smart file reading is deferred to a LeanCTX or Headroom decision."
+      },
+      {
+        "match": "head",
+        "class": "recognized-only",
+        "rtk": "read",
+        "note": "Smart file reading is deferred to a LeanCTX or Headroom decision."
+      },
+      {
+        "match": "tail",
+        "class": "recognized-only",
+        "rtk": "read",
+        "note": "Smart file reading is deferred to a LeanCTX or Headroom decision."
+      },
+      {
+        "match": "rtk read",
+        "class": "recognized-only",
+        "rtk": "read",
+        "note": "Smart file reading is deferred."
+      },
+      {
+        "match": "rtk smart",
+        "class": "recognized-only",
+        "rtk": "smart",
+        "note": "Summaries replace content. Deferred."
+      }
     ]
   }
 }

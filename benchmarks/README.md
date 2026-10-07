@@ -47,3 +47,13 @@ The emitted Markdown is formatted so it can be pasted into `docs/VALIDATION_MATR
 bash -n benchmarks/run-benchmark.sh benchmarks/fixtures/noisy-pass.sh benchmarks/fixtures/failing-stacktrace.sh
 bash benchmarks/run-benchmark.sh > /tmp/token-controller-benchmark.md
 ```
+
+## RTK pipe benchmark
+
+`benchmarks/run-rtk-benchmark.sh` measures what `wx` shows when RTK filters the captured stdout of recorded runs (`tests/fixtures/rtk`), and keeps that apart from the built-in exact-repeat reducer. It has three sections: the built-in reducer (reference), RTK pipe with the fake RTK from `tests/fixtures/bin/rtk` (a pipeline check, always runs), and RTK pipe with a real `rtk` (skipped if none is installed).
+
+```bash
+bash benchmarks/run-rtk-benchmark.sh > /tmp/token-controller-rtk-benchmark.md
+```
+
+Each row shows the command, profile, raw and visible bytes, byte reduction percent, `output_policy`, `rtk_class`, `compressor`, `filter`, `fallback_reason`, and whether the evidence was preserved. Rows are the 42 pipe-filter fixtures of `tests/fixtures/rtk/MATRIX` (14 filters, groups A to D; group X rows are demoted commands, checked by the wx test only) in the `code` profile, then the first success fixture of every filter in `security`, and `pytest` in the other four protected profiles (`raw`, `db`, `migration`, `release`), which must show raw output with no RTK call. The script exits 1 if raw capture, an exit code, or stderr is lost, a protected profile is not raw, or an outcome differs from the pin in the matrix. With a real RTK, outcomes and evidence results are pinned for 0.42.4 only. A shown RTK output that lacks text marked as evidence is a pinned known loss: it is listed and counted, and it does not fail the run. These are byte counts, not token counts. The fake RTK's byte counts only test the pipeline.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Path: scripts/workflow.sh
 # Usage: source scripts/workflow.sh <mode>
-# Modes: init setup raw scope architect decisions code snippet agent test test-full debug docs cicd review security migration db perf release off status report reset-session
+# Modes (defined in config/workflow_settings.json): raw scope architect decisions code rapid-prototype snippet micro agent test test-full debug data-analysis docs cicd review security migration db perf release off
+# Commands: init setup status modes version report doctor reset-session
 # Backward-compatible aliases: plan=architect, ci=cicd
 
 # This script is intended to be sourced, because it exports variables to the current shell.
@@ -12,6 +13,8 @@ _AI_WORKFLOW_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_AI_WORKFLOW_SCRIPT_DIR/lib/wx.sh"
 # shellcheck source=lib/wx-session.sh
 source "$_AI_WORKFLOW_SCRIPT_DIR/lib/wx-session.sh"
+# shellcheck source=lib/versions.sh
+source "$_AI_WORKFLOW_SCRIPT_DIR/lib/versions.sh"
 unset _AI_WORKFLOW_SCRIPT_DIR
 
 _ai_workflow_main() {
@@ -33,7 +36,7 @@ _ai_workflow_main() {
 
   usage() {
     cat <<USAGE
-Usage: source scripts/workflow.sh <mode>
+Usage: ${AICONTEXT_ENTRYPOINT_NAME:-source scripts/workflow.sh} <mode>
 
 Modes:
   init         Initialize AGENTS.md in the current directory.
@@ -43,8 +46,10 @@ Modes:
   architect    Architecture, structure, codebase overview.
   decisions    ADRs, domain models, schemas, types.
   code         Normal implementation work.
+  rapid-prototype Fast prototyping. Compress successful output only. Keep errors raw.
   data-analysis Data analysis, stats, and visualization.
   snippet      Small file/method/snippet review.
+  micro        Very small task. No context tools, target file/snippet only.
   agent        Agent-governance / AGENTS.md workflows.
   test         Unit/integration test runs.
   test-full    Full app / broad automated test routine.
@@ -58,9 +63,19 @@ Modes:
   perf         Performance profiling and benchmarking.
   release      Release preparation.
   off          Disable all optimizers.
-  status       Show current profile.
-  report       Summarize the current project's wx session.
+  status       Show current profile. Option: --json (reads the active mode file)
+  modes        List modes and aliases from the settings file. Option: --json
+  version      Show the CLI version and the JSON schema numbers. Option: --json
+  doctor       Read-only check of settings, instruction files, and tools. Option: --json
+               It can create an empty ~/.config/ai-workflow when run through workflow.sh.
+  report       Summarize the current project's wx session. Options: --json, --project <dir>
   reset-session Archive the current wx session and start a new one.
+
+Environment:
+  AICONTEXT_CAVEMAN_REQUEST=off|lite|full
+               Opt in to terse agent output for one activation, for example:
+               AICONTEXT_CAVEMAN_REQUEST=lite workflow code
+               Caveman is off by default. Blocked modes ignore the request.
 
 Aliases:
   plan -> architect
@@ -75,6 +90,24 @@ USAGE
     fi
   }
 
+  # Caveman policy helpers. They only resolve state. Nothing here calls Caveman.
+  _aiw_caveman_rank() {
+    case "$1" in
+      off) echo 0 ;;
+      lite) echo 1 ;;
+      full) echo 2 ;;
+      *) return 1 ;;
+    esac
+  }
+
+  # Hard-blocked profiles stay off even if the config allows a level.
+  _aiw_caveman_blocked() {
+    case "$1" in
+      raw|security|db|release|migration|docs|debug|micro|snippet|off) return 0 ;;
+    esac
+    jq -e --arg m "$1" '(.caveman_policy.hard_blocked_profiles // []) | index($m) != null' "$_SETTINGS_FILE" >/dev/null 2>&1
+  }
+
   status() {
     echo "Current AI Context Workflow Status:"
     echo "  AICONTEXT_PROFILE=${AICONTEXT_PROFILE:-unset}"
@@ -87,9 +120,229 @@ USAGE
     echo "  AICONTEXT_LEANCTX_MODE=${AICONTEXT_LEANCTX_MODE:-unset}"
     echo "  AICONTEXT_RTK_MODE=${AICONTEXT_RTK_MODE:-unset}"
     echo "  AICONTEXT_CAVEMAN_OUTPUT=${AICONTEXT_CAVEMAN_OUTPUT:-unset}"
+    echo "  AICONTEXT_CAVEMAN_REQUESTED=${AICONTEXT_CAVEMAN_REQUESTED:-unset}"
+    echo "  AICONTEXT_CAVEMAN_MODE=${AICONTEXT_CAVEMAN_MODE:-unset}"
+    echo "  AICONTEXT_CAVEMAN_MAX=${AICONTEXT_CAVEMAN_MAX:-unset}"
+    echo "  AICONTEXT_CAVEMAN_SHRINK=${AICONTEXT_CAVEMAN_SHRINK:-unset}"
+    echo "  AICONTEXT_OUTPUT_STYLE=${AICONTEXT_OUTPUT_STYLE:-unset}"
     echo "  AICONTEXT_RAW_ON_FAIL=${AICONTEXT_RAW_ON_FAIL:-unset}"
     echo "  AICONTEXT_KEEP_RAW_LOGS=${AICONTEXT_KEEP_RAW_LOGS:-unset}"
     echo "  Active env cache: $_ACTIVE_ENV_FILE"
+    # The lines above are this shell's state. wx uses the env file, so show that too.
+    local _FILE_PROFILE=""
+    if [ -f "$_ACTIVE_ENV_FILE" ] && [ -r "$_ACTIVE_ENV_FILE" ]; then
+      _FILE_PROFILE="$(sed -n 's/^export AICONTEXT_PROFILE="\(.*\)"$/\1/p' "$_ACTIVE_ENV_FILE" | head -n 1)"
+    fi
+    echo "  Env file profile (used by wx): ${_FILE_PROFILE:-none}"
+    if [ -n "$_FILE_PROFILE" ] && [ -n "${AICONTEXT_PROFILE:-}" ] && [ "$AICONTEXT_PROFILE" != "$_FILE_PROFILE" ]; then
+      echo "  Warning: this shell has profile '$AICONTEXT_PROFILE', but the env file has '$_FILE_PROFILE'. wx uses the env file. Run: workflow $_FILE_PROFILE"
+    fi
+  }
+
+  # JSON status for tools (the VS Code extension, agents). It reads the active mode file as controller
+  # state, like wx does. It never changes the caller's shell: values are read in a subshell.
+  # Fields: see docs/TECHNICAL_DEBT.md (status --json). Needs jq.
+  status_json() {
+    need_jq || return 1
+
+    local _SHELL_PROFILE="${AICONTEXT_PROFILE:-}"
+    local _USE_SHELL_STATE=false
+    local _FILE_USABLE=false
+
+    [ "${AICONTEXT_USE_SHELL_STATE:-}" = true ] && _USE_SHELL_STATE=true
+    [ -f "$_ACTIVE_ENV_FILE" ] && [ -r "$_ACTIVE_ENV_FILE" ] && _FILE_USABLE=true
+
+    (
+      local _SOURCE=unset
+
+      if [ "$_FILE_USABLE" = true ]; then
+        _wx_unset_policy_state
+        _wx_apply_env_file "$_ACTIVE_ENV_FILE"
+        # A file without a profile is not usable state. wx keeps output raw in that case.
+        [ -n "${AICONTEXT_PROFILE:-}" ] && _SOURCE=active_env_file
+      elif [ -n "$_SHELL_PROFILE" ]; then
+        _SOURCE=shell_fallback
+      fi
+
+      jq -n \
+        --argjson schema_version "$AIW_STATUS_SCHEMA_VERSION" \
+        --arg source "$_SOURCE" \
+        --arg env_file "$_ACTIVE_ENV_FILE" \
+        --arg shell_profile "$_SHELL_PROFILE" \
+        --argjson use_shell_state "$_USE_SHELL_STATE" \
+        --arg profile "${AICONTEXT_PROFILE:-}" \
+        --arg risk "${AICONTEXT_RISK:-}" \
+        --arg output_style "${AICONTEXT_OUTPUT_STYLE:-}" \
+        --arg raw_on_fail "${AICONTEXT_RAW_ON_FAIL:-}" \
+        --arg keep_raw_logs "${AICONTEXT_KEEP_RAW_LOGS:-}" \
+        --arg compress_shell "${AICONTEXT_COMPRESS_SHELL:-}" \
+        --arg compress_files "${AICONTEXT_COMPRESS_FILES:-}" \
+        --arg rtk_mode "${AICONTEXT_RTK_MODE:-}" \
+        --arg leanctx_mode "${AICONTEXT_LEANCTX_MODE:-}" \
+        --arg headroom_mode "${AICONTEXT_HEADROOM_MODE:-}" \
+        --arg caveman_requested "${AICONTEXT_CAVEMAN_REQUESTED:-}" \
+        --arg caveman_mode "${AICONTEXT_CAVEMAN_MODE:-}" \
+        --arg caveman_max "${AICONTEXT_CAVEMAN_MAX:-}" \
+        --arg caveman_output "${AICONTEXT_CAVEMAN_OUTPUT:-}" \
+        '
+        def s: if . == "" then null else . end;
+        def b: if . == "true" then true elif . == "false" then false else null end;
+        ($profile | s) as $p
+        | {
+            schema_version: $schema_version,
+            profile: $p,
+            risk: ($risk | s),
+            output_style: ($output_style | s),
+            raw_on_fail: ($raw_on_fail | b),
+            keep_raw_logs: ($keep_raw_logs | b),
+            compress_shell: ($compress_shell | s),
+            compress_files: ($compress_files | s),
+            rtk_mode: ($rtk_mode | s),
+            leanctx_mode: ($leanctx_mode | s),
+            headroom_mode: ($headroom_mode | s),
+            caveman_requested: ($caveman_requested | s),
+            caveman_mode: ($caveman_mode | s),
+            caveman_max: ($caveman_max | s),
+            caveman_output: ($caveman_output | b),
+            source: $source,
+            active_env_file: $env_file,
+            shell_profile: (if ($shell_profile != "") and ($shell_profile != $profile) then $shell_profile else null end),
+            stale_shell: (($shell_profile != "") and ($source != "shell_fallback") and ($shell_profile != $profile)),
+            use_shell_state: $use_shell_state
+          }'
+    )
+  }
+
+  # Machine-readable mode list, read from the settings file. The extension and other tools use it
+  # so they do not keep their own copy of the modes. Fields: see docs/TECHNICAL_DEBT.md (modes --json).
+  # The Caveman level is the effective one (same rules as activation). tests/workflow-session.test.sh
+  # compares this list with the variables each mode exports, so the two cannot drift silently.
+  modes_json() {
+    need_jq || return 1
+    if [ ! -f "$_SETTINGS_FILE" ] || [ ! -r "$_SETTINGS_FILE" ]; then
+      echo "Error: settings file not found: $_SETTINGS_FILE" >&2
+      return 1
+    fi
+
+    jq --argjson schema_version "$AIW_MODES_SCHEMA_VERSION" '
+      def rank: if . == "off" then 0 elif . == "lite" then 1 elif . == "full" then 2 else null end;
+      def level($v): if ($v | rank) == null then "off" else $v end;
+      (.defaults // {}) as $d
+      | (.caveman_policy.hard_blocked_profiles // []) as $config_blocked
+      | ["raw", "security", "db", "release", "migration", "docs", "debug", "micro", "snippet", "off"] as $blocked
+      | {
+          schema_version: $schema_version,
+          modes: [
+            .modes | to_entries[] | .key as $name | .value as $m
+            | level($m.caveman_mode // $d.caveman_mode // "off") as $requested
+            | (if (($blocked + $config_blocked) | index($name)) != null then "off"
+               else level($m.caveman_max // $d.caveman_max // "off") end) as $cap
+            | (if ($requested | rank) <= ($cap | rank) then $requested else $cap end) as $effective
+            | {
+                name: $name,
+                description: ($m.description // null),
+                risk: ($m.risk // "normal"),
+                compress_shell: ($m.compress_shell // "safe"),
+                compress_files: ($m.compress_files // "safe"),
+                rtk_mode: ($m.rtk_mode // "off"),
+                leanctx_mode: ($m.leanctx_mode // "off"),
+                headroom_mode: ($m.headroom_mode // "off"),
+                caveman_mode: $effective,
+                caveman_max: $cap,
+                caveman_output: ($effective != "off"),
+                output_style: ($d.default_output_style // "ste-inspired")
+              }
+          ],
+          aliases: [
+            (if has("aliases") then .aliases else {"plan": "architect", "ci": "cicd"} end)
+            | to_entries[] | {alias: .key, target: .value}
+          ]
+        }' "$_SETTINGS_FILE"
+  }
+
+  modes_text() {
+    local _MODES_JSON
+    _MODES_JSON="$(modes_json)" || return 1
+    echo "Modes:"
+    jq -r '.modes[] | [.name, .risk, (.description // "")] | @tsv' <<< "$_MODES_JSON" |
+      awk -F'\t' '{ printf "  %-16s %-9s %s\n", $1, $2, $3 }'
+    local _ALIAS_LINE
+    _ALIAS_LINE="$(jq -r '[.aliases[] | "\(.alias) -> \(.target)"] | join(", ")' <<< "$_MODES_JSON")"
+    [ -n "$_ALIAS_LINE" ] && echo "Aliases: $_ALIAS_LINE"
+    return 0
+  }
+
+  # Version and schema numbers. The numbers come from lib/versions.sh. The config schema is read from the
+  # settings file. The git fields are filled only when the controller folder is a git checkout and git answers.
+  version_values() {
+    _V_CONFIG_SCHEMA=""
+    _V_GIT_COMMIT=""
+    _V_GIT_BRANCH=""
+    local _VALUE
+
+    if command -v jq >/dev/null 2>&1 && [ -r "$_SETTINGS_FILE" ]; then
+      _VALUE="$(jq -r '.schema_version // empty | tostring' "$_SETTINGS_FILE" 2>/dev/null)"
+      case "$_VALUE" in
+        ''|*[!0-9]*) ;;
+        *) _V_CONFIG_SCHEMA="$_VALUE" ;;
+      esac
+    fi
+
+    if command -v git >/dev/null 2>&1 && [ -e "$_PROJECT_ROOT/.git" ]; then
+      # git rev-parse and git branch only read refs. GIT_DIR and GIT_WORK_TREE from the caller are ignored.
+      local -a _GIT=(env -u GIT_DIR -u GIT_WORK_TREE GIT_OPTIONAL_LOCKS=0 git -C "$_PROJECT_ROOT")
+      command -v timeout >/dev/null 2>&1 && _GIT=(timeout 3 "${_GIT[@]}")
+      _VALUE="$("${_GIT[@]}" rev-parse --short=12 HEAD 2>/dev/null)"
+      case "$_VALUE" in
+        ''|*[!0-9a-f]*) ;;
+        *) _V_GIT_COMMIT="$_VALUE" ;;
+      esac
+      _V_GIT_BRANCH="$("${_GIT[@]}" branch --show-current 2>/dev/null | tr -cd '[:alnum:]._/-' | cut -c1-80)"
+    fi
+  }
+
+  version_json() {
+    need_jq || return 1
+    version_values
+    jq -n \
+      --argjson schema_version "$AIW_VERSION_SCHEMA_VERSION" \
+      --arg cli_version "$AIW_CLI_VERSION" \
+      --argjson config_schema_version "${_V_CONFIG_SCHEMA:-null}" \
+      --argjson status_schema_version "$AIW_STATUS_SCHEMA_VERSION" \
+      --argjson modes_schema_version "$AIW_MODES_SCHEMA_VERSION" \
+      --argjson doctor_schema_version "$AIW_DOCTOR_SCHEMA_VERSION" \
+      --argjson report_schema_version "$AIW_REPORT_SCHEMA_VERSION" \
+      --argjson session_schema_version "$AIW_SESSION_SCHEMA_VERSION" \
+      --arg git_commit "$_V_GIT_COMMIT" \
+      --arg git_branch "$_V_GIT_BRANCH" \
+      '{
+        schema_version: $schema_version,
+        cli_version: $cli_version,
+        config_schema_version: $config_schema_version,
+        status_schema_version: $status_schema_version,
+        modes_schema_version: $modes_schema_version,
+        doctor_schema_version: $doctor_schema_version,
+        report_schema_version: $report_schema_version,
+        session_schema_version: $session_schema_version,
+        git_commit: (if $git_commit == "" then null else $git_commit end),
+        git_branch: (if $git_branch == "" then null else $git_branch end)
+      }'
+  }
+
+  version_text() {
+    version_values
+    printf 'Token Controller CLI %s\n' "$AIW_CLI_VERSION"
+    printf '  config schema:   %s\n' "${_V_CONFIG_SCHEMA:-unknown}"
+    printf '  status schema:   %s\n' "$AIW_STATUS_SCHEMA_VERSION"
+    printf '  modes schema:    %s\n' "$AIW_MODES_SCHEMA_VERSION"
+    printf '  doctor schema:   %s\n' "$AIW_DOCTOR_SCHEMA_VERSION"
+    printf '  report schema:   %s\n' "$AIW_REPORT_SCHEMA_VERSION"
+    printf '  session schema:  %s\n' "$AIW_SESSION_SCHEMA_VERSION"
+    printf '  version schema:  %s\n' "$AIW_VERSION_SCHEMA_VERSION"
+    if [ -n "$_V_GIT_COMMIT" ]; then
+      printf '  git:             %s%s\n' "$_V_GIT_COMMIT" "${_V_GIT_BRANCH:+ ($_V_GIT_BRANCH)}"
+    fi
+    return 0
   }
 
   case "$_MODE" in
@@ -97,13 +350,67 @@ USAGE
       usage
       return 0
       ;;
+    version|--version|-V)
+      [ "$#" -gt 0 ] && shift
+      case "${1:-}" in
+        --json)
+          version_json
+          return $?
+          ;;
+        ""|--text)
+          version_text
+          return $?
+          ;;
+        *)
+          echo "Error: unknown version option: $1. Use: workflow version [--json]" >&2
+          return 2
+          ;;
+      esac
+      ;;
+    modes)
+      [ "$#" -gt 0 ] && shift
+      case "${1:-}" in
+        --json)
+          modes_json
+          return $?
+          ;;
+        ""|--text)
+          modes_text
+          return $?
+          ;;
+        *)
+          echo "Error: unknown modes option: $1. Use: workflow modes [--json]" >&2
+          return 2
+          ;;
+      esac
+      ;;
     status|"")
-      status
-      return 0
+      [ "$#" -gt 0 ] && shift
+      case "${1:-}" in
+        --json)
+          status_json
+          return $?
+          ;;
+        "")
+          status
+          return 0
+          ;;
+        *)
+          echo "Error: unknown status option: $1. Use: workflow status [--json]" >&2
+          return 2
+          ;;
+      esac
+      ;;
+    doctor)
+      shift
+      # Read-only check. Runs in a child process so it cannot change this shell.
+      AICONTEXT_DOCTOR_VIA_WORKFLOW=1 bash "$_SCRIPT_DIR/doctor.sh" "$@"
+      return $?
       ;;
     report)
       need_jq || return 1
-      workflow_report "$_ACTIVE_ENV_FILE"
+      [ "$#" -gt 0 ] && shift
+      workflow_report "$_ACTIVE_ENV_FILE" "$@"
       return $?
       ;;
     reset-session)
@@ -378,11 +685,13 @@ USAGE
       )
       return $?
       ;;
-    plan)
-      _MODE="architect"
-      ;;
-    ci)
-      _MODE="cicd"
+  esac
+
+  # Mode ids are lowercase words with hyphens. Reject anything else before it reaches a jq program.
+  case "$_MODE" in
+    ''|-*|*[!a-z0-9-]*)
+      echo "Error: profile '$_MODE' not found in $_SETTINGS_FILE" >&2
+      return 1
       ;;
   esac
 
@@ -393,6 +702,16 @@ USAGE
   fi
 
   need_jq || return 1
+
+  # Aliases come from config ("aliases"). Without that key, the two built-in aliases still work.
+  local _ALIAS_TARGET
+  _ALIAS_TARGET="$(jq -r --arg m "$_MODE" 'if has("aliases") then (.aliases[$m] // "") else ({"plan": "architect", "ci": "cicd"}[$m] // "") end' "$_SETTINGS_FILE" 2>/dev/null)"
+  if [ -n "$_ALIAS_TARGET" ]; then
+    case "$_ALIAS_TARGET" in
+      -*|*[!a-z0-9-]*) ;;
+      *) _MODE="$_ALIAS_TARGET" ;;
+    esac
+  fi
 
   if ! jq -e ".modes[\"$_MODE\"]" "$_SETTINGS_FILE" >/dev/null 2>&1; then
     echo "Error: profile '$_MODE' not found in $_SETTINGS_FILE" >&2
@@ -409,7 +728,64 @@ USAGE
   export AICONTEXT_HEADROOM_MODE="$(jq -r ".modes[\"$_MODE\"].headroom_mode // \"off\"" "$_SETTINGS_FILE")"
   export AICONTEXT_LEANCTX_MODE="$(jq -r ".modes[\"$_MODE\"].leanctx_mode // \"off\"" "$_SETTINGS_FILE")"
   export AICONTEXT_RTK_MODE="$(jq -r ".modes[\"$_MODE\"].rtk_mode // \"off\"" "$_SETTINGS_FILE")"
-  export AICONTEXT_CAVEMAN_OUTPUT="$(jq -r ".modes[\"$_MODE\"].caveman_output // false" "$_SETTINGS_FILE")"
+  export AICONTEXT_OUTPUT_STYLE="$(jq -r '.defaults.default_output_style // "ste-inspired"' "$_SETTINGS_FILE")"
+
+  # Caveman state only. Valid levels are off, lite, full. Anything else (ultra, wenyan) becomes off.
+  local _CAVEMAN_REQUESTED
+  local _CAVEMAN_REQUEST_FROM=caveman_mode
+  local _CAVEMAN_CAP
+  local _CAVEMAN_SHRINK
+  local _CAVEMAN_EFFECTIVE
+  _CAVEMAN_REQUESTED="$(jq -r ".modes[\"$_MODE\"].caveman_mode // .defaults.caveman_mode // \"off\"" "$_SETTINGS_FILE")"
+  # Explicit opt-in for this activation: AICONTEXT_CAVEMAN_REQUEST=off|lite|full workflow <mode>.
+  # It replaces the config level. It is not saved: the next activation without it uses the config level again.
+  if [ -n "${AICONTEXT_CAVEMAN_REQUEST:-}" ]; then
+    _CAVEMAN_REQUESTED="$AICONTEXT_CAVEMAN_REQUEST"
+    _CAVEMAN_REQUEST_FROM=AICONTEXT_CAVEMAN_REQUEST
+  fi
+  _CAVEMAN_CAP="$(jq -r ".modes[\"$_MODE\"].caveman_max // .defaults.caveman_max // \"off\"" "$_SETTINGS_FILE")"
+  _CAVEMAN_SHRINK="$(jq -r ".modes[\"$_MODE\"].caveman_shrink // .defaults.caveman_shrink // \"off\"" "$_SETTINGS_FILE")"
+  if ! _aiw_caveman_rank "$_CAVEMAN_REQUESTED" >/dev/null; then
+    printf 'Warning: %s "%s" is not supported. Use off, lite, or full. Using off.\n' "$_CAVEMAN_REQUEST_FROM" "$_CAVEMAN_REQUESTED" >&2
+    _CAVEMAN_REQUESTED=off
+  fi
+  if ! _aiw_caveman_rank "$_CAVEMAN_CAP" >/dev/null; then
+    printf 'Warning: caveman_max "%s" is not supported. Using off.\n' "$_CAVEMAN_CAP" >&2
+    _CAVEMAN_CAP=off
+  fi
+  case "$_CAVEMAN_SHRINK" in
+    off|experiment) ;;
+    *)
+      printf 'Warning: caveman_shrink "%s" is not supported. Using off.\n' "$_CAVEMAN_SHRINK" >&2
+      _CAVEMAN_SHRINK=off
+      ;;
+  esac
+  if _aiw_caveman_blocked "$_MODE"; then
+    _CAVEMAN_CAP=off
+    _CAVEMAN_SHRINK=off
+  fi
+  # Effective level is the lower of the requested level and the cap.
+  if [ "$(_aiw_caveman_rank "$_CAVEMAN_REQUESTED")" -le "$(_aiw_caveman_rank "$_CAVEMAN_CAP")" ]; then
+    _CAVEMAN_EFFECTIVE="$_CAVEMAN_REQUESTED"
+  else
+    _CAVEMAN_EFFECTIVE="$_CAVEMAN_CAP"
+  fi
+  if [ "$_CAVEMAN_REQUEST_FROM" = AICONTEXT_CAVEMAN_REQUEST ] && [ "$_CAVEMAN_REQUESTED" != off ] && [ "$_CAVEMAN_EFFECTIVE" != "$_CAVEMAN_REQUESTED" ]; then
+    if [ "$_CAVEMAN_EFFECTIVE" = off ]; then
+      printf "Notice: Caveman request '%s' ignored. Mode '%s' does not allow Caveman.\n" "$_CAVEMAN_REQUESTED" "$_MODE" >&2
+    else
+      printf "Notice: Caveman request '%s' lowered to '%s'. That is the limit for mode '%s'.\n" "$_CAVEMAN_REQUESTED" "$_CAVEMAN_EFFECTIVE" "$_MODE" >&2
+    fi
+  fi
+  export AICONTEXT_CAVEMAN_REQUESTED="$_CAVEMAN_REQUESTED"
+  export AICONTEXT_CAVEMAN_MODE="$_CAVEMAN_EFFECTIVE"
+  export AICONTEXT_CAVEMAN_MAX="$_CAVEMAN_CAP"
+  export AICONTEXT_CAVEMAN_SHRINK="$_CAVEMAN_SHRINK"
+  if [ "$_CAVEMAN_EFFECTIVE" = "off" ]; then
+    export AICONTEXT_CAVEMAN_OUTPUT=false
+  else
+    export AICONTEXT_CAVEMAN_OUTPUT=true
+  fi
   export AICONTEXT_CACHE_ALIGN="$(jq -r ".modes[\"$_MODE\"].cache_align // .defaults.cache_align // true" "$_SETTINGS_FILE")"
   export AICONTEXT_RAW_ON_FAIL="$(jq -r ".modes[\"$_MODE\"].raw_on_fail // .defaults.raw_on_fail // true" "$_SETTINGS_FILE")"
   export AICONTEXT_KEEP_RAW_LOGS="$(jq -r ".modes[\"$_MODE\"].keep_raw_logs // .defaults.keep_raw_logs // true" "$_SETTINGS_FILE")"
@@ -445,6 +821,11 @@ export AICONTEXT_HEADROOM_MODE="$AICONTEXT_HEADROOM_MODE"
 export AICONTEXT_LEANCTX_MODE="$AICONTEXT_LEANCTX_MODE"
 export AICONTEXT_RTK_MODE="$AICONTEXT_RTK_MODE"
 export AICONTEXT_CAVEMAN_OUTPUT="$AICONTEXT_CAVEMAN_OUTPUT"
+export AICONTEXT_CAVEMAN_REQUESTED="$AICONTEXT_CAVEMAN_REQUESTED"
+export AICONTEXT_CAVEMAN_MODE="$AICONTEXT_CAVEMAN_MODE"
+export AICONTEXT_CAVEMAN_MAX="$AICONTEXT_CAVEMAN_MAX"
+export AICONTEXT_CAVEMAN_SHRINK="$AICONTEXT_CAVEMAN_SHRINK"
+export AICONTEXT_OUTPUT_STYLE="$AICONTEXT_OUTPUT_STYLE"
 export AICONTEXT_CACHE_ALIGN="$AICONTEXT_CACHE_ALIGN"
 export AICONTEXT_RAW_ON_FAIL="$AICONTEXT_RAW_ON_FAIL"
 export AICONTEXT_KEEP_RAW_LOGS="$AICONTEXT_KEEP_RAW_LOGS"
@@ -466,7 +847,8 @@ ENV
 
   printf 'Activated AI context profile: %s\n' "$AICONTEXT_PROFILE"
   printf '  risk=%s shell=%s files=%s index=%s memory=%s\n' "$AICONTEXT_RISK" "$AICONTEXT_COMPRESS_SHELL" "$AICONTEXT_COMPRESS_FILES" "$AICONTEXT_CODEBASE_INDEX" "$AICONTEXT_MEMORY_LAYER"
-  printf '  rtk=%s headroom=%s leanctx=%s caveman=%s raw_on_fail=%s\n' "$AICONTEXT_RTK_MODE" "$AICONTEXT_HEADROOM_MODE" "$AICONTEXT_LEANCTX_MODE" "$AICONTEXT_CAVEMAN_OUTPUT" "$AICONTEXT_RAW_ON_FAIL"
+  printf '  rtk=%s headroom=%s leanctx=%s caveman=%s raw_on_fail=%s\n' "$AICONTEXT_RTK_MODE" "$AICONTEXT_HEADROOM_MODE" "$AICONTEXT_LEANCTX_MODE" "$AICONTEXT_CAVEMAN_MODE" "$AICONTEXT_RAW_ON_FAIL"
+  printf '  output_style=%s caveman_max=%s caveman_shrink=%s\n' "$AICONTEXT_OUTPUT_STYLE" "$AICONTEXT_CAVEMAN_MAX" "$AICONTEXT_CAVEMAN_SHRINK"
   printf '  env_cache=%s\n' "$_ACTIVE_ENV_FILE"
 
   return 0

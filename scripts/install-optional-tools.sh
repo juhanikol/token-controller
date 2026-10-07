@@ -3,7 +3,7 @@ set -euo pipefail
 
 cat <<'INTRO'
 This script installs only basic WSL/Ubuntu prerequisites automatically.
-It then prints optional commands for RTK, Headroom, LeanCTX, Claude Code, and MemStack.
+It then prints optional commands for RTK, Headroom, LeanCTX, Caveman, Claude Code, and MemStack (legacy).
 No optional tool command is run automatically.
 Review each optional command before running it.
 INTRO
@@ -22,8 +22,12 @@ RTK:
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
   source ~/.bashrc
   rtk --version
-  rtk init -g --copilot
-  rtk init --show
+
+  # NOT RECOMMENDED with wx. "rtk init" installs hooks or instructions that make agents run commands
+  # through RTK directly, so wx raw capture is skipped for those commands.
+  # Token Controller never runs it. "workflow doctor" warns if a hook exists.
+  # rtk init -g --copilot
+  # rtk init --show
 
 Headroom:
   python3 -m venv ~/.venvs/headroom
@@ -51,6 +55,14 @@ LeanCTX (choose one installation method; do not run both):
   pip install python-lsp-server
   go install golang.org/x/tools/gopls@latest
 
+Caveman (optional output-style skill; off by default in every Token Controller mode):
+  # Claude Code plugin:
+  claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman
+  # OR other agents (global; omit -g for one project):
+  npx skills add JuliusBrussee/caveman -g
+  # In a session, say "stop caveman" or "normal mode" to turn it off.
+  # It adds input tokens and can cost more than it saves on short tasks.
+
 Node.js 18+ (needed for Claude Code):
   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
   source ~/.bashrc
@@ -61,7 +73,7 @@ Claude Code:
   npm install -g @anthropic-ai/claude-code
   claude --version
 
-MemStack, Claude Code oriented:
+MemStack (legacy, under review), Claude Code oriented:
   python3 -m venv ~/.venvs/memstack
   source ~/.venvs/memstack/bin/activate
   pip install --upgrade pip

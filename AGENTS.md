@@ -19,24 +19,31 @@ Current claims must be worded conservatively:
 - Say “wraps and compresses command output” only for implemented `wx` behavior.
 - Say “measured reduction” only when raw and compressed sizes are recorded.
 
+## Current Direction
+
+Branch `mode_switcher_and_orchestrator`: Token Controller is a **mode switcher and orchestrator for proven external context tools** (RTK, LeanCTX, Headroom, Caveman). It is not a replacement for them. `wx` stays as the raw-capture, exit-code, measurement, and fallback layer. It is not the whole token-saving solution.
+
+Read `docs/MODE_SWITCHER_AND_ORCHESTRATOR_PLAN.md` only when the task touches architecture, tool orchestration, `workflow doctor`, config conflicts, or the VS Code extension. Do not read `docs/DRAFTS/` unless asked.
+
 ## Architecture & Boundaries
 
 - **Core CLI:** Bash scripts under `scripts/`.
 - **Configuration:** `config/workflow_settings.json` is the source of profile policy.
-- **Command wrapper:** `wx` is the deterministic execution boundary. Compression and measurement should happen here, not only in prompts.
-- **VS Code UI:** TypeScript extension under `extensions/vscode/`. It triggers the CLI and displays/selects modes.
-- **Downstream template:** `templates/AGENTS_base.md` is distributed into other projects by `workflow init`. Keep it short, stable, and tool-agnostic.
+- **Command wrapper:** `wx` captures raw evidence and measures. External compressors run only after raw capture.
+- **VS Code UI:** TypeScript extension under `extensions/vscode/`. It is the eventual release surface. It calls the CLI. Avoid Linux-only assumptions in extension-facing code (a Windows release is possible).
+- **Downstream template:** `templates/AGENTS_base.md` is distributed into other projects by `workflow init`. Keep it short and stable. Name tools only as optional. Never reference `docs/`.
 - **Integrations:** `integrations/` contains examples for Claude Code, Copilot, MCP, or optional tools. Do not present examples as installed behavior.
-- **Validation:** `docs/VALIDATION_MATRIX.md` records correctness and measurement evidence.
+- **Validation:** `docs/VALIDATION_MATRIX.md` records measurement evidence. It becomes required after two external tools are integrated.
 
 ## Development Rules
 
 - Preserve correctness over token reduction.
 - Preserve raw evidence for `security`, `db`, `release`, `migration`, and first failing `debug` runs.
 - Do not destructively compress vulnerability findings, SQL/data-loss warnings, auth/crypto code, release artifacts, or first failures.
-- Every compression-related change must update or add validation evidence.
+- Changes to `wx` capture or compression behavior must update tests (`tests/wx-wrapper.test.sh`).
 - Any README claim about savings must be backed by implemented code and validation data.
 - Keep generated/session files out of Git unless they are intentional fixtures.
+- Keep docs short. Do not install or integrate external tools without an explicit task.
 
 ## Build & Test Commands
 
@@ -46,12 +53,14 @@ Run these before declaring work complete:
 bash -n scripts/workflow.sh
 find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
 jq . config/workflow_settings.json >/dev/null
+git diff --check
 ```
 
 **VS Code Extension Build:**
 
 ```bash
 cd extensions/vscode
+npm ci
 npm run compile
 npx vsce package
 ```

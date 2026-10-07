@@ -598,3 +598,125 @@ Copy this block for each experiment.
 - Limitation: matcher coverage is conservative and host-specific; it does not cover every nested shell form or any non-Claude host
 - Pass/fail: PASS
 - Recommended profile change: none
+
+### Experiment: profile/state manager review (eight checks)
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (HEAD `0b5f823` plus an uncommitted working tree)
+- Scenario: check that the repository acts as a profile/state manager (plus the `wx` wrapper as the only mechanical layer), and not as a token optimizer by itself
+- Profiles: all 22 modes; `code` and `security` in detail
+- Active env file: an isolated directory (`AICONTEXT_CONFIG_DIR`). The real `~/.config/ai-workflow/active_mode.env` was not changed.
+- Tools installed: Bash 5.2.21, jq 1.8.2. RTK 0.42.4 and LeanCTX are installed on this machine, but nothing was installed or configured for this review, and only `tests/wx-wrapper.test.sh` calls RTK (through its fake RTK and one real-RTK check).
+- Tools missing: Headroom, Caveman, MemStack were not used
+- Commands:
+  - `bash -n scripts/workflow.sh`, `bash -n scripts/lib/*.sh`, `jq . config/workflow_settings.json >/dev/null`
+  - `source scripts/workflow.sh status` (clean environment, no mode file), `status --json`
+  - `source scripts/workflow.sh code` and `security`, then `declare -p`, `env`, and a child process
+  - a loop over all 22 modes comparing exported values with `jq` on the config
+  - a copy of the config with a new mode and a changed risk (`AICONTEXT_SETTINGS_FILE`)
+  - `scripts/workflow-cli.sh modes --json`
+  - `grep` for code that reads the protection flags
+  - `wc` on `templates/AGENTS_base.md`
+  - README scenario table compared with the config (`comm` on the mode names, plus the values of the protected rows)
+  - `bash tests/wx-wrapper.test.sh`, `bash benchmarks/run-benchmark.sh`
+- Results:
+
+| # | Check | Result | Evidence |
+| ---: | --- | --- | --- |
+| 1 | `workflow.sh` uses the config as the source of truth | PASS, with notes | All 22 modes export exactly the config values for risk, shell, files, index, memory, headroom, leanctx, and rtk. A new mode and a changed risk in a copied config were picked up with no script change. An unknown mode returns 1. Not config-driven: the Caveman blocked-profile list (a code copy beside the config list), the built-in alias fallback, and the usage text (debt D-16, D-18). |
+| 2 | `status` works before any profile is activated | PASS | Clean environment, no mode file: text status prints `unset` for every variable and returns 0. `status --json` returns `profile: null`, `source: "unset"`, `stale_shell: false`. |
+| 3 | Variables are exported to the current shell when sourced | PASS | `declare -x` for `AICONTEXT_PROFILE` and `AICONTEXT_RISK`, a child process sees `code/normal` and `security/critical`, and 29 `AICONTEXT_*` variables are exported. |
+| 4 | Backward-compatible variables are exported | PASS | `RTK_HOOK_ENABLED`, `HEADROOM_COMPRESSION_STRATEGY`, `LEANCTX_ACTIVE`, `MEMSTACK_ACTIVE`, `CAVEMAN_OUTPUT`: exported, non-empty, and mapped correctly in all 22 modes (110 checks). All five are in the mode file. |
+| 5 | High-risk profiles are raw/lossless by default | PASS for `critical`. Not for `high`, by design. See finding F3 and F4. | `critical`: `raw`, `security`, `migration`, `db`, `release`. All five have shell compression `off` or `off-or-lossless-only`, `rtk_mode off`, Caveman `off`, Headroom `off` or `lossless-only`. The `high` modes (12) are not raw: 11 allow shell compression or RTK on successful output (for example `debug`, `test`, `cicd`, `rapid-prototype`). |
+| 6 | Target files and failures are protected from destructive compression | Failures: PASS (mechanical). Target files: policy only. See finding F2. | All 22 modes export `raw_on_fail`, `keep_raw_logs`, `preserve_*`, and `target_files_full` as `true`. Nothing in `scripts/lib`, `doctor.sh`, or the extension reads those flags or `AICONTEXT_COMPRESS_FILES`. Failures are protected because `wx` always keeps raw output on a nonzero exit (`raw-nonzero-exit`), keeps stderr verbatim, and keeps raw logs. `tests/wx-wrapper.test.sh` passes, and the benchmark keeps failure, security, and database evidence. |
+| 7 | `AGENTS_base.md` is concise and free from context bloat | PASS | 19 lines, 224 words, 1,586 bytes (about 400 tokens, estimated as bytes/4, not tokenizer-measured). No references to `docs/`. Longest line is 298 characters (the Caveman bullet). It names four optional tools. |
+| 8 | README scenario mappings match the config | PASS, with one finding. See finding F1. | The 22 modes in the README table and the 22 in the config are the same set. Aliases match (`plan`, `ci`). "Raw or lossless" rows (`security`, `db`, `release`) have `off-or-lossless-only` and RTK `off`. "Little or no / disable" rows (`snippet`, `micro`, `raw`, `off`) have shell compression `off`. |
+
+- Findings and minimal patches (proposed, not applied):
+  - **F1 (README, check 8).** "Policy rules in plain language" says `raw`, `security`, `db`, and `release` use raw or lossless context. The config marks `migration` as `critical` too, and `wx` treats it as protected. Patch: add `migration` to that line.
+  - **F2 (check 6).** The flags `raw_on_fail`, `keep_raw_logs`, `preserve_stderr`, `preserve_exit_code`, `preserve_first_error`, `preserve_warnings`, `target_files_full`, and `compress_files` are exported state that nothing reads. `wx` hard-wires the safe behavior, so setting a flag to `false` changes nothing (the safe direction). Keeping target files full is only a request to the agent. Patch (docs only): add one sentence to the README policy rules, "These flags are state for agents and tools. `wx` always keeps raw output on failure, stderr, and raw logs." Recorded as debt D-33. Do not make `wx` read `raw_on_fail=false`, because that would weaken the safety layer.
+  - **F3 (check 5).** `leanctx_mode` on critical modes is `guarded` (`security`, `release`), `diagnostic` (`db`), and `graph-read` (`migration`), and `memory_layer` and `codebase_index` are on for `security`, `db`, and `migration`. These labels are free text and LeanCTX is not integrated, so "lossless" cannot be asserted for them. Patch (decision for you): either set `leanctx_mode` to `off` for the critical modes until LeanCTX is designed, or keep the labels and accept that they are intent only. Covered by debt D-01 and D-03.
+  - **F4 (check 5).** `risk: high` does not mean raw. Only `critical` is raw or lossless. Patch (docs only): define the three levels in one README sentence.
+  - **F5 (check 7, optional).** Shorten the Caveman bullet in the template (298 characters) if the template should be smaller. No change is needed to pass.
+  - **F6 (check 1).** The Caveman blocked list and the aliases exist outside the config. The existing tests guard the Caveman copies.
+- Evidence preserved: raw stdout and stderr, exit codes, first failures, security and database output (shown by the existing `wx` tests and the benchmark, run again for this review)
+- Evidence lost or possibly hidden: none in the checks. The benchmark's noisy-success fixture still collapses exact repeated lines on purpose.
+- Mechanical results re-run for this review: `tests/wx-wrapper.test.sh` PASS (including the real-RTK check); `benchmarks/run-benchmark.sh` PASS (aggregate emitted bytes 1641, practical reduction 74.84%, byte reduction only).
+- Pass/fail: PASS. The repository acts as a profile/state manager. The only mechanical layer is `wx`. File and mode-level protection beyond `wx` is policy for agents and tools. No check found a mode that exports a value different from the config.
+- Interpretation: this review checks state and wording. It does not show token savings, agent compliance, or any behavior of LeanCTX, Headroom, or Caveman.
+- Recommended profile change: none. Apply F1 and F4 (docs) first. Decide F3. F2 is recorded as debt D-33.
+- Update (2026-10-07): F1, F3, and F4 were applied (README wording and `leanctx_mode` `off` in critical modes). F2 stays open as debt D-33. After the change: `bash -n`, `jq`, `workflow-cli.sh modes --json`, and `tests/workflow-session.test.sh` passed.
+
+### Experiment: RTK pipe filters, recorded fixtures
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (working tree)
+- Scenario: replay recorded command output through `wx` and check what `rtk pipe` does with it, for the six enabled filters
+- Profile: `code`
+- Tools: RTK 0.42.4 (real, through a spy script), a fake RTK for the deterministic checks. Recordings from go 1.27.0, pytest 9.1.1, TypeScript 7.0.2, vitest 5.0.3. The `cargo-test` recordings are hand-written (cargo is not installed)
+- Command: `bash tests/wx-wrapper.test.sh` (fixtures in `tests/fixtures/rtk`)
+- Results: 25 recorded runs. 7 failing runs stayed raw and never reached RTK. 3 runs had empty stdout, so RTK was not called (`go build`, quiet `tsc`). 15 runs reached RTK. With real RTK: 11 accepted (smaller, guard passed), 4 fell back to raw with `evidence-guard`.
+
+| Run | Raw bytes | RTK output bytes | Real-RTK result |
+| --- | ---: | ---: | --- |
+| cargo-test, 40 tests | 1308 | 39 | accepted |
+| pytest, 32 tests | 2874 | 17 | accepted |
+| tsc `--extendedDiagnostics` | 322 | 32 | accepted |
+| vitest default / verbose / with warnings | 218 / 4192 / 271 | 31 / 31 / 31 | accepted |
+| cargo test `--nocapture`, go test `-v`, go test `-json`, pytest with warnings | 514 / 2074 / 17859 / 3445 | 38 / 23 / 32 / 17 | raw shown (`evidence-guard`) |
+
+- Evidence preserved: for every run, `stdout.raw`, `stderr.raw`, and `exit_code.raw` equal the recording and are on disk before RTK starts. stderr is shown as recorded. Exit codes are unchanged. Failing output is shown raw.
+- Evidence lost or possibly hidden: 5 accepted runs lose information or state something false, and the guard does not catch it: plain `go test` ("Go test: No tests found"), `go test -bench` (benchmark numbers), `pytest --collect-only` ("No tests collected"), `tsc --listFiles` and `tsc --showConfig` ("TypeScript compilation completed"). The `go-build` filter never receives input.
+- Pass/fail: PASS for the `wx` behavior checks. FINDING for three filters (D-38).
+- Interpretation: sizes are bytes of RTK output on 25 recordings, not token counts and not a general saving. The `cargo-test` recordings are less reliable than the others. RTK versions other than 0.42.4 are not pinned.
+- Recommended profile change: none yet. Recommended config change: narrow `go test` to `go test -json`, and set `go build` and `tsc` to `never` (D-38).
+
+### Experiment: RTK pipe benchmark (bytes)
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (working tree)
+- Command: `bash benchmarks/run-rtk-benchmark.sh` (14 rows per RTK section: 9 recorded runs in profile `code`, and one of them again in each of the five protected profiles; recordings from `tests/fixtures/rtk`)
+- Tools: fake RTK (pipeline check) and real RTK 0.42.4 through a spy script. The `cargo-test` recordings are hand-written
+- Result: PASS. Fake RTK: every row matched its expected outcome. Real RTK: every row matched the pinned 0.42.4 outcome. Protected profiles (`raw`, `security`, `db`, `migration`, `release`): raw output, no compressor, 0 RTK calls, in both sections.
+- Real RTK, `code` profile, bytes of stdout plus stderr (stderr is shown unchanged and counted):
+
+| Run | Raw | Visible | Reduction | `output_policy` |
+| --- | ---: | ---: | ---: | --- |
+| `cargo test` | 1794 | 525 | 70.74% | `compress-rtk-v1` |
+| `pytest -v` (no warnings) | 2874 | 17 | 99.41% | `compress-rtk-v1` |
+| `tsc --extendedDiagnostics` | 322 | 32 | 90.06% | `compress-rtk-v1` |
+| `vitest --reporter=verbose` | 4192 | 31 | 99.26% | `compress-rtk-v1` |
+| `go test -v` (warning lines) | 2074 | 2074 | 0% | `raw-rtk-fallback`, `evidence-guard` |
+| `pytest -v` (warnings) | 3445 | 3445 | 0% | `raw-rtk-fallback`, `evidence-guard` |
+| `cargo test -- --nocapture` (warning lines) | 1000 | 1000 | 0% | `raw-rtk-fallback`, `evidence-guard` |
+| `go build -v` | 16 | 16 | 0% | `raw-empty-or-binary-output` (stdout is empty, RTK not called) |
+
+- Of the 7 runs that reached RTK, 4 were accepted and 3 fell back to raw. Together: 15701 bytes shown as 7124 (54.63%). The 4 accepted runs alone: 9182 bytes shown as 605 (93.41%).
+- Built-in exact-repeat reducer, for reference: `npm install` fixture 336 bytes to 102 (69.64%). On the raw stdout of the 15 successful RTK recordings it gave 0.00% for 13 and a small increase for 2 (`cargo-test/pass-noisy` -3.82%, `tsc/showconfig` -0.19%). `wx` does not apply it to those commands.
+- Evidence preserved: yes in all rows (exit code, raw files, stderr as recorded, guard lines, and markers for warnings and failures). For accepted RTK output the guard check passes by construction.
+- Interpretation: byte counts on 14 rows (9 recorded runs), one RTK version. Not token counts, not a general saving. Runs with warning lines got no reduction. The five informational runs in D-38 are not in this benchmark.
+- Pass/fail: PASS
+
+### Experiment: RTK fixture matrix, all 18 pipe filters (bytes)
+
+- Date: 2026-10-07
+- Repository / branch: token-controller / `mode_switcher_and_orchestrator` (working tree)
+- Command: `bash benchmarks/run-rtk-benchmark.sh`. 59 fixtures in `tests/fixtures/rtk/MATRIX` (group A cargo-test, pytest, go-test, go-build, tsc, vitest; B mypy, ruff-check, ruff-format, prettier; C grep, rg, find, fd, git-log, git-status, git-diff; D log), plus 22 protected-profile rows (first success fixture of every filter in `security`, `pytest` in the other four protected profiles)
+- Tools: fake RTK (pipeline check) and real RTK 0.42.4 through a spy script. Recorded with real tools: go, pytest, tsc, vitest, git, grep, find. Hand-written: cargo-test, mypy, ruff-check, ruff-format, prettier, rg, fd, log (see `tests/fixtures/rtk/PROVENANCE.txt`)
+- Result: PASS, with 12 pinned known losses. Raw capture, exit codes, and stderr held in all 81 rows per section. Protected profiles: raw output, no RTK call. Every outcome matched the pin in the matrix.
+- Real RTK, `code` profile, 59 rows: 24 RTK outputs shown, 10 raw after `rtk-not-smaller`, 5 after `evidence-guard`, 1 after `rtk-empty-output` (`git diff --stat`), 14 failing runs raw (RTK not called), 5 empty stdout (RTK not called).
+- Bytes (stdout plus stderr): the 24 shown RTK outputs 28675 to 5914. Of those, 12 keep every marked evidence text (13794 to 2822) and 12 do not. All 40 runs that reached RTK: 68216 to 45455.
+- Known losses (shown RTK output, evidence guard accepted it, marked text missing): `pytest --collect-only`, `go test -bench`, plain `go test`, `tsc --listFiles`, `--extendedDiagnostics`, `--showConfig`, `ruff format` (changed count), `prettier --write` (changed file names), `find` and `fd` on 30 directories (RTK prints "+10 more dirs", 40 files not shown), `git log` and `git log --oneline` (RTK drops commits).
+- Not lost in this matrix: all `grep`/`rg` runs fell back (RTK output was larger), `git diff` kept every changed line (it drops context and headers), `git status` kept every path, `log` kept the ERROR and WARN lines, and Traceback runs fell back through the guard.
+- Evidence preserved: raw files, stderr, and exit codes: yes in every row. Marked evidence text in shown output: no in the 12 rows above.
+- Interpretation: byte counts on 59 fixtures, one RTK version, 8 filters with hand-written input. Not token counts, not a general saving. Small outputs often grow under RTK and fall back to raw.
+- Pass/fail: PASS (the 12 losses are pinned in the matrix, so a change of RTK output fails the run; see D-38)
+
+### Experiment: RTK matrix after fixes (bytes)
+
+- Date: 2026-10-07
+- Command: `bash benchmarks/run-rtk-benchmark.sh` (42 `code` rows from `tests/fixtures/rtk/MATRIX`, 18 protected-profile rows), real RTK 0.42.4 through a spy script, fake RTK for the pipeline
+- Changes since the previous matrix entry: guard rejects RTK omission markers; `tsc`, `go test`, `ruff format`, `prettier`, `pytest --collect-only` are `recognized-only` (14 pipe filters left)
+- Result: PASS. Known losses in shown output: 0 (was 12). Real RTK, `code` rows: 11 RTK outputs shown (13728 to 2783 bytes), 7 evidence-guard fallbacks, 10 not-smaller fallbacks, 1 empty RTK output, 9 failing runs and 4 empty-stdout runs raw without an RTK call. Protected profiles raw, no RTK call.
+- Interpretation: byte counts, one RTK version, hand-written input for 7 filters. The guard only sees omission markers, errors, and warnings. No token saving is claimed.
+- Pass/fail: PASS
