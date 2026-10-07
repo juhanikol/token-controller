@@ -2,6 +2,8 @@
 
 `mcp-example.json` exposes LeanCTX and Headroom as local stdio MCP servers.
 
+Headroom: later proxy/MCP/request-level compression, not now
+
 - VS Code: copy it to `.vscode/mcp.json` or merge its `servers` entries into your user MCP configuration.
 - Cursor: merge the same entries into `~/.cursor/mcp.json`, using `mcpServers` instead of the top-level `servers` key.
 
