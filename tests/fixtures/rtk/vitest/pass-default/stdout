@@ -1,0 +1,10 @@
+
+ RUN  v5.0.3 /home/user/proj
+
+ ✓ tests/math.test.ts (24 tests) 10ms
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  13:57:42
+   Duration  257ms (transform 51%, import 28%, tests 13%, worker 7%)
+

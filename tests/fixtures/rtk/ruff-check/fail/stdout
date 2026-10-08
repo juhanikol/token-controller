@@ -1,0 +1,22 @@
+src/parser.py:1:8: F401 [*] `os` imported but unused
+   |
+ 1 | import os
+   |        ^^ F401
+   |
+   = help: Remove unused import: `os`
+
+src/lexer.py:14:5: E711 [*] Comparison to `None` should be `cond is None`
+   |
+14 | import os
+   |        ^^ E711
+   |
+   = help: Remove unused import: `os`
+
+src/cache.py:22:1: B006 Do not use mutable data structures for argument defaults
+   |
+22 | import os
+   |        ^^ B006
+   |
+
+Found 3 errors.
+[*] 2 fixable with the `--fix` option.

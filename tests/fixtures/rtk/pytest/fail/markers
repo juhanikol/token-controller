@@ -1,0 +1,2 @@
+FAILED tests/test_fail.py::test_total
+tests/test_fail.py:4: AssertionError

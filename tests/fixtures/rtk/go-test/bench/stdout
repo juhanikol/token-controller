@@ -1,0 +1,7 @@
+goos: linux
+goarch: amd64
+pkg: example.com/rec
+cpu: Example CPU @ 2.00GHz
+BenchmarkAdd-8   	1000000000	         0.3067 ns/op
+PASS
+ok  	example.com/rec	0.344s

@@ -1,0 +1,32 @@
+diff --git a/src/lexer.py b/src/lexer.py
+index 8415b24..65b85e6 100644
+--- a/src/lexer.py
++++ b/src/lexer.py
+@@ -9,4 +9,4 @@ def run_lexer(data):
+ 
+ def helper_lexer(x):
+     # TODO: remove after migration
+-    return x * 2
++    return x * 3
+diff --git a/src/parser.py b/src/parser.py
+index 47a462f..536e686 100644
+--- a/src/parser.py
++++ b/src/parser.py
+@@ -1,7 +1,7 @@
+ """Module parser."""
+ import os
+ 
+-# TODO: handle empty input in parser
++# TODO: handle empty and None input in parser
+ def run_parser(data):
+     if not data:
+         raise ValueError("empty input")
+diff --git a/src/render.py b/src/render.py
+index 8a83850..092151a 100644
+--- a/src/render.py
++++ b/src/render.py
+@@ -10,3 +10,4 @@ def run_render(data):
+ def helper_render(x):
+     # TODO: remove after migration
+     return x * 2
++print("debug")
