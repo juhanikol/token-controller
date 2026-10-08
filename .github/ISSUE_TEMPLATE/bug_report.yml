@@ -1,0 +1,85 @@
+name: Bug report
+description: Something in Token Controller does not work as documented.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug.
+
+        **Do not paste secrets, tokens, private repository names, private paths, customer data, or proprietary logs.** Replace them with placeholders such as `<TOKEN>`, `<PRIVATE_REPO>`, or `/home/<user>/project`. Issues are public.
+
+        For install problems use the "Installation problem" form instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Where does the problem show up?
+      options:
+        - CLI (workflow / wx)
+        - Mode switching or policy
+        - workflow init / AGENTS.md
+        - VS Code extension
+        - Optional tool adapter (RTK, LeanCTX, Caveman)
+        - Reports / measurement
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, starting from a clean state if you can.
+      placeholder: |
+        1. cd ~/projects/example
+        2. workflow init
+        3. workflow code
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and WSL version, distro, Bash version, jq version, VS Code version, Token Controller version (`workflow version`), extension version, and which optional tools are installed.
+      placeholder: |
+        Windows / WSL 2 version:
+        Distro (e.g. Ubuntu 24.04):
+        Bash / jq / git versions:
+        VS Code version:
+        Token Controller version (workflow version):
+        Extension version:
+        Optional tools installed (RTK, LeanCTX, Caveman):
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Command output (optional)
+      description: Output of the failing command, or `workflow doctor` / `workflow status`. Remove secrets and private paths first.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: sensitive-data
+    attributes:
+      label: Sensitive data confirmation
+      options:
+        - label: I removed secrets, tokens, private repository names, private paths, customer data, and proprietary logs from this report.
+          required: true

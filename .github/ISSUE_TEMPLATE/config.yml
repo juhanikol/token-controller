@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup guide (README)
+    url: https://github.com/juhanikol/token-controller/blob/main/README.md#install-wsl-2--ubuntu
+    about: Install steps for WSL 2 + Ubuntu. Please read this before opening an installation issue.
+  - name: VS Code extension README
+    url: https://github.com/juhanikol/token-controller/blob/main/extensions/vscode/README.md
+    about: Extension install, first-run behavior, settings, and limitations.

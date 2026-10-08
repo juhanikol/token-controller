@@ -1,0 +1,40 @@
+name: Question
+description: Ask how something works or how to use it.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [README](https://github.com/juhanikol/token-controller/blob/main/README.md) and the [extension README](https://github.com/juhanikol/token-controller/blob/main/extensions/vscode/README.md) first.
+
+        **Do not paste secrets, tokens, private repository names, private paths, customer data, or proprietary logs.** Issues are public.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI (workflow / wx)
+        - Modes and policy
+        - workflow init / AGENTS.md
+        - VS Code extension
+        - Optional tools (RTK, LeanCTX, Caveman)
+        - Reports / measurement
+        - Installation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you working on, what have you already tried, and what did you read?
+    validations:
+      required: false

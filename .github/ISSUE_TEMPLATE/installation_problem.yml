@@ -1,0 +1,125 @@
+name: Installation problem
+description: Install or first-run setup did not work.
+title: "[Install]: "
+labels: ["installation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the [setup guide](https://github.com/juhanikol/token-controller/blob/main/README.md#install-wsl-2--ubuntu) first. Token Controller is tested on WSL 2 with Ubuntu only.
+
+        **Do not paste secrets, tokens, private repository names, private paths, customer data, or proprietary logs.** Replace them with placeholders. Issues are public.
+  - type: checkboxes
+    id: optional-tools
+    attributes:
+      label: Optional tools
+      description: RTK, LeanCTX, and Caveman are optional.
+      options:
+        - label: I understand that optional tools (RTK, LeanCTX, Caveman) are not required for core startup. My problem is not only that an optional tool is missing.
+          required: true
+  - type: dropdown
+    id: wsl-installer
+    attributes:
+      label: WSL installer (scripts/install-wsl.sh)
+      description: Did you run it, and how did it go?
+      options:
+        - Not run
+        - Ran, succeeded
+        - Ran, failed
+        - Ran with --dry-run only
+    validations:
+      required: true
+  - type: dropdown
+    id: vsix-install
+    attributes:
+      label: VSIX install
+      description: Installing token-controller-ui-x.x.x.vsix into VS Code.
+      options:
+        - Not attempted
+        - Installed from the Extensions view
+        - Installed with code --install-extension
+        - Install failed
+    validations:
+      required: true
+  - type: dropdown
+    id: extension-host
+    attributes:
+      label: Extension host
+      description: 'Where is the extension installed? The window should show "WSL: Ubuntu" at the bottom left.'
+      options:
+        - WSL window (extension installed in WSL)
+        - Local Windows window
+        - Other remote (SSH, Dev Container, Codespaces)
+        - Not sure
+        - Not using the extension
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow-command
+    attributes:
+      label: workflow command
+      description: Result of running `workflow status` in a new WSL terminal.
+      options:
+        - Works
+        - command not found
+        - Runs but reports an error
+        - Not tried
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow-init
+    attributes:
+      label: workflow init
+      description: Result of running `workflow init` in a project.
+      options:
+        - Works
+        - Fails
+        - Not tried
+    validations:
+      required: true
+  - type: checkboxes
+    id: base-tools
+    attributes:
+      label: jq / git / bash
+      description: Tick the ones that are installed and working.
+      options:
+        - label: bash works
+        - label: jq works (`jq --version`)
+        - label: git works (`git --version`)
+        - label: curl works (`curl --version`)
+  - type: textarea
+    id: optional-tools-state
+    attributes:
+      label: Optional tools installed (if any)
+      description: Which of RTK, LeanCTX, or Caveman are installed, and their versions. Write "none" if none.
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and the step where it happened.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows and WSL version, distro, VS Code version, extension version, where the repository is cloned (for example `~/projects` vs `/mnt/c`).
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Command output (optional)
+      description: Output of `workflow doctor`, the installer, or the failing command. Remove secrets and private paths first.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: sensitive-data
+    attributes:
+      label: Sensitive data confirmation
+      options:
+        - label: I removed secrets, tokens, private repository names, private paths, customer data, and proprietary logs from this report.
+          required: true

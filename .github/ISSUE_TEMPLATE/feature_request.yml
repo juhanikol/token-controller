@@ -1,0 +1,61 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Token Controller favors predictable, inspectable behavior, so please describe the problem as well as the idea.
+
+        **Do not paste secrets, tokens, private repository names, private paths, customer data, or proprietary logs.** Issues are public.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI (workflow / wx)
+        - Modes and policy
+        - workflow init / AGENTS.md
+        - VS Code extension
+        - Optional tool adapter (RTK, LeanCTX, Caveman)
+        - Reports / measurement
+        - Installation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk sensitivity
+      description: How much could this change affect what the assistant sees or what is written to disk?
+      options:
+        - None, documentation or UI text only
+        - Low, does not change command output or policy
+        - Medium, changes command output or what is captured
+        - High, changes policy, safety rules, or files in user projects
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you tried or thought about.
+    validations:
+      required: true
