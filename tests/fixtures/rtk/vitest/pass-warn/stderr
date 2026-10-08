@@ -1,4 +1,0 @@
-stderr | tests/warn.test.ts > logs a warning but passes
-Warning: cache is cold, results may be slow
-Error: optional plugin failed to load (ignored)
-

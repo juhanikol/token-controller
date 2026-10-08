@@ -1,1 +1,0 @@
-pytest -v -W ignore tests/test_math.py

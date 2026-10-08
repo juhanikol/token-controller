@@ -1,7 +1,0 @@
-2026-01-06 10:00:01 INFO request received
-2026-01-06 10:00:02 ERROR unhandled exception in handler
-Traceback (most recent call last):
-  File "src/parser.py", line 7, in run_parser
-    raise ValueError("empty input")
-ValueError: empty input
-2026-01-06 10:00:03 INFO request finished with status 500

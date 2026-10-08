@@ -1,2 +1,0 @@
-logs/app.log:13:src/parser.py:7: error: empty input rejected
-logs/app.log:14:src/cache.py:3: warning: cache is cold

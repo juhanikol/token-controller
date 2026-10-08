@@ -1,7 +1,0 @@
-SECURITY SCAN RESULT: action required
-VULNERABILITY CVE-2099-0001 package-a 1.0.0 severity=critical
-VULNERABILITY CVE-2099-0001 package-a 1.0.0 severity=critical
-VULNERABILITY CVE-2099-0001 package-a 1.0.0 severity=critical
-Affected path: /workspace/package-lock.json:128
-Remediation: review the upstream advisory before upgrading.
-Do not discard package name, version, CVE, severity, path, or remediation.
