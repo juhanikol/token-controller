@@ -1,0 +1,7 @@
+DATABASE MIGRATION WARNING: possible data loss
+ALTER TABLE customer_orders DROP COLUMN legacy_reference;
+ALTER TABLE customer_orders DROP COLUMN legacy_reference;
+ALTER TABLE customer_orders DROP COLUMN legacy_reference;
+Migration: migrations/20261006_drop_legacy_reference.sql:14
+Affected rows estimate: 12500
+Review backup, constraint, ordering, and rollback requirements before applying.
