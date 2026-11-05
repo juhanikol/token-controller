@@ -2,7 +2,7 @@
 
 **Stop burning tokens on noise. Pick the work mode, let the controller guide the tools, and keep the important evidence safe.**
 
-NOTICE 5.11.2026: Token controller is WIP and dependency changes has created issues that are not yet handled. Use at your own risk. Quick hint: Use either RTK or lean-ctx. Do not use both. RTK combined with headroom is brilliant but some feaures lean-ctx offers are also exceptional.
+NOTICE 5.11.2026: Token controller is WIP and dependency changes has created issues that are not yet handled. Use at your own risk. Quick hint: Use either RTK or lean-ctx. Do not use both. RTK combined with headroom is brilliant but some features lean-ctx offers are also exceptional.
 
 Are your AI-coding context disappearing faster than expected?
 
